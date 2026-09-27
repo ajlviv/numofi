@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">FinanceTracker</string>
+    <string name="sign_in">Sign In with Google</string>
+    <string name="signing_in">Signing in…</string>
+    <string name="sign_out">Sign Out</string>
+    <string name="welcome">Welcome</string>
+    <string name="hello_user">Hello, %s</string>
+    <string name="auth_error">Authentication error</string>
+    <string name="loading">Loading…</string>
+    <string name="no_user">No user signed in</string>
+    <string name="login_required">Please sign in to continue</string>
+    <string name="total_balance">Total Balance</string>
+    <string name="income">Income</string>
+    <string name="expenses">Expenses</string>
+    <string name="add_transaction">Add Transaction</string>
+    <string name="transaction_title">Title</string>
+    <string name="transaction_amount">Amount</string>
+    <string name="transaction_type">Type</string>
+    <string name="transaction_type_income">Income</string>
+    <string name="transaction_type_expense">Expense</string>
+    <string name="save">Save</string>
+    <string name="cancel">Cancel</string>
+    <string name="no_transactions">No transactions yet</string>
+    <string name="settings">Settings</string>
+    <string name="logout">Logout</string>
+    <string name="home">Home</string>
+    <string name="dashboard">Dashboard</string>
+    <string name="transactions">Transactions</string>
+
+    <!--
+        Google Sign-In Web client ID (Google Cloud Console > APIs & Services >
+        Credentials > Create credentials > OAuth client ID > Web application).
+        This is a public identifier and is expected to ship inside the APK.
+        The matching client SECRET is not needed by the app - do not add it here.
+        Sign-in stays disabled while this still holds the placeholder.
+    -->
+    <string name="default_web_client_id" translatable="false">247805661259-k37mj1b13iuae5vpr34adh2c8buo2b95.apps.googleusercontent.com</string>
+    <string name="web_client_id_missing">Add your Google Web client ID to res/values/strings.xml to enable sign-in.</string>
+</resources>
