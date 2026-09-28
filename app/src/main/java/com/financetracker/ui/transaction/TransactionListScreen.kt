@@ -21,6 +21,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.financetracker.model.BankCode
@@ -31,6 +33,7 @@ import com.financetracker.util.MoneyFormat
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
+import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
 
 private val TransactionType.label: String
@@ -69,37 +72,35 @@ fun TransactionListScreen(
         )
 
         FilterRow {
-            BankCode.CHOICES.forEach { code ->
-                FilterChip(
-                    selected = filter.normalizedBank == code,
-                    onClick = {
-                        viewModel.onBankSelected(if (filter.normalizedBank == code) null else code)
-                    },
-                    label = { Text(BankCode.label(code)) }
+            DateFilterButton(
+                filter = filter,
+                onRangeChanged = viewModel::onDateRangeChanged,
+                onDatesCleared = viewModel::onDatesCleared
+            )
+            MultiSelectDropdown(
+                label = "Banks",
+                options = BankCode.CHOICES.map { it to BankCode.label(it) },
+                isSelected = { it in filter.bankCodes },
+                onToggle = viewModel::onBankToggled
+            )
+            MultiSelectDropdown(
+                label = "Type",
+                options = TransactionType.entries.map { it to it.label },
+                isSelected = { it in filter.types },
+                onToggle = viewModel::onTypeToggled
+            )
+            // Offered whenever there is anything to offer: the card filter works on its own,
+            // and the list is already narrowed to the selected banks when any are picked.
+            if (cardLabels.isNotEmpty()) {
+                MultiSelectDropdown(
+                    label = "Cards",
+                    options = cardLabels.map { it to it },
+                    isSelected = { it in filter.cardLabels },
+                    onToggle = viewModel::onCardToggled
                 )
             }
-            TransactionType.entries.forEach { type ->
-                FilterChip(
-                    selected = filter.type == type,
-                    onClick = { viewModel.onTypeSelected(if (filter.type == type) null else type) },
-                    label = { Text(type.label) }
-                )
-            }
-        }
-
-        // Offered whenever there is anything to offer: the card filter works on its own, and
-        // the list is already narrowed to the selected bank when one is picked.
-        if (cardLabels.isNotEmpty()) {
-            FilterRow {
-                cardLabels.forEach { label ->
-                    FilterChip(
-                        selected = filter.cardLabel == label,
-                        onClick = {
-                            viewModel.onCardSelected(if (filter.cardLabel == label) null else label)
-                        },
-                        label = { Text(label) }
-                    )
-                }
+            if (filter.isActive) {
+                TextButton(onClick = viewModel::clear) { Text("Clear") }
             }
         }
 
@@ -115,8 +116,7 @@ fun TransactionListScreen(
                         modifier = Modifier.fillParentMaxSize(),
                         contentAlignment = Alignment.Center
                     ) {
-                        EmptyState(hasFilters = search.isNotBlank() || filter.bankCode != null ||
-                            filter.cardLabel != null || filter.type != null)
+                        EmptyState(hasFilters = search.isNotBlank() || filter.isActive)
                     }
                 }
             }
@@ -143,6 +143,250 @@ private fun FilterRow(content: @Composable RowScope.() -> Unit) {
         content = content
     )
 }
+
+/**
+ * A dropdown of checkable options, of which any number may be picked.
+ *
+ * The menu stays open while picking, because the whole point of a multi-select is that the
+ * next choice is usually in the same list, and each row carries a tick rather than a
+ * checkbox so that the row is the only thing that toggles. A checkbox inside a menu item
+ * would receive the click itself and either swallow it or toggle twice.
+ */
+@Composable
+private fun <T> MultiSelectDropdown(
+    label: String,
+    options: List<Pair<T, String>>,
+    isSelected: (T) -> Boolean,
+    onToggle: (T) -> Unit
+) {
+    var expanded by remember { mutableStateOf(false) }
+    val selected = options.filter { isSelected(it.first) }
+
+    Box {
+        OutlinedButton(onClick = { expanded = true }) {
+            Text(
+                // One pick reads better than a count of one; the count only earns its place
+                // once there is more than one thing to count.
+                text = when (selected.size) {
+                    0 -> label
+                    1 -> selected.first().second
+                    else -> "$label · ${selected.size}"
+                },
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            Spacer(modifier = Modifier.width(4.dp))
+            Icon(Icons.Default.ArrowDropDown, contentDescription = null)
+        }
+        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+            options.forEach { (value, text) ->
+                DropdownMenuItem(
+                    text = { Text(text) },
+                    onClick = { onToggle(value) },
+                    trailingIcon = if (isSelected(value)) {
+                        { Icon(Icons.Default.Check, contentDescription = null) }
+                    } else {
+                        null
+                    }
+                )
+            }
+            HorizontalDivider()
+            TextButton(
+                onClick = { expanded = false },
+                modifier = Modifier.fillMaxWidth()
+            ) { Text("Done") }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun DateFilterButton(
+    filter: TransactionFilter,
+    onRangeChanged: (LocalDate?, LocalDate?) -> Unit,
+    onDatesCleared: () -> Unit
+) {
+    // The button opens a small menu, and the menu is what opens the calendar. These are two
+    // separate steps, so they need two separate flags: sharing one meant choosing the menu
+    // item that opens the calendar also dismissed the calendar it had just opened.
+    var menuExpanded by remember { mutableStateOf(false) }
+    var pickerVisible by remember { mutableStateOf(false) }
+    val from = filter.from
+    val to = filter.to
+
+    Box {
+        OutlinedButton(onClick = { menuExpanded = true }) {
+            Text(
+                text = when {
+                    from == null && to == null -> "Date"
+                    from != null && to == null -> "From ${from.shortDate()}"
+                    to != null && from == null -> "Until ${to.shortDate()}"
+                    from == to -> from!!.shortDate()
+                    else -> "${from!!.shortDate()} – ${to!!.shortDate()}"
+                },
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            Spacer(modifier = Modifier.width(4.dp))
+            Icon(Icons.Default.CalendarMonth, contentDescription = null)
+        }
+        DropdownMenu(
+            expanded = menuExpanded,
+            onDismissRequest = { menuExpanded = false }
+        ) {
+            DropdownMenuItem(
+                text = { Text("Pick dates") },
+                onClick = {
+                    menuExpanded = false
+                    pickerVisible = true
+                }
+            )
+            if (from != null || to != null) {
+                DropdownMenuItem(
+                    text = { Text("Clear dates") },
+                    onClick = {
+                        menuExpanded = false
+                        onDatesCleared()
+                    }
+                )
+            }
+        }
+    }
+    if (pickerVisible) {
+        DateRangeDialog(
+            from = from,
+            to = to,
+            onDismiss = { pickerVisible = false },
+            onApply = { start, end ->
+                onRangeChanged(start, end)
+                pickerVisible = false
+            }
+        )
+    }
+}
+
+/**
+ * The date picker, with the presets above it.
+ *
+ * A preset writes into the picker rather than applying straight away, so the chosen range
+ * stays visible and reviewable in the calendar and one button commits it. A picker that
+ * applied immediately would leave the user guessing what the tap behind the dialog had
+ * actually selected.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun DateRangeDialog(
+    from: LocalDate?,
+    to: LocalDate?,
+    onDismiss: () -> Unit,
+    onApply: (LocalDate?, LocalDate?) -> Unit
+) {
+    // The picker exposes its selection read-only, so a preset is applied by rebuilding the
+    // state around the preset's dates. That puts them in the calendar, where the user can
+    // see and adjust them, instead of only in the filter.
+    var shown by remember { mutableStateOf(from to to) }
+    val state = key(shown) {
+        rememberDateRangePickerState(
+            initialSelectedStartDateMillis = shown.first?.toPickerMillis(),
+            initialSelectedEndDateMillis = shown.second?.toPickerMillis()
+        )
+    }
+    // An AlertDialog was the wrong container for this. Its text slot insets the content by
+    // 24dp on each side, and the calendar grid needs the full window width to lay out all
+    // seven day columns. Handed less than that, it does not shrink its columns, it clips
+    // the last two off the right edge, where they cannot be reached at all.
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(usePlatformDefaultWidth = false)
+    ) {
+        Surface(
+            modifier = Modifier.fillMaxWidth(),
+            shape = MaterialTheme.shapes.extraLarge,
+            tonalElevation = 6.dp
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    // A definite height, and not a height cap, because the calendar is now
+                    // weighted: a column that only knows an upper bound would wrap its content
+                    // and hand the weighted child nothing. Two earlier attempts each broke a
+                    // different part of this dialog, so the sizing is spelled out rather than
+                    // left to wrap-content.
+                    .fillMaxHeight(0.9f)
+                    .padding(vertical = 8.dp)
+            ) {
+                Text(
+                    text = "Filter by date",
+                    style = MaterialTheme.typography.titleMedium,
+                    modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp)
+                )
+                Row(
+                    modifier = Modifier
+                        .horizontalScroll(rememberScrollState())
+                        .padding(horizontal = 24.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    DatePreset.entries.forEach { preset ->
+                        FilterChip(
+                            selected = false,
+                            onClick = {
+                                val (presetFrom, presetTo) = preset.range(LocalDate.now())
+                                shown = presetFrom to presetTo
+                            },
+                            label = { Text(preset.label) }
+                        )
+                    }
+                }
+                // The calendar takes whatever height the title, presets and buttons leave, and
+                // scrolls inside itself. Left unweighted it would claim all of it and squeeze
+                // the Apply button to nothing, which is where the confirm action went missing.
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(1f, fill = true)
+                ) {
+                    // Full width of the dialog, which is now the full width of the window, so
+                    // the calendar lays out its seven columns at their natural size. This must
+                    // stay a finite width: wrapping it in a horizontal scroll, as an earlier
+                    // attempt did, handed the grid an unbounded width and it collapsed to a
+                    // fraction of the dialog while the header kept its full height.
+                    DateRangePicker(
+                        state = state,
+                        showModeToggle = false,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp),
+                    horizontalArrangement = Arrangement.End
+                ) {
+                    TextButton(onClick = onDismiss) { Text("Cancel") }
+                    TextButton(onClick = {
+                        onApply(
+                            state.selectedStartDateMillis?.toPickerDate(),
+                            state.selectedEndDateMillis?.toPickerDate()
+                        )
+                    }) { Text("Apply") }
+                }
+            }
+        }
+    }
+}
+
+/**
+ * The picker works in UTC midnights, so both directions of the conversion anchor on UTC.
+ * Reading them in the device zone would shift a range by a day either side of midnight for
+ * anyone east or west of Greenwich.
+ */
+private fun LocalDate.toPickerMillis(): Long =
+    atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli()
+
+private fun Long.toPickerDate(): LocalDate =
+    Instant.ofEpochMilli(this).atZone(ZoneOffset.UTC).toLocalDate()
+
+private fun LocalDate.shortDate(): String = DateTimeFormatter.ofPattern("d MMM").format(this)
 
 @Composable
 private fun EmptyState(hasFilters: Boolean) {

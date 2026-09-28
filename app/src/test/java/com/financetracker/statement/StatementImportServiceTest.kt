@@ -4,6 +4,7 @@ import com.financetracker.data.TransactionDao
 import com.financetracker.data.statement.StatementImportService
 import com.financetracker.data.statement.StatementRow
 import com.financetracker.model.BankCode
+import com.financetracker.model.CardRef
 import com.financetracker.model.TransactionEntity
 import com.financetracker.model.TransactionType
 import kotlinx.coroutines.flow.Flow
@@ -44,12 +45,17 @@ class StatementImportServiceTest {
         override fun getAllForUser(userId: String): Flow<List<TransactionEntity>> = error("unused")
         override fun getFilteredQuery(
             userId: String,
-            bankCode: String?,
-            cardLabel: String?,
-            type: TransactionType?,
+            bankCodes: List<String>,
+            bankCount: Int,
+            cardLabels: List<String>,
+            cardCount: Int,
+            types: List<TransactionType>,
+            typeCount: Int,
+            fromMillis: Long?,
+            toMillis: Long?,
             search: String?
         ): Flow<List<TransactionEntity>> = error("unused")
-        override fun getDistinctCardLabels(userId: String, bankCode: String?): Flow<List<String>> = error("unused")
+        override fun getCardRefs(userId: String): Flow<List<CardRef>> = error("unused")
         override fun getByType(userId: String, type: String): Flow<List<TransactionEntity>> = error("unused")
         override fun getRecentTransactions(userId: String, limit: Int): Flow<List<TransactionEntity>> = error("unused")
     }
