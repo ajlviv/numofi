@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.financetracker.data.TransactionDao
 import com.financetracker.model.BankCode
+import com.financetracker.model.CardRef
 import com.financetracker.model.Transaction
 import com.financetracker.model.TransactionEntity
 import com.financetracker.model.TransactionType
@@ -22,25 +23,112 @@ import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.launch
+import java.time.LocalDate
+import java.time.ZoneId
 import javax.inject.Inject
 
 /**
  * The filter state behind the transaction screen.
  *
- * The chip selections behind the transaction screen: bank, card and direction.
+ * Every filter is a set, and an empty set means "no constraint", which is what lets the DAO
+ * serve every combination from one query. The date range is two independently optional
+ * bounds, so "everything since March" and "everything up to March" are both expressible
+ * without inventing a bound the user did not ask for.
  *
  * The search term is deliberately not part of this. It is typed faster than a query should
  * run, so it lives in its own flow and is debounced separately; keeping a second copy here
  * would only create a way for the field and the list to disagree about what was typed.
- * Normalised on the way in, so an unknown bank code becomes null, which the DAO reads as
- * "no constraint" rather than as a filter matching nothing.
  */
 data class TransactionFilter(
-    val bankCode: String? = null,
-    val cardLabel: String? = null,
-    val type: TransactionType? = null
+    val bankCodes: Set<String> = emptySet(),
+    val cardLabels: Set<String> = emptySet(),
+    val types: Set<TransactionType> = emptySet(),
+    val from: LocalDate? = null,
+    val to: LocalDate? = null
 ) {
-    val normalizedBank: String? get() = BankCode.normalize(bankCode)
+    /** Unknown codes are dropped, so a stale value cannot conjure a bank of its own. */
+    val normalizedBanks: Set<String> get() = bankCodes.mapNotNull(BankCode::normalize).toSet()
+
+    val isActive: Boolean
+        get() = bankCodes.isNotEmpty() || cardLabels.isNotEmpty() ||
+            types.isNotEmpty() || from != null || to != null
+
+    fun toggledBank(code: String) = copy(bankCodes = bankCodes.toggle(code))
+
+    fun toggledCard(label: String) = copy(cardLabels = cardLabels.toggle(label))
+
+    fun toggledType(type: TransactionType) = copy(types = types.toggle(type))
+
+    /**
+     * Drops the cards the current bank selection cannot have.
+     *
+     * A card belongs to the bank that issued it, so keeping one selected after its bank was
+     * deselected would leave a filter matching nothing with no visible reason. Pruning is
+     * per card rather than clearing outright, so changing one bank does not discard the
+     * cards that belong to the banks still selected.
+     */
+    fun prunedTo(offeredCards: Set<String>) = copy(cardLabels = cardLabels.intersect(offeredCards))
+
+    fun startMillis(zone: ZoneId): Long? = from?.atStartOfDay(zone)?.toInstant()?.toEpochMilli()
+
+    /**
+     * The exclusive end of the range is the start of the day *after* [to], not its last
+     * instant. A day is not a fixed number of milliseconds across a DST boundary, and asking
+     * the zone for the boundary sidesteps that entirely.
+     */
+    fun endMillis(zone: ZoneId): Long? = to?.plusDays(1)?.atStartOfDay(zone)?.toInstant()?.toEpochMilli()
+}
+
+private fun <T> Set<T>.toggle(value: T): Set<T> = if (value in this) this - value else this + value
+
+/** The cards a bank selection can offer, taken from the cards the user has actually used. */
+private fun List<CardRef>.offeredCards(banks: Set<String>): List<String> =
+    filter { banks.isEmpty() || BankCode.normalize(it.bankCode) in banks }
+        .map(CardRef::cardLabel)
+        .distinct()
+        .sorted()
+
+/** The periods offered beside the date picker, as inclusive day ranges ending today. */
+enum class DatePreset(val label: String) {
+    THIS_MONTH("This month"),
+    LAST_MONTH("Last month"),
+    LAST_30_DAYS("Last 30 days"),
+    LAST_90_DAYS("Last 90 days"),
+    YEAR_TO_DATE("Year to date");
+
+    fun range(today: LocalDate): Pair<LocalDate, LocalDate> = when (this) {
+        THIS_MONTH -> today.withDayOfMonth(1) to today
+        LAST_MONTH -> today.minusMonths(1).withDayOfMonth(1) to today.withDayOfMonth(1).minusDays(1)
+        LAST_30_DAYS -> today.minusDays(29) to today
+        LAST_90_DAYS -> today.minusDays(89) to today
+        YEAR_TO_DATE -> today.withDayOfYear(1) to today
+    }
+}
+
+/**
+ * The filter resolved into the exact values the query binds.
+ *
+ * Built as one value so `distinctUntilChanged` can suppress a re-query: it compares by
+ * equality, and the lists are sorted so the same selection always compares equal regardless
+ * of the order the user happened to tap the chips in.
+ */
+private data class FilterQuery(
+    val banks: List<String>,
+    val cards: List<String>,
+    val types: List<TransactionType>,
+    val fromMillis: Long?,
+    val toMillis: Long?
+) {
+    companion object {
+        fun of(filter: TransactionFilter, zone: ZoneId) = FilterQuery(
+            filter.normalizedBanks.sorted(),
+            filter.cardLabels.sorted(),
+            filter.types.sortedBy { it.name },
+            filter.startMillis(zone),
+            filter.endMillis(zone)
+        )
+    }
 }
 
 /**
@@ -65,6 +153,13 @@ class TransactionListViewModel @Inject constructor(
     private val transactionDao: TransactionDao
 ) : ViewModel() {
 
+    /**
+     * The zone every day boundary is resolved in. A transaction is stored as an instant, so
+     * "the 14th" is only meaningful relative to a zone; the device's is the one the user is
+     * looking at their statement in.
+     */
+    private val zone: ZoneId = ZoneId.systemDefault()
+
     private val _filter = MutableStateFlow(TransactionFilter())
     val filter: StateFlow<TransactionFilter> = _filter.asStateFlow()
 
@@ -81,52 +176,79 @@ class TransactionListViewModel @Inject constructor(
         .debounce(SEARCH_DEBOUNCE_MILLIS)
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
 
+    /**
+     * Kept as state rather than only as a derived flow so a bank toggle can read the cards
+     * synchronously and prune in the same update. Reconciling against a list that arrives a
+     * frame later would let the list flash empty in between.
+     */
+    private val _cardRefs = MutableStateFlow<List<CardRef>>(emptyList())
+
+    init {
+        viewModelScope.launch {
+            authRepository.currentUid
+                .filterNotNull()
+                .flatMapLatest { uid -> transactionDao.getCardRefs(uid) }
+                .collect { refs -> _cardRefs.value = refs }
+        }
+    }
+
     val transactions: StateFlow<List<Transaction>> = authRepository.currentUid
         .filterNotNull()
         .flatMapLatest { uid ->
             combine(
                 debouncedSearch,
-                _filter.map { it.normalizedBank },
-                _filter.map { it.cardLabel },
-                _filter.map { it.type }
-            ) { search, bank, card, type ->
-                transactionDao.getFiltered(uid, bank, card, type, search)
+                _filter.map { FilterQuery.of(it, zone) }.distinctUntilChanged()
+            ) { search, query ->
+                transactionDao.getFiltered(
+                    uid,
+                    query.banks,
+                    query.cards,
+                    query.types,
+                    query.fromMillis,
+                    query.toMillis,
+                    search
+                )
             }.flatMapLatest { it }
         }
         .map { rows -> rows.map(TransactionEntity::toDomain) }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
     /**
-     * The cards offered as filter chips, narrowed to the selected bank. A card belongs to
-     * the bank that issued it, so this follows [TransactionFilter.bankCode] rather than
+     * The cards offered in the card dropdown, narrowed to the selected banks. A card belongs
+     * to the bank that issued it, so this follows [TransactionFilter.bankCodes] rather than
      * listing every card the user has ever had.
      */
-    val cardLabels: StateFlow<List<String>> = authRepository.currentUid
-        .filterNotNull()
-        .flatMapLatest { uid ->
-            _filter.map { it.normalizedBank }.flatMapLatest { bank ->
-                transactionDao.getDistinctCardLabels(uid, bank)
-            }
-        }
+    val cardLabels: StateFlow<List<String>> = combine(
+        _filter.map { it.normalizedBanks }.distinctUntilChanged(),
+        _cardRefs
+    ) { banks, refs -> refs.offeredCards(banks) }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
     fun onSearchChange(value: String) {
         _search.value = value
     }
 
-    fun onBankSelected(code: String?) {
-        // The card is cleared with the bank, because the offered cards change with it. A
-        // selection kept across the change would stop matching anything while its chip had
-        // already disappeared from the row, leaving an empty list with no visible reason.
-        _filter.value = _filter.value.copy(bankCode = code, cardLabel = null)
+    fun onBankToggled(code: String) {
+        val next = _filter.value.toggledBank(code)
+        // Pruned in the same update as the bank itself, so the two can never disagree.
+        val offered = _cardRefs.value.offeredCards(next.normalizedBanks).toSet()
+        _filter.value = next.prunedTo(offered)
     }
 
-    fun onCardSelected(label: String?) {
-        _filter.value = _filter.value.copy(cardLabel = label)
+    fun onCardToggled(label: String) {
+        _filter.value = _filter.value.toggledCard(label)
     }
 
-    fun onTypeSelected(type: TransactionType?) {
-        _filter.value = _filter.value.copy(type = type)
+    fun onTypeToggled(type: TransactionType) {
+        _filter.value = _filter.value.toggledType(type)
+    }
+
+    fun onDateRangeChanged(from: LocalDate?, to: LocalDate?) {
+        _filter.value = _filter.value.copy(from = from, to = to)
+    }
+
+    fun onDatesCleared() {
+        _filter.value = _filter.value.copy(from = null, to = null)
     }
 
     fun clear() {

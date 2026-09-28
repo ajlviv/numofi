@@ -124,6 +124,19 @@ data class Transaction(
     fun isExpense(): Boolean = type == TransactionType.EXPENSE
 }
 
+/**
+ * A card the user has actually transacted with, paired with the bank that issued it.
+ *
+ * The list screen needs the pairing for two things: to offer only the cards belonging to the
+ * selected banks, and to drop a selected card when a change of banks rules it out. Deriving
+ * both from this one small query keeps that decision pure and synchronous, rather than
+ * reconciling against a card list that arrives a frame after the bank selection changed.
+ */
+data class CardRef(
+    val bankCode: String?,
+    val cardLabel: String
+)
+
 data class User(
     val uid: String,
     val email: String,
