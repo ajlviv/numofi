@@ -1,6 +1,4 @@
-package com.financetracker.ui.dashboard
-
-import com.financetracker.model.Transaction
+package com.financetracker.model
 
 /**
  * One currency's income, expense and balance.

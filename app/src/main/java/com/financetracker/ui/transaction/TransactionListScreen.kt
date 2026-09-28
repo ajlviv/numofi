@@ -1,5 +1,6 @@
 package com.financetracker.ui.transaction
 
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
@@ -13,6 +14,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -28,8 +30,8 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.financetracker.model.BankCode
 import com.financetracker.model.Transaction
 import com.financetracker.model.TransactionType
+import com.financetracker.ui.MoneyAmount
 import com.financetracker.util.CategoryLabel
-import com.financetracker.util.MoneyFormat
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
@@ -50,26 +52,51 @@ fun TransactionListScreen(
     val filter by viewModel.filter.collectAsStateWithLifecycle()
     val search by viewModel.search.collectAsStateWithLifecycle()
     val cardLabels by viewModel.cardLabels.collectAsStateWithLifecycle()
+    val summary by viewModel.summary.collectAsStateWithLifecycle()
     val dateFormat = DateTimeFormatter.ofPattern("MMM dd, yyyy")
+    var summaryVisible by rememberSaveable { mutableStateOf(false) }
 
     Column(modifier = modifier.fillMaxSize()) {
-        OutlinedTextField(
-            value = search,
-            onValueChange = viewModel::onSearchChange,
+        Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 8.dp),
-            singleLine = true,
-            label = { Text("Search") },
-            leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
-            trailingIcon = {
-                if (search.isNotEmpty()) {
-                    IconButton(onClick = { viewModel.onSearchChange("") }) {
-                        Icon(Icons.Default.Close, contentDescription = "Clear search")
+                .padding(start = 16.dp, end = 8.dp, top = 8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            OutlinedTextField(
+                value = search,
+                onValueChange = viewModel::onSearchChange,
+                modifier = Modifier.weight(1f),
+                singleLine = true,
+                label = { Text("Search") },
+                leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
+                trailingIcon = {
+                    if (search.isNotEmpty()) {
+                        IconButton(onClick = { viewModel.onSearchChange("") }) {
+                            Icon(Icons.Default.Close, contentDescription = "Clear search")
+                        }
                     }
                 }
+            )
+            // Totals for the current filters, so the button is tinted while the panel it opens
+            // is up. The state survives rotation, unlike a plain remember, because losing the
+            // panel on every rotation is a small thing that still irritates.
+            IconButton(onClick = { summaryVisible = !summaryVisible }) {
+                Icon(
+                    imageVector = Icons.Default.Analytics,
+                    contentDescription = if (summaryVisible) "Hide totals" else "Show totals",
+                    tint = if (summaryVisible) {
+                        MaterialTheme.colorScheme.primary
+                    } else {
+                        MaterialTheme.colorScheme.onSurfaceVariant
+                    }
+                )
             }
-        )
+        }
+
+        AnimatedVisibility(visible = summaryVisible) {
+            SummaryPanel(summary)
+        }
 
         FilterRow {
             DateFilterButton(
@@ -128,6 +155,77 @@ fun TransactionListScreen(
                 )
             }
         }
+    }
+}
+
+/**
+ * Totals for the rows the list is currently showing.
+ *
+ * Grouped per currency, and each group labelled only when there is more than one: a lone group
+ * is unambiguous, but a second currency printed underneath the first with no name of its own
+ * would read as a duplicate of it. Amounts go through [MoneyAmount] so the currency symbol is
+ * styled the same as in the list, and expenses are printed as a positive figure in red the
+ * way the list itself prints them, with the sign left to mean something in the net row.
+ */
+@Composable
+private fun SummaryPanel(summary: TransactionSummary) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 4.dp),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Text(
+                text = when {
+                    summary.isEmpty -> "No transactions to total"
+                    summary.count == 1 -> "1 transaction"
+                    else -> "${summary.count} transactions"
+                },
+                style = MaterialTheme.typography.titleSmall,
+                color = MaterialTheme.colorScheme.primary
+            )
+            summary.totals.forEach { totals ->
+                if (summary.totals.size > 1) {
+                    Text(
+                        text = totals.currencyCode ?: "No currency recorded",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = Color.Gray
+                    )
+                }
+                SummaryAmount("Income", totals.income, totals.currencyCode, Color(0xFF2E7D32))
+                SummaryAmount("Expenses", totals.expense, totals.currencyCode, Color(0xFFC62828))
+                // A negative net is the number that matters, so it is the one that changes
+                // colour; the other two are coloured by what they always mean.
+                SummaryAmount(
+                    label = "Net",
+                    amount = totals.balance,
+                    currencyCode = totals.currencyCode,
+                    color = if (totals.balance < 0) Color(0xFFC62828) else Color(0xFF2E7D32)
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun SummaryAmount(label: String, amount: Double, currencyCode: String?, color: Color) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(label, style = MaterialTheme.typography.bodyMedium, color = Color.Gray)
+        MoneyAmount(
+            amount = amount,
+            currencyCode = currencyCode,
+            style = MaterialTheme.typography.bodyLarge,
+            fontWeight = FontWeight.Bold,
+            color = color
+        )
     }
 }
 
@@ -484,11 +582,13 @@ private fun TransactionListItem(
                 horizontalAlignment = Alignment.End,
                 modifier = Modifier.fillMaxHeight()
             ) {
-                Text(
-                    text = "${if (transaction.isIncome()) "+" else "-"}${MoneyFormat.format(transaction.amount, transaction.currencyCode)}",
+                MoneyAmount(
+                    amount = transaction.amount,
+                    currencyCode = transaction.currencyCode,
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold,
-                    color = if (transaction.isIncome()) Color(0xFF2E7D32) else Color(0xFFC62828)
+                    color = if (transaction.isIncome()) Color(0xFF2E7D32) else Color(0xFFC62828),
+                    prefix = if (transaction.isIncome()) "+" else "-"
                 )
                 // minLines keeps the slot reserved when there is no note, so every row
                 // in the list has the same height.

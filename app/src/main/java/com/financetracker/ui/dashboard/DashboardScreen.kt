@@ -29,9 +29,11 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.financetracker.model.CurrencyTotals
 import com.financetracker.model.Transaction
+import com.financetracker.model.totalsByCurrency
+import com.financetracker.ui.MoneyAmount
 import com.financetracker.util.CategoryLabel
-import com.financetracker.util.MoneyFormat
 
 private val IncomeGreen = Color(0xFF2E7D32)
 private val ExpenseRed = Color(0xFFC62828)
@@ -102,11 +104,15 @@ private fun BalanceCard(balance: Double, currencyCode: String?) {
                 color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.8f)
             )
             Spacer(modifier = Modifier.height(8.dp))
-            Text(
-                text = MoneyFormat.format(balance, currencyCode),
+            // The default mustard is dark, and this card draws on the filled primary colour,
+            // so the symbol is brightened here to stay readable on that background.
+            MoneyAmount(
+                amount = balance,
+                currencyCode = currencyCode,
                 style = MaterialTheme.typography.headlineLarge,
                 fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.onPrimary
+                color = MaterialTheme.colorScheme.onPrimary,
+                symbolColor = Color(0xFFF5D98A)
             )
         }
     }
@@ -131,8 +137,9 @@ private fun RowScope.SummaryCard(
         Column(modifier = Modifier.padding(16.dp), horizontalAlignment = Alignment.CenterHorizontally) {
             Text(label, style = MaterialTheme.typography.bodySmall, color = Color.Gray)
             Spacer(modifier = Modifier.height(4.dp))
-            Text(
-                text = MoneyFormat.format(amount, currencyCode),
+            MoneyAmount(
+                amount = amount,
+                currencyCode = currencyCode,
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.Bold,
                 color = color
@@ -177,8 +184,9 @@ private fun TransactionRow(transaction: Transaction) {
             )
         }
 
-        Text(
-            text = MoneyFormat.format(transaction.amount, transaction.currencyCode),
+        MoneyAmount(
+            amount = transaction.amount,
+            currencyCode = transaction.currencyCode,
             style = MaterialTheme.typography.bodyLarge,
             fontWeight = FontWeight.Bold,
             color = if (transaction.isIncome()) IncomeGreen else ExpenseRed

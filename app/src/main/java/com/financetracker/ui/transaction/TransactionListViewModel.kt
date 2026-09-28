@@ -214,6 +214,14 @@ class TransactionListViewModel @Inject constructor(
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
     /**
+     * Totals for exactly the rows [transactions] is showing, so the summary is a view of the
+     * list rather than a parallel query that could fall out of step with the filters.
+     */
+    val summary: StateFlow<TransactionSummary> = transactions
+        .map { TransactionSummary.of(it) }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), TransactionSummary.EMPTY)
+
+    /**
      * The cards offered in the card dropdown, narrowed to the selected banks. A card belongs
      * to the bank that issued it, so this follows [TransactionFilter.bankCodes] rather than
      * listing every card the user has ever had.
