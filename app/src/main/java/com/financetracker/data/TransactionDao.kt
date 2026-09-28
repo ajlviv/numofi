@@ -120,7 +120,7 @@ interface TransactionDao {
     // There is deliberately no "total income"/"total expense" query here. A SUM across the
     // whole table adds hryvnias to dollars and returns a figure that looks like a total but
     // is not one. Totals are grouped by currency instead; see
-    // com.financetracker.ui.dashboard.totalsByCurrency.
+    // com.financetracker.model.totalsByCurrency.
 
     @Query("SELECT * FROM transactions WHERE userId = :userId ORDER BY timestamp DESC LIMIT :limit")
     fun getRecentTransactions(userId: String, limit: Int): Flow<List<TransactionEntity>>

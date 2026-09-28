@@ -1,6 +1,5 @@
-package com.financetracker.ui.dashboard
+package com.financetracker.model
 
-import com.financetracker.model.Transaction
 import com.financetracker.model.TransactionType
 import org.junit.Assert.assertEquals
 import org.junit.Test
