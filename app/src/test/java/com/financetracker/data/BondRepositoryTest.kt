@@ -44,7 +44,8 @@ class BondRepositoryTest {
     private val bond = Bond(
         isin = "UA9000012345",
         name = "ОвДП 24/Б",
-        nominalUAH = 1000.0,
+        nominal = 1000.0,
+        nominalCurrency = "UAH",
         couponPercent = 9.5
     )
 
@@ -64,7 +65,7 @@ class BondRepositoryTest {
 
     private suspend fun buy(
         quantity: Int = 1,
-        price: Double = 99.5,
+        price: Double = 995.0,
         currency: String = "UAH",
         amount: Double? = null,
         commission: Double = 0.0,
@@ -76,9 +77,9 @@ class BondRepositoryTest {
         bond = bond,
         side = BondTradeSide.BUY,
         quantity = quantity,
-        pricePercent = price,
-        accruedInterestUAH = accrued,
-        commissionUAH = commission,
+        price = price,
+        accruedInterest = accrued,
+        commission = commission,
         tradeDate = date,
         bank = bank,
         settlementCurrency = currency,
@@ -87,16 +88,16 @@ class BondRepositoryTest {
 
     private suspend fun sell(
         quantity: Int,
-        price: Double = 101.0,
+        price: Double = 1010.0,
         userId: String = "uid-1"
     ) = repo.recordTrade(
         userId = userId,
         bond = bond,
         side = BondTradeSide.SELL,
         quantity = quantity,
-        pricePercent = price,
-        accruedInterestUAH = 0.0,
-        commissionUAH = 0.0,
+        price = price,
+        accruedInterest = 0.0,
+        commission = 0.0,
         tradeDate = 1_700_100_000_000,
         bank = bank,
         settlementCurrency = "UAH",
@@ -147,7 +148,7 @@ class BondRepositoryTest {
 
         val cash = cashRows().single { it.transferDirection == TransferDirection.IN }
         assertEquals(TransactionType.TRANSFER, cash.type)
-        // 101% of 1000.
+        // 1010.00 per bond, entered as money.
         assertEquals(1010.0, cash.amount, 0.0)
     }
 
@@ -155,7 +156,7 @@ class BondRepositoryTest {
     fun `the cash row lands in the currency the account holds`() = runTest {
         // A purchase settled in dollars has to be counted against the dollar balance, or the
         // cash figure contradicts the one the user saw on their statement.
-        buy(quantity = 1, price = 99.5, currency = "USD", amount = 325.0)
+        buy(quantity = 1, price = 995.0, currency = "USD", amount = 325.0)
 
         val cash = cashRows().single()
         assertEquals("USD", cash.currencyCode)
@@ -174,21 +175,40 @@ class BondRepositoryTest {
     }
 
     @Test
+    fun `the note records the price as money, not as a percentage`() = runTest {
+        // The stored and displayed unit is money, so the note has to print money too. A note
+        // reading "99.5%" would send the user back to a percentage they no longer type.
+        buy(quantity = 3, price = 995.0)
+
+        val purchased = cashRows().single()
+        assertTrue(
+            "Купівля 3 шт.".startsWith(
+                purchased.note!!.substringBefore("@").trim()
+            )
+        )
+        // 995.00 formatted with the device's separators and the ₴ symbol.
+        assertTrue(purchased.note!!.contains("995"))
+        assertTrue(purchased.note!!.contains("₴") || purchased.note!!.contains("UAH"))
+        assertTrue(!purchased.note!!.contains("%"))
+    }
+
+    @Test
     fun `the title is the instrument, and the note says which way the trade went`() = runTest {
         // A title of "Купівля ОвДП" reads as a sentence about a purchase, and a list of them
         // is a list of sentences. The instrument is what the user is looking for; the side is
         // a property of the trade, and transfers are drawn neutrally, so the note is the only
         // thing that keeps a round trip's two rows apart.
-        buy(quantity = 3, price = 99.5)
+        buy(quantity = 3, price = 995.0)
 
         val purchased = cashRows().single()
         assertEquals("ОвДП 24/Б", purchased.title)
-        assertEquals("Купівля 3 шт. @ 99.5%", purchased.note)
+        assertTrue(purchased.note!!.startsWith("Купівля 3 шт. @"))
 
-        sell(quantity = 1, price = 101.0)
+        sell(quantity = 1, price = 1010.0)
         val rows = cashRows().sortedBy { it.id }
         assertEquals(listOf("ОвДП 24/Б", "ОвДП 24/Б"), rows.map { it.title })
-        assertEquals(listOf("Купівля 3 шт. @ 99.5%", "Продаж 1 шт. @ 101%"), rows.map { it.note })
+        assertTrue(rows[0].note!!.startsWith("Купівля 3 шт. @"))
+        assertTrue(rows[1].note!!.startsWith("Продаж 1 шт. @"))
     }
 
     @Test
@@ -206,7 +226,7 @@ class BondRepositoryTest {
     @Test
     fun `a new instrument is stored once, on its first trade`() = runTest {
         buy(quantity = 1)
-        buy(quantity = 1, price = 100.0)
+        buy(quantity = 1, price = 1000.0)
 
         assertEquals(1, db.bondDao().getBondsOnce().size)
         assertEquals(2, db.bondDao().getTrades().size)
@@ -221,9 +241,9 @@ class BondRepositoryTest {
             bond = bond.copy(isin = " ua9000012345 "),
             side = BondTradeSide.BUY,
             quantity = 1,
-            pricePercent = 99.5,
-            accruedInterestUAH = 0.0,
-            commissionUAH = 0.0,
+            price = 995.0,
+            accruedInterest = 0.0,
+            commission = 0.0,
             tradeDate = 1_700_000_000_000,
             bank = bank,
             settlementCurrency = "UAH",
@@ -234,11 +254,83 @@ class BondRepositoryTest {
     }
 
     @Test
+    fun `a bond with blank isin falls back to its name as the instrument identifier`() = runTest {
+        val result = repo.recordTrade(
+            userId = "uid-1",
+            bond = bond.copy(isin = "", name = "Військові ОвДП"),
+            side = BondTradeSide.BUY,
+            quantity = 2,
+            price = 1000.0,
+            accruedInterest = 0.0,
+            commission = 0.0,
+            tradeDate = 1_700_000_000_000,
+            bank = bank,
+            settlementCurrency = "UAH",
+            settlementAmount = null
+        )
+
+        assertTrue(result is RecordTradeResult.Recorded)
+        val bonds = db.bondDao().getBondsOnce()
+        assertEquals(1, bonds.size)
+        assertEquals("ВІЙСЬКОВІ ОВДП", bonds.single().isin)
+        assertEquals("Військові ОвДП", bonds.single().name)
+    }
+
+    @Test
+    fun `a dollar bond keeps its denomination on the instrument and the trade`() = runTest {
+        // ОВДП are not all UAH-nominal. A dollar bond's price, accrual and commission are
+        // dollar figures, and losing the denomination at the bond row would mean the money
+        // numbers are silently read as hryvnia everywhere they are summed or formatted.
+        repo.recordTrade(
+            userId = "uid-1",
+            bond = bond.copy(isin = "UA9000055555", nominalCurrency = "USD"),
+            side = BondTradeSide.BUY,
+            quantity = 1,
+            price = 995.0,
+            accruedInterest = 3.0,
+            commission = 2.0,
+            tradeDate = 1_700_000_000_000,
+            bank = bank,
+            settlementCurrency = "USD",
+            settlementAmount = null
+        )
+
+        val stored = db.bondDao().getByIsin("UA9000055555")!!
+        assertEquals("USD", stored.nominalCurrency)
+        assertEquals(995.0, db.bondDao().getTrades().single().price, 0.0)
+    }
+
+    @Test
+    fun `a dollar bond settled in hryvnia needs no implied rate of itself`() = runTest {
+        // A settlement in the bond's own currency carries no rate. In UAH that means a UAH
+        // bond; the point of the comparison being against the bond's denomination rather than
+        // a hard-coded UAH is that it must hold for a dollar bond too.
+        repo.recordTrade(
+            userId = "uid-1",
+            bond = bond.copy(isin = "UA9000055555", nominalCurrency = "USD"),
+            side = BondTradeSide.BUY,
+            quantity = 1,
+            price = 995.0,
+            accruedInterest = 0.0,
+            commission = 0.0,
+            tradeDate = 1_700_000_000_000,
+            bank = bank,
+            settlementCurrency = "USD",
+            settlementAmount = null
+        )
+
+        // No amount charged field, because the settlement currency is the bond's own.
+        val cash = cashRows().single()
+        assertEquals(995.0, cash.amount, 0.0)
+        assertEquals("USD", cash.currencyCode)
+    }
+
+    @Test
     fun `a later trade does not overwrite the stored terms`() = runTest {
         buy()
         // The form still holds a coupon the user has since edited elsewhere. Restating it
         // here would silently change what every position on this bond reports.
-        buy(quantity = 1, price = 100.0)
+        buy(quantity = 1, price = 1000.0)
 
         assertEquals(9.5, db.bondDao().getBondsOnce().single().couponPercent!!, 0.0)
     }
@@ -335,22 +427,23 @@ class BondRepositoryTest {
 
     @Test
     fun `positions fold from the trades`() = runTest {
-        buy(quantity = 3, price = 99.5)
+        buy(quantity = 3, price = 995.0)
 
         val position = repo.observePositions().first().single()
         assertEquals(3, position.quantity)
-        assertEquals(2985.0, position.costUAH, 0.0)
+        // 3 x 995.00 in the bond's own currency.
+        assertEquals(2985.0, position.cost, 0.0)
     }
 
     @Test
     fun `trades are read newest first for the list, and that is a display order only`() = runTest {
-        buy(quantity = 1, price = 95.0, date = 1_700_000_000_000)
-        buy(quantity = 1, price = 100.0, date = 1_700_200_000_000)
+        buy(quantity = 1, price = 950.0, date = 1_700_000_000_000)
+        buy(quantity = 1, price = 1000.0, date = 1_700_200_000_000)
 
         val trades = repo.observeTrades().first()
-        assertEquals(listOf(100.0, 95.0), trades.map { it.pricePercent })
+        assertEquals(listOf(1000.0, 950.0), trades.map { it.price })
         // The position itself is order-independent, and this is the assertion that says so.
-        assertEquals(1950.0, repo.observePositions().first().single().costUAH, 0.0)
+        assertEquals(1950.0, repo.observePositions().first().single().cost, 0.0)
     }
 
     @Test
@@ -414,9 +507,9 @@ class BondRepositoryTest {
             bond = bond,
             side = BondTradeSide.BUY,
             quantity = 1,
-            pricePercent = 99.5,
-            accruedInterestUAH = 0.0,
-            commissionUAH = 0.0,
+            price = 995.0,
+            accruedInterest = 0.0,
+            commission = 0.0,
             tradeDate = 1_700_000_000_000,
             bank = bank,
             settlementCurrency = "UAH",
@@ -435,9 +528,9 @@ class BondRepositoryTest {
             bond = bond,
             side = BondTradeSide.BUY,
             quantity = 1,
-            pricePercent = 99.5,
-            accruedInterestUAH = 0.0,
-            commissionUAH = 0.0,
+            price = 995.0,
+            accruedInterest = 0.0,
+            commission = 0.0,
             tradeDate = 1_700_000_000_000,
             bank = null,
             settlementCurrency = "UAH",

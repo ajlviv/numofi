@@ -32,6 +32,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.financetracker.model.BondPosition
 import com.financetracker.ui.MoneyAmount
+import com.financetracker.util.MoneyFormat
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
@@ -104,7 +105,8 @@ private fun PositionCard(position: BondPosition) {
     // Remembered rather than a top-level val: the locale is read once per composition instead
     // of once per class load, so a user who changes it in system settings sees the change.
     val dateFormat = remember { DateTimeFormatter.ofPattern("dd MMM yyyy", Locale.getDefault()) }
-    val gain = position.unrealisedUAH >= 0
+    val currency = position.bond.nominalCurrency
+    val gain = position.unrealised >= 0
     val gainColor = if (gain) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error
 
     Card(
@@ -119,16 +121,21 @@ private fun PositionCard(position: BondPosition) {
                         style = MaterialTheme.typography.bodyLarge,
                         fontWeight = FontWeight.Medium
                     )
-                    Text(
-                        text = position.bond.isin,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
+                    if (position.bond.isin.isNotBlank() && !position.bond.isin.equals(position.bond.name, ignoreCase = true)) {
+                        Text(
+                            text = position.bond.isin,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
                 }
                 Column(horizontalAlignment = Alignment.End) {
+                    // In the bond's own currency. A USD bond is quoted in dollars and a UAH
+                    // one in hryvnia, and the symbol on the card is how the two stay apart
+                    // without ever being converted.
                     MoneyAmount(
-                        amount = position.marketValueUAH,
-                        currencyCode = "UAH",
+                        amount = position.marketValue,
+                        currencyCode = currency,
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold
                     )
@@ -147,8 +154,11 @@ private fun PositionCard(position: BondPosition) {
 
             Row(horizontalArrangement = Arrangement.spacedBy(24.dp)) {
                 Figure("Held", "${position.quantity}")
-                Figure("Cost", position.averageCostPercent?.let { "%.2f%%".format(it) } ?: "—")
-                Figure("Unrealised", withSign(position.unrealisedUAH), gainColor)
+                Figure(
+                    "Cost/bond",
+                    position.averageCost?.let { MoneyFormat.format(it, currency) } ?: "—"
+                )
+                Figure("Unrealised", withSign(position.unrealised, currency), gainColor)
             }
 
             val terms = bondTerms(position, dateFormat)
@@ -184,10 +194,11 @@ private fun bondTerms(position: BondPosition, dateFormat: DateTimeFormatter): St
     val coupon = position.bond.couponPercent
     if (coupon != null) {
         val period = position.bond.couponPeriodMonths
-        val annual = position.annualCouponIncomeUAH
+        val annual = position.annualCouponIncome
+        val currency = position.bond.nominalCurrency
         parts += when {
-            period != null && annual != null -> "Coupon %.2f%% every %d months — %.2f UAH a year".format(
-                coupon, period, annual
+            period != null && annual != null -> "Coupon %.2f%% every %d months — %s a year".format(
+                coupon, period, MoneyFormat.format(annual, currency)
             )
 
             period != null -> "Coupon %.2f%% every %d months".format(coupon, period)
@@ -218,5 +229,5 @@ private fun Figure(label: String, value: String, color: Color? = null) {
     }
 }
 
-private fun withSign(value: Double): String =
-    if (value > 0) "+%.2f".format(value) else "%.2f".format(value)
+private fun withSign(value: Double, currency: String): String =
+    (if (value > 0) "+" else "") + MoneyFormat.format(value, currency)

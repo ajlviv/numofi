@@ -17,6 +17,7 @@ import com.financetracker.model.SearchText
 import com.financetracker.model.TransactionEntity
 import com.financetracker.model.TransactionType
 import com.financetracker.model.TransferDirection
+import com.financetracker.util.MoneyFormat
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
@@ -101,18 +102,26 @@ class BondRepository @Inject constructor(
         bond: Bond,
         side: BondTradeSide,
         quantity: Int,
-        pricePercent: Double,
-        accruedInterestUAH: Double,
-        commissionUAH: Double,
+        price: Double,
+        accruedInterest: Double,
+        commission: Double,
         tradeDate: Long,
         bank: BankRef?,
         settlementCurrency: String,
         settlementAmount: Double?
     ): RecordTradeResult {
-        val isin = BondMath.normaliseIsin(bond.isin)
-        // Pure functions, so they stay outside: there is nothing to roll back.
+        val isin = BondMath.normaliseIsin(bond.isin).ifBlank {
+            BondMath.normaliseIsin(bond.name)
+        }
+        if (isin.isBlank()) {
+            return RecordTradeResult.Invalid("Enter a name")
+        }
+        // Pure functions, so they stay outside: there is nothing to roll back. The price is
+        // money in the bond's currency and is capped at twice the nominal, not checked
+        // against a percentage ceiling — that is the whole point of storing money.
         BondMath.validateQuantity(quantity)?.let { return RecordTradeResult.Invalid(it) }
-        BondMath.validatePricePercent(pricePercent)?.let { return RecordTradeResult.Invalid(it) }
+        BondMath.validatePrice(price, bond.nominal.takeIf { it > 0.0 })?.let { return RecordTradeResult.Invalid(it) }
+        BondMath.validateNominal(bond.nominal)?.let { return RecordTradeResult.Invalid(it) }
 
         return db.withTransaction {
             val existing = bondDao.getByIsin(isin)
@@ -140,23 +149,28 @@ class BondRepository @Inject constructor(
                 bondDao.getByIsin(isin)
             } ?: return@withTransaction RecordTradeResult.Invalid("Bond could not be saved")
 
-            val marketUAH = BondMath.tradeTotalUAH(
+            val marketValue = BondMath.tradeTotal(
                 BondTrade(
                     id = 0,
                     isin = isin,
                     side = side,
                     quantity = quantity,
-                    pricePercent = pricePercent,
-                    accruedInterestUAH = accruedInterestUAH,
-                    commissionUAH = commissionUAH,
+                    price = price,
+                    accruedInterest = accruedInterest,
+                    commission = commission,
                     tradeDate = tradeDate,
                     bankCode = bank?.code,
                     transactionId = null
-                ),
-                stored.nominalUAH
+                )
             )
-            val settlement = BondMath.settlement(marketUAH, settlementCurrency, settlementAmount)
+            val settlement = BondMath.settlement(
+                marketValue = marketValue,
+                bondCurrency = stored.nominalCurrency,
+                settlementCurrency = settlementCurrency,
+                actualAmount = settlementAmount
+            )
 
+            val note = tradeNote(side, quantity, price, bond.nominalCurrency)
             val cashId = transactionDao.insert(
                 TransactionEntity(
                     userId = userId,
@@ -165,7 +179,7 @@ class BondRepository @Inject constructor(
                     type = TransactionType.TRANSFER,
                     category = CATEGORY,
                     timestamp = tradeDate,
-                    note = tradeNote(side, quantity, pricePercent),
+                    note = note,
                     currencyCode = settlementCurrency,
                     bankCode = bank?.code,
                     // Derived here for the same reason as everywhere else: a row whose
@@ -173,7 +187,7 @@ class BondRepository @Inject constructor(
                     // without one.
                     searchText = SearchText.of(
                         bondTitle(stored.name),
-                        tradeNote(side, quantity, pricePercent),
+                        note,
                         CATEGORY,
                         bank,
                         null
@@ -190,9 +204,9 @@ class BondRepository @Inject constructor(
                     isin = isin,
                     side = side,
                     quantity = quantity,
-                    pricePercent = pricePercent,
-                    accruedInterestUAH = accruedInterestUAH,
-                    commissionUAH = commissionUAH,
+                    price = price,
+                    accruedInterest = accruedInterest,
+                    commission = commission,
                     tradeDate = tradeDate,
                     bankCode = bank?.code,
                     transactionId = cashId
@@ -218,18 +232,23 @@ class BondRepository @Inject constructor(
      * colour on purpose: a purchase is not an expense and should not be dressed as one. With
      * that colouring gone, the note is the only thing saying which way the trade went, and
      * the two rows of a round trip would otherwise be indistinguishable.
+     *
+     * The price is printed as money in the bond's currency — 1 020.00 ₴ — matching what the
+     * user typed, and not as a percentage, which is what the whole storage change removed.
      */
-    private fun tradeNote(side: BondTradeSide, quantity: Int, pricePercent: Double): String =
-        "%s %d шт. @ %s%%".format(if (side == BondTradeSide.BUY) "Купівля" else "Продаж", quantity, trim(pricePercent))
-
-    private fun trim(value: Double): String =
-        if (value % 1.0 == 0.0) value.toInt().toString() else value.toString()
+    private fun tradeNote(side: BondTradeSide, quantity: Int, price: Double, currency: String): String =
+        "%s %d шт. @ %s".format(
+            if (side == BondTradeSide.BUY) "Купівля" else "Продаж",
+            quantity,
+            MoneyFormat.format(price, currency)
+        )
 
     private fun Bond.toEntity(isin: String): BondEntity =
         BondEntity(
             isin = isin,
             name = name,
-            nominalUAH = nominalUAH,
+            nominal = nominal,
+            nominalCurrency = nominalCurrency,
             couponPercent = couponPercent,
             couponPeriodMonths = couponPeriodMonths,
             maturityDate = maturityDate

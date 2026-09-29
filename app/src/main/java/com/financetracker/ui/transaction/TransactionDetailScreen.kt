@@ -4,10 +4,14 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontFamily
@@ -27,6 +31,9 @@ fun TransactionDetailScreen(
     onDelete: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    // Deletion is destructive and final, so it has to survive a mis-tap: the icon only raises
+    // the confirmation, and nothing leaves the database until the user says so twice.
+    var confirmDelete by remember { mutableStateOf(false) }
     Scaffold(
         modifier = modifier,
         topBar = {
@@ -34,11 +41,11 @@ fun TransactionDetailScreen(
                 title = { Text("Transaction Details") },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.Default.ArrowBack, contentDescription = "Back")
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
                     }
                 },
                 actions = {
-                    IconButton(onClick = onDelete) {
+                    IconButton(onClick = { confirmDelete = true }) {
                         Icon(Icons.Default.Delete, contentDescription = "Delete", tint = Color.Red)
                     }
                 }
@@ -90,6 +97,29 @@ fun TransactionDetailScreen(
                 SectionCard(section)
             }
         }
+    }
+
+    if (confirmDelete) {
+        AlertDialog(
+            onDismissRequest = { confirmDelete = false },
+            title = { Text("Delete transaction?") },
+            // The title is named because deleting the wrong row is the whole risk this dialog
+            // exists to absorb, and it cannot be undone afterwards.
+            text = { Text("\"${transaction.title}\" will be permanently deleted.") },
+            dismissButton = {
+                TextButton(onClick = { confirmDelete = false }) { Text("Cancel") }
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        confirmDelete = false
+                        onDelete()
+                    }
+                ) {
+                    Text("Delete", color = Color.Red)
+                }
+            }
+        )
     }
 }
 

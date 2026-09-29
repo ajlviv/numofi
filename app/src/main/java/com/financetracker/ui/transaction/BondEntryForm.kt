@@ -37,7 +37,9 @@ import com.financetracker.model.BondMath
 import com.financetracker.model.BondTradeSide
 import com.financetracker.model.RECORDABLE_CURRENCIES
 import com.financetracker.ui.MoneyAmount
+import com.financetracker.ui.component.RequiredLabel
 import com.financetracker.ui.component.SingleChoiceDropdown
+import com.financetracker.util.MoneyFormat
 import java.time.LocalDate
 import java.util.Locale
 
@@ -46,7 +48,7 @@ internal data class BondForm(
     val bond: Bond,
     val side: BondTradeSide,
     val quantity: Int,
-    val pricePercent: Double,
+    val price: Double,
     val accrued: Double,
     val commission: Double,
     val date: LocalDate,
@@ -71,7 +73,8 @@ internal fun BondEntryForm(
     var side by remember { mutableStateOf(BondTradeSide.BUY) }
     var isin by remember { mutableStateOf("") }
     var name by remember { mutableStateOf("") }
-    var nominal by remember { mutableStateOf("") }
+    var nominal by remember { mutableStateOf("1000") }
+    var bondCurrency by remember { mutableStateOf("UAH") }
     var coupon by remember { mutableStateOf("") }
     var couponPeriod by remember { mutableStateOf("") }
     var maturity by remember { mutableStateOf<LocalDate?>(null) }
@@ -92,7 +95,8 @@ internal fun BondEntryForm(
         knownBond?.let {
             isin = it.isin
             name = it.name
-            nominal = it.nominalUAH.toPlainString()
+            nominal = it.nominal.toPlainString()
+            bondCurrency = it.nominalCurrency
             it.couponPercent?.let { coupon = it.toPlainString() }
             it.couponPeriodMonths?.let { months -> couponPeriod = months.toString() }
             it.maturityDate?.let { millis -> maturity = instantToLocalDate(millis) }
@@ -106,18 +110,21 @@ internal fun BondEntryForm(
     val accruedValue = accrued.replace(',', '.').toDoubleOrNull() ?: 0.0
     val commissionValue = commission.replace(',', '.').toDoubleOrNull() ?: 0.0
     val couponValue = coupon.replace(',', '.').toDoubleOrNull()
+    val priceProblem = BondMath.validatePrice(priceValue, nominalValue.takeIf { it > 0.0 })
 
     // The live total, so the figure the user is about to commit is on screen while they
     // type it rather than only after. This is the number they will check against the broker.
-    val marketUAH = if (quantityValue > 0 && priceValue > 0.0 && nominalValue > 0.0) {
-        quantityValue * BondMath.cleanPriceUAH(nominalValue, priceValue) +
-            quantityValue * accruedValue + commissionValue
+    // Money in the bond's currency: price is typed as money since v7, so no nominal or
+    // percentage is involved. Refused for a price the form itself rejects: totalling an
+    // input it calls impossible would be the very mistake the error is warning about.
+    val marketTotal = if (priceProblem == null && quantityValue > 0 && priceValue > 0.0) {
+        quantityValue * priceValue + quantityValue * accruedValue + commissionValue
     } else {
         null
     }
-    val foreign = !currency.equals("UAH", ignoreCase = true)
+    val foreign = !currency.equals(bondCurrency, ignoreCase = true)
     val enteredAmount = settlementAmount.replace(',', '.').toDoubleOrNull()
-    val settlement = marketUAH?.let { BondMath.settlement(it, currency, enteredAmount) }
+    val settlement = marketTotal?.let { BondMath.settlement(it, bondCurrency, currency, enteredAmount) }
 
     Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
         SingleChoiceSegmentedButtonRow {
@@ -155,21 +162,38 @@ internal fun BondEntryForm(
         OutlinedTextField(
             value = name,
             onValueChange = { name = it },
-            label = { Text("Name") },
+            label = { RequiredLabel("Name") },
             placeholder = { Text("ОвДП 24/Б") },
             modifier = Modifier.fillMaxWidth(),
             singleLine = true
         )
 
-        OutlinedTextField(
-            value = nominal,
-            onValueChange = { nominal = it },
-            label = { Text("Nominal (UAH)") },
-            placeholder = { Text("1000") },
-            modifier = Modifier.fillMaxWidth(),
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-            singleLine = true
-        )
+        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            OutlinedTextField(
+                value = nominal,
+                onValueChange = { nominal = it },
+                // Prefilled with 1000, the everyday nominal, and kept editable because a
+                // bond's face value determines the coupon and the price ceiling.
+                label = { RequiredLabel("Nominal") },
+                placeholder = { Text("1000") },
+                modifier = Modifier.weight(1f),
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                singleLine = true
+            )
+            SingleChoiceDropdown(
+                label = "Bond currency",
+                options = RECORDABLE_CURRENCIES.map { it to it },
+                selected = bondCurrency,
+                onSelect = {
+                    // Settlement follows the bond unless the user had picked something of
+                    // their own: a USD bond opens settled in USD, and a bond currency change
+                    // does not silently re-file a settlement the user deliberately set.
+                    if (currency == bondCurrency) currency = it
+                    bondCurrency = it
+                },
+                modifier = Modifier.weight(1f)
+            )
+        }
 
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             OutlinedTextField(
@@ -200,7 +224,7 @@ internal fun BondEntryForm(
             OutlinedTextField(
                 value = quantity,
                 onValueChange = { quantity = it.filter(Char::isDigit) },
-                label = { Text("Quantity") },
+                label = { RequiredLabel("Quantity") },
                 modifier = Modifier.weight(1f),
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                 singleLine = true
@@ -208,12 +232,44 @@ internal fun BondEntryForm(
             OutlinedTextField(
                 value = price,
                 onValueChange = { price = it },
-                label = { Text("Price %") },
-                placeholder = { Text("99.5") },
+                // Money per bond in the bond's currency: what the broker's confirmation
+                // prints. Not a percentage — the whole point of the v7 change is that the
+                // number typed is the number spent, so 1020 means 1020.00, not 1020%.
+                label = { RequiredLabel("Price/bond") },
+                placeholder = { Text(MoneyFormat.format(995.0, bondCurrency)) },
                 modifier = Modifier.weight(1f),
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                 singleLine = true
             )
+        }
+
+        // The price's reading as the percentage-of-nominal the exchange quotes, kept live
+        // under the field it belongs to. This is the one figure a misreading of a bank
+        // screen mangles, and leaving it to the Save error would defer a correction the
+        // form could already be showing. An impossible input is reported here instead, in
+        // the same slot, so the field never silently totals it.
+        when {
+            priceProblem != null ->
+                Text(
+                    text = priceProblem,
+                    color = MaterialTheme.colorScheme.error,
+                    style = MaterialTheme.typography.bodySmall
+                )
+            nominalValue > 0.0 && priceValue > 0.0 ->
+                Text(
+                    text = "= %.2f%% of %s nominal".format(
+                        BondMath.percentOfNominal(priceValue, nominalValue),
+                        MoneyFormat.text(nominalValue, bondCurrency).plain
+                    ),
+                    style = MaterialTheme.typography.bodySmall
+                )
+            nominalValue > 0.0 ->
+                Text(
+                    text = "% of %s nominal".format(MoneyFormat.text(nominalValue, bondCurrency).plain),
+                    style = MaterialTheme.typography.bodySmall
+                )
+            else ->
+                Text(text = "% of nominal", style = MaterialTheme.typography.bodySmall)
         }
 
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -281,8 +337,10 @@ internal fun BondEntryForm(
                 settlement.impliedRate?.let {
                     Text(
                         // Shown so a mistyped amount is visible before it is saved rather than
-                        // after, at which point it is already in the balance.
-                        text = "at about %.2f UAH per %s".format(it, currency),
+                        // after, at which point it is already in the balance. The bond is
+                        // priced in its own currency, so the rate reads as bond currency per
+                        // settlement currency.
+                        text = "at about %.2f %s per %s".format(it, bondCurrency, currency),
                         style = MaterialTheme.typography.bodySmall
                     )
                 }
@@ -313,12 +371,16 @@ internal fun BondEntryForm(
                     return@Button
                 }
                 error = null
+                val normalisedIsin = BondMath.normaliseIsin(isin).ifBlank {
+                    BondMath.normaliseIsin(name)
+                }
                 onSave(
                     BondForm(
                         bond = Bond(
-                            isin = BondMath.normaliseIsin(isin),
+                            isin = normalisedIsin,
                             name = name.trim(),
-                            nominalUAH = nominalValue,
+                            nominal = nominalValue,
+                            nominalCurrency = bondCurrency,
                             couponPercent = couponValue,
                             couponPeriodMonths = couponPeriod.toIntOrNull(),
                             maturityDate = maturity?.let {
@@ -327,7 +389,7 @@ internal fun BondEntryForm(
                         ),
                         side = side,
                         quantity = quantityValue,
-                        pricePercent = priceValue,
+                        price = priceValue,
                         accrued = accruedValue,
                         commission = commissionValue,
                         date = date,
@@ -357,8 +419,8 @@ internal fun BondEntryForm(
  * Checks the form before anything is written, so the user is told what is wrong while the
  * fields are still on screen.
  *
- * Null means usable. The order is deliberate: the instrument first, because nothing else can
- * be checked without a nominal to check it against.
+ * Null means usable. The order is deliberate: the instrument name first, because nothing else
+ * can be checked without a nominal to check it against.
  */
 private fun validate(
     isin: String,
@@ -371,12 +433,12 @@ private fun validate(
     commission: Double,
     settlementAmount: Double?
 ): String? = when {
-    isin.isBlank() -> "Enter the ISIN"
     name.isBlank() -> "Enter a name"
     BondMath.validateNominal(nominal) != null -> BondMath.validateNominal(nominal)!!
     BondMath.validateCouponPercent(coupon) != null -> BondMath.validateCouponPercent(coupon)!!
     BondMath.validateQuantity(quantity) != null -> BondMath.validateQuantity(quantity)!!
-    BondMath.validatePricePercent(price) != null -> BondMath.validatePricePercent(price)!!
+    BondMath.validatePrice(price, nominal.takeIf { it > 0.0 }) != null ->
+        BondMath.validatePrice(price, nominal.takeIf { it > 0.0 })!!
     accrued < 0.0 -> "Accrued interest cannot be negative"
     commission < 0.0 -> "Commission cannot be negative"
     // Optional, so an empty box is allowed and a typed zero is allowed; only a negative

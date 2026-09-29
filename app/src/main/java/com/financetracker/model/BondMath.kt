@@ -5,30 +5,28 @@ package com.financetracker.model
  *
  * Kept apart from any storage or UI type, and written as plain functions over plain doubles,
  * so the arithmetic can be checked against a broker's confirmation screen directly. Every
- * price here is a percentage of nominal because that is how these instruments are quoted;
- * the division by 100 happens in exactly one place each, which is the whole defence against
- * the same slip appearing twice with different results.
+ * amount here is money in the bond's own currency: the price the user types is the price
+ * spent, with no division by 100 anywhere except the one derived reading that converts a
+ * money price to the percentage-of-nominal quote convention.
  */
 object BondMath {
 
-    /**
-     * The clean price of a single bond, in UAH.
-     *
-     * [pricePercent] is a percentage of [nominalUAH]: 99.5 means 99.5% of face value.
-     */
-    fun cleanPriceUAH(nominalUAH: Double, pricePercent: Double): Double =
-        nominalUAH * pricePercent / 100.0
+    /** The most a bond can plausibly cost, as a multiple of its nominal. */
+    const val MAX_PRICE_OF_NOMINAL = 2.0
+
+    /** The currencies a bond may be denominated in. [Currency.kt] owns this list. */
+    const val DEFAULT_NOMINAL_CURRENCY = "UAH"
 
     /**
-     * What one trade costs, in UAH, whichever way it went.
+     * What one trade costs, wherever it went, in the bond's currency.
      *
-     * Quantity times the clean price, plus the accrued interest for every bond, plus the
+     * Quantity times the price per bond, plus the accrued interest for every bond, plus the
      * commission once. The two additions are deliberately asymmetric:
      *
-     * - [BondTrade.accruedInterestUAH] is a per-bond figure, so it scales with the quantity.
+     * - [BondTrade.accruedInterest] is a per-bond figure, so it scales with the quantity.
      *   This is how a broker quotes it and it is stored in that unit so a per-bond reading
      *   stays recoverable.
-     * - [BondTrade.commissionUAH] is the whole trade's commission as charged, so it is added
+     * - [BondTrade.commission] is the whole trade's commission as charged, so it is added
      *   once. A broker quoting per bond and one quoting per trade are indistinguishable
      *   from a single number, and the field is defined as the total so that whatever the
      *   user types is what gets spent.
@@ -36,10 +34,20 @@ object BondMath {
      * A sale uses the same expression: the money is the same money, and keeping one function
      * means a sale cannot drift from a purchase's arithmetic.
      */
-    fun tradeTotalUAH(trade: BondTrade, nominalUAH: Double): Double =
-        trade.quantity * cleanPriceUAH(nominalUAH, trade.pricePercent) +
-            trade.quantity * trade.accruedInterestUAH +
-            trade.commissionUAH
+    fun tradeTotal(trade: BondTrade): Double =
+        trade.quantity * trade.price +
+            trade.quantity * trade.accruedInterest +
+            trade.commission
+
+    /**
+     * The percentage-of-nominal reading of a money price, for display and nothing else.
+     *
+     * The one division by 100 worth doing. The stored figure is the money price, and this is
+     * the exchange-quote convention it corresponds to, so the two never have to be reasoned
+     * into agreement.
+     */
+    fun percentOfNominal(price: Double, nominal: Double): Double =
+        price / nominal * 100.0
 
     /**
      * What a trade costs, valued in the currency the account actually holds.
@@ -49,38 +57,45 @@ object BondMath {
      * mistyped amount is visible. The rate is never stored: there is no rate feed here, and
      * a stored rate would be a second source of truth about a conversion that happened
      * somewhere else entirely.
+     *
+     * [bondCurrency] is the currency [marketValue] is in. Settlement in the bond's own
+     * currency needs no rate even to mention; settlement in any other needs one, so the two
+     * cases are told apart by comparing currencies rather than by assuming UAH.
      */
-    fun settlement(marketUAH: Double, settlementCurrency: String, actualAmount: Double?): BondSettlement {
-        val isHomeCurrency = settlementCurrency.equals(HOME_CURRENCY, ignoreCase = true)
-        if (isHomeCurrency) {
-            // A rate against UAH would be inventing a 1.0 and implying a conversion that
-            // never took place, so it is left off.
-            return BondSettlement(amount = marketUAH, impliedRate = null)
+    fun settlement(
+        marketValue: Double,
+        bondCurrency: String,
+        settlementCurrency: String,
+        actualAmount: Double?
+    ): BondSettlement {
+        val sameCurrency = settlementCurrency.equals(bondCurrency, ignoreCase = true)
+        if (sameCurrency) {
+            // A rate against the bond's own currency would be inventing a 1.0 and implying a
+            // conversion that never took place, so it is left off.
+            return BondSettlement(amount = marketValue, impliedRate = null)
         }
         if (actualAmount == null) {
             // The form has to be usable before the user goes and looks the figure up, so the
             // market value stands in. The balance is in the wrong currency until they fill
             // it in, which is visible rather than hidden.
-            return BondSettlement(amount = marketUAH, impliedRate = null)
+            return BondSettlement(amount = marketValue, impliedRate = null)
         }
         return BondSettlement(
             amount = actualAmount,
-            impliedRate = if (actualAmount == 0.0) null else marketUAH / actualAmount
+            impliedRate = if (actualAmount == 0.0) null else marketValue / actualAmount
         )
     }
-
-    /** The currency the bonds themselves are denominated in. */
-    const val HOME_CURRENCY = "UAH"
 
     /**
      * A year's worth of coupon on a holding, or null when the coupon was never recorded.
      *
-     * Null and not zero, because a missing rate is a different fact from a bond that pays
-     * nothing. Multiplying by a bare [couponPercent] would be wrong by a factor of a
-     * hundred: 9.5 is nine and a half percent, not nine and a half times the nominal.
+     * In the bond's currency. Null and not zero, because a missing rate is a different fact
+     * from a bond that pays nothing. Multiplying by a bare [couponPercent] would be wrong by
+     * a factor of a hundred: 9.5 is nine and a half percent, not nine and a half times the
+     * nominal.
      */
-    fun annualCouponIncomeUAH(quantity: Int, nominalUAH: Double, couponPercent: Double?): Double? =
-        couponPercent?.let { quantity * nominalUAH * it / 100.0 }
+    fun annualCouponIncome(quantity: Int, nominal: Double, couponPercent: Double?): Double? =
+        couponPercent?.let { quantity * nominal * it / 100.0 }
 
     /**
      * The coupon for one payment period, or null when the period is unknown.
@@ -90,15 +105,15 @@ object BondMath {
      * by the month count directly would give a quarterly payment as a thirty-second of the
      * annual coupon.
      */
-    fun periodCouponIncomeUAH(
+    fun periodCouponIncome(
         quantity: Int,
-        nominalUAH: Double,
+        nominal: Double,
         couponPercent: Double?,
         monthsBetween: Int?
     ): Double? {
         if (couponPercent == null || monthsBetween == null || monthsBetween <= 0) return null
         val periodsPerYear = 12.0 / monthsBetween
-        return annualCouponIncomeUAH(quantity, nominalUAH, couponPercent)!! / periodsPerYear
+        return annualCouponIncome(quantity, nominal, couponPercent)!! / periodsPerYear
     }
 
     /**
@@ -121,10 +136,10 @@ object BondMath {
 
         var quantity = 0
         var cost = 0.0
-        var lastPricePercent: Double? = null
+        var lastPrice: Double? = null
 
         for (trade in trades) {
-            val total = tradeTotalUAH(trade, bond.nominalUAH)
+            val total = tradeTotal(trade)
             when (trade.side) {
                 BondTradeSide.BUY -> {
                     quantity += trade.quantity
@@ -137,21 +152,21 @@ object BondMath {
                     quantity -= sold
                 }
             }
-            lastPricePercent = trade.pricePercent
+            lastPrice = trade.price
         }
 
         // A fully closed position is left in place with a quantity of zero rather than
         // dropped, so the residual shows instead of a silent 0.0. Rounding on the
         // proportional subtraction leaves a few kopecks, and zeroing them would hide it.
-        val average = if (quantity > 0) cost / quantity / bond.nominalUAH * 100.0 else null
+        val average = if (quantity > 0) cost / quantity else null
 
         return BondPosition(
             bond = bond,
             quantity = quantity,
-            costUAH = cost,
-            averageCostPercent = average,
-            lastPricePercent = lastPricePercent,
-            annualCouponIncomeUAH = annualCouponIncomeUAH(quantity, bond.nominalUAH, bond.couponPercent)
+            cost = cost,
+            averageCost = average,
+            lastPrice = lastPrice,
+            annualCouponIncome = annualCouponIncome(quantity, bond.nominal, bond.couponPercent)
         )
     }
 
@@ -170,26 +185,29 @@ object BondMath {
     }
 
     /**
-     * Error text, or null when the price is usable.
+     * Error text, or null when the price of one bond is usable.
      *
-     * Bounded loosely on purpose: a bond can trade far below par and a distressed one far
-     * above it, and a range tight enough to be "sensible" would reject real trades. What is
-     * caught is a zero and a number so large it can only be a misplaced decimal point.
+     * Money in, money out: the field is a UAH/USD/EUR price per bond, so the bottom is zero
+     * and the top is [MAX_PRICE_OF_NOMINAL] times the nominal. A distressed bond can trade
+     * far below par, but none trades at multiples of its face value, so a figure above twice
+     * the nominal can only be a slip — most often a quantity or a comma typed in the wrong
+     * box. No percentage conversion is needed or offered here.
      */
-    fun validatePricePercent(pricePercent: Double): String? = when {
-        pricePercent <= 0.0 -> "Price must be above 0%"
-        pricePercent > 1000.0 -> "Price looks too large"
+    fun validatePrice(price: Double, nominal: Double?): String? = when {
+        price <= 0.0 -> "Price must be above 0"
+        nominal != null && nominal > 0.0 && price > MAX_PRICE_OF_NOMINAL * nominal ->
+            "Price looks too large — a bond does not trade at more than twice its nominal"
         else -> null
     }
 
     /**
      * Error text, or null when the nominal is usable.
      *
-     * Zero is rejected rather than divided by, because the nominal scales every price in the
-     * app and a zero one would make the average cost and the coupon income both meaningless.
+     * Zero is rejected rather than divided by, because the nominal scales the coupon and the
+     * price ceiling and a zero one would make both meaningless.
      */
-    fun validateNominal(nominalUAH: Double): String? = when {
-        nominalUAH <= 0.0 -> "Nominal must be above 0"
+    fun validateNominal(nominal: Double): String? = when {
+        nominal <= 0.0 -> "Nominal must be above 0"
         else -> null
     }
 

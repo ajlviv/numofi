@@ -9,7 +9,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.AccountBalance
 import androidx.compose.material.icons.filled.Dashboard
-import androidx.compose.material.icons.filled.List
+import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FloatingActionButton
@@ -45,7 +45,7 @@ enum class MainBottomNavDestination(
     val icon: ImageVector
 ) {
     DASHBOARD("dashboard", "Dashboard", Icons.Default.Dashboard),
-    TRANSACTIONS("transactions", "Transactions", Icons.Default.List),
+    TRANSACTIONS("transactions", "Transactions", Icons.AutoMirrored.Filled.List),
     BONDS("bonds", "Bonds", Icons.Default.AccountBalance),
     SETTINGS("settings", "Settings", Icons.Default.Settings)
 }

@@ -9,9 +9,11 @@ import org.junit.Test
  * The money.
  *
  * These are the numbers a user checks against their broker's screen, so each test is written
- * as a worked figure rather than a round number. Two mistakes are guarded here that a
- * percentage is easy to make and hard to notice: treating 9.5 as a rate instead of 9.5
- * percent, and adding a per-bond commission once rather than once per bond.
+ * as a worked figure rather than a round number. Since v7 the price is stored as money per
+ * bond — 995.0 UAH, not 99.5% — so there is no percent-to-money division anywhere but the
+ * one derived reading. Two mistakes are guarded here that money makes easy in another way:
+ * treating 9.5 as a rate instead of 9.5 percent, and adding a per-bond commission once
+ * rather than once per bond.
  */
 class BondMathTest {
 
@@ -19,10 +21,13 @@ class BondMathTest {
     private val nominal = 1000.0
     private val coupon = 9.5
 
+    /** 99.5% of the 1000 nominal, now entered directly as money. */
+    private val parPrice = 995.0
+
     private fun trade(
         side: BondTradeSide = BondTradeSide.BUY,
         quantity: Int = 1,
-        pricePercent: Double = 99.5,
+        price: Double = parPrice,
         accrued: Double = 0.0,
         commission: Double = 0.0
     ) = BondTrade(
@@ -30,9 +35,9 @@ class BondMathTest {
         isin = "UA9000012345",
         side = side,
         quantity = quantity,
-        pricePercent = pricePercent,
-        accruedInterestUAH = accrued,
-        commissionUAH = commission,
+        price = price,
+        accruedInterest = accrued,
+        commission = commission,
         tradeDate = 0,
         bankCode = null,
         transactionId = null
@@ -41,26 +46,26 @@ class BondMathTest {
     // MARK: - One trade
 
     @Test
-    fun `the clean price of one bond is a percentage of nominal`() {
-        // 99.5% of 1000 is 995. If the division by 100 were dropped this would be 99500,
-        // a hundredfold error that still looks like a plausible number on screen.
-        assertEquals(995.0, BondMath.cleanPriceUAH(nominal, 99.5), 0.0)
+    fun `one bond costs what was entered, with no percentage conversion`() {
+        // The whole point of storing money: 1020.00 typed is 1020.00 spent. The old code had
+        // to divide 1020% by 100 and got a tenfold error when the unit was misread.
+        assertEquals(1020.0, BondMath.tradeTotal(trade(price = 1020.0)), 0.0)
+        assertEquals(995.0, BondMath.tradeTotal(trade()), 0.0)
     }
 
     @Test
-    fun `a bond trading above nominal is not capped at nominal`() {
-        // ОВДП do trade above par. Clamping here would make a 101% fill read as 100%.
-        assertEquals(1012.0, BondMath.cleanPriceUAH(nominal, 101.2), 0.0)
+    fun `the percentage-of-nominal reading is derived, not stored`() {
+        // The market quotes 102%; the user typed 1020.00. Both are reachable, and the
+        // division by 100 lives here and nowhere else.
+        assertEquals(102.0, BondMath.percentOfNominal(1020.0, nominal), 0.0001)
+        assertEquals(99.5, BondMath.percentOfNominal(parPrice, nominal), 0.0001)
     }
 
     @Test
     fun `a purchase totals the price, the accrual and the commission`() {
-        // 2 bonds at 99.5% is 1990, plus 40 of accrued interest for each of the two bonds
+        // 2 bonds at 995.00 is 1990, plus 40 of accrued interest for each of the two bonds
         // (the accrual is a per-bond figure), plus 12 for the commission.
-        val total = BondMath.tradeTotalUAH(
-            trade(quantity = 2, accrued = 40.0, commission = 12.0),
-            nominal
-        )
+        val total = BondMath.tradeTotal(trade(quantity = 2, accrued = 40.0, commission = 12.0))
 
         assertEquals(2082.0, total, 0.0)
     }
@@ -69,8 +74,8 @@ class BondMathTest {
     fun `the commission is added once per trade, not once per bond`() {
         // 12 is the whole trade's commission as the broker charged it. Multiplying it by
         // the quantity would silently inflate every multi-bond purchase by the lot size.
-        val perBond = BondMath.tradeTotalUAH(trade(quantity = 1, commission = 12.0), nominal)
-        val fiveBonds = BondMath.tradeTotalUAH(trade(quantity = 5, commission = 12.0), nominal)
+        val perBond = BondMath.tradeTotal(trade(quantity = 1, commission = 12.0))
+        val fiveBonds = BondMath.tradeTotal(trade(quantity = 5, commission = 12.0))
 
         assertEquals(1007.0, perBond, 0.0)
         assertEquals(4987.0, fiveBonds, 0.0)
@@ -82,17 +87,16 @@ class BondMathTest {
         // opposite case to the commission, and the asymmetry is deliberate: brokers quote
         // the accrual per bond and the commission per trade, so each is stored in the unit
         // it is quoted in.
-        val total = BondMath.tradeTotalUAH(trade(quantity = 3, accrued = 20.0), nominal)
+        val total = BondMath.tradeTotal(trade(quantity = 3, accrued = 20.0))
 
         assertEquals(3045.0, total, 0.0)
     }
 
     @Test
     fun `a sale pays what it brings in`() {
-        // 1010 of price at 101%, plus 30 of accrued interest, plus 5 commission.
-        val total = BondMath.tradeTotalUAH(
-            trade(side = BondTradeSide.SELL, quantity = 1, pricePercent = 101.0, accrued = 30.0, commission = 5.0),
-            nominal
+        // 1010 of price, plus 30 of accrued interest, plus 5 commission.
+        val total = BondMath.tradeTotal(
+            trade(side = BondTradeSide.SELL, quantity = 1, price = 1010.0, accrued = 30.0, commission = 5.0)
         )
 
         assertEquals(1045.0, total, 0.0)
@@ -104,21 +108,21 @@ class BondMathTest {
     fun `annual coupon income treats the rate as a percentage`() {
         // One 1000 nominal at 9.5% is 95 a year, not 9500. This is the single most likely
         // arithmetic slip in the whole feature: a coupon of 9.5 is not a rate of 9.5.
-        assertEquals(95.0, BondMath.annualCouponIncomeUAH(quantity = 1, nominalUAH = nominal, couponPercent = coupon)!!, 0.0)
-        assertEquals(475.0, BondMath.annualCouponIncomeUAH(quantity = 5, nominalUAH = nominal, couponPercent = coupon)!!, 0.0)
+        assertEquals(95.0, BondMath.annualCouponIncome(quantity = 1, nominal = nominal, couponPercent = coupon)!!, 0.0)
+        assertEquals(475.0, BondMath.annualCouponIncome(quantity = 5, nominal = nominal, couponPercent = coupon)!!, 0.0)
     }
 
     @Test
     fun `a bond with no recorded coupon has none to report`() {
         // Null rather than zero: zero would be a claim that the bond pays nothing, which is
         // a different fact from not knowing.
-        assertNull(BondMath.annualCouponIncomeUAH(quantity = 10, nominalUAH = nominal, couponPercent = null))
+        assertNull(BondMath.annualCouponIncome(quantity = 10, nominal = nominal, couponPercent = null))
     }
 
     @Test
     fun `a zero coupon is reported as zero, not as unknown`() {
         // Distinct from null above, and it must survive the null check.
-        assertEquals(0.0, BondMath.annualCouponIncomeUAH(quantity = 10, nominalUAH = nominal, couponPercent = 0.0)!!, 0.0)
+        assertEquals(0.0, BondMath.annualCouponIncome(quantity = 10, nominal = nominal, couponPercent = 0.0)!!, 0.0)
     }
 
     @Test
@@ -126,41 +130,38 @@ class BondMathTest {
         // Quarterly and annual payments differ in when the cash lands, not in how much a
         // year accrues. Dividing by the period here would understate the annual income by
         // the payment count.
-        val quarterly = BondMath.annualCouponIncomeUAH(1, nominal, coupon)!!
-        val annual = BondMath.annualCouponIncomeUAH(1, nominal, coupon)!!
-
-        assertEquals(quarterly, annual, 0.0)
-        assertEquals(95.0 / 4, BondMath.periodCouponIncomeUAH(1, nominal, coupon, monthsBetween = 3)!!, 0.0)
+        assertEquals(95.0 / 4, BondMath.periodCouponIncome(1, nominal, coupon, monthsBetween = 3)!!, 0.0)
         // A zero or absent period is not a division by zero.
-        assertNull(BondMath.periodCouponIncomeUAH(1, nominal, coupon, monthsBetween = 0))
-        assertNull(BondMath.periodCouponIncomeUAH(1, nominal, coupon, monthsBetween = null))
-        assertNull(BondMath.periodCouponIncomeUAH(1, nominal, null, monthsBetween = 3))
+        assertNull(BondMath.periodCouponIncome(1, nominal, coupon, monthsBetween = 0))
+        assertNull(BondMath.periodCouponIncome(1, nominal, coupon, monthsBetween = null))
+        assertNull(BondMath.periodCouponIncome(1, nominal, null, monthsBetween = 3))
     }
 
     // MARK: - Positions
 
-    private val bond = Bond(isin = "UA9000012345", name = "ОвДП 24/Б", nominalUAH = nominal, couponPercent = coupon)
+    private val bond = Bond(isin = "UA9000012345", name = "ОвДП 24/Б", nominal = nominal, couponPercent = coupon)
 
     @Test
     fun `one purchase is a position costing what was paid`() {
         val position = BondMath.position(bond, listOf(trade(quantity = 2, accrued = 40.0, commission = 12.0)))!!
 
         assertEquals(2, position.quantity)
-        assertEquals(2082.0, position.costUAH, 0.0)
-        // Above nominal, because the accrual and commission are part of what it cost.
-        assertEquals(104.1, position.averageCostPercent!!, 0.0001)
+        assertEquals(2082.0, position.cost, 0.0)
+        // 1041.00 per bond — above par because the accrual and commission are part of the
+        // cost. Money, not a percentage.
+        assertEquals(1041.0, position.averageCost!!, 0.0001)
     }
 
     @Test
     fun `a sale reduces the quantity and the cost by the same proportion`() {
-        // Sold at 101% but the cost basis is what the user paid, so the average cost of what
+        // Sold at 1010 but the cost basis is what the user paid, so the average cost of what
         // remains is unchanged by the price they got. Using the sale price here would quietly
         // rewrite the cost of the bonds they kept.
         val position = BondMath.position(
             bond,
             listOf(
-                trade(quantity = 10, accrued = 0.0, commission = 0.0),
-                trade(side = BondTradeSide.SELL, quantity = 4, pricePercent = 101.0, commission = 5.0)
+                trade(quantity = 10, commission = 0.0),
+                trade(side = BondTradeSide.SELL, quantity = 4, price = 1010.0, commission = 5.0)
             )
         )!!
 
@@ -168,8 +169,8 @@ class BondMathTest {
         // Pro rata: 4 of 10 bonds, so 40% of 9950 leaves the cost basis. The 5 commission on
         // the sale is not added back, because a sale reduces the holding rather than
         // enlarging it — the cash it produced is on its own transaction row.
-        assertEquals(5970.0, position.costUAH, 0.0)
-        assertEquals(99.5, position.averageCostPercent!!, 0.0001)
+        assertEquals(5970.0, position.cost, 0.0)
+        assertEquals(995.0, position.averageCost!!, 0.0001)
     }
 
     @Test
@@ -177,17 +178,17 @@ class BondMathTest {
         val position = BondMath.position(
             bond,
             listOf(
-                trade(quantity = 1, pricePercent = 95.0, commission = 0.0),
-                trade(quantity = 3, pricePercent = 100.0, commission = 0.0)
+                trade(quantity = 1, price = 950.0, commission = 0.0),
+                trade(quantity = 3, price = 1000.0, commission = 0.0)
             )
         )!!
 
         assertEquals(4, position.quantity)
         // 950 plus 3000. The accrual and commission are zero on both trades, so the cost
         // basis is exactly what the two fills came to.
-        assertEquals(3950.0, position.costUAH, 0.0)
-        // 987.50 per bond, which is 98.75% of nominal — not the 100 the last fill was at.
-        assertEquals(98.75, position.averageCostPercent!!, 0.0001)
+        assertEquals(3950.0, position.cost, 0.0)
+        // 987.50 per bond — not the 1000 the last fill was at.
+        assertEquals(987.5, position.averageCost!!, 0.0001)
     }
 
     @Test
@@ -206,11 +207,11 @@ class BondMathTest {
                 trade(side = BondTradeSide.SELL, quantity = 5)
             )
         )!!
-        assertNull(position.averageCostPercent)
+        assertNull(position.averageCost)
 
         assertEquals(0, position.quantity)
         // Left at the residual rather than zeroed, so a rounding remainder does not vanish.
-        assertTrue(position.costUAH < 1.0)
+        assertTrue(position.cost < 1.0)
     }
 
     @Test
@@ -223,13 +224,13 @@ class BondMathTest {
         val position = BondMath.position(
             bond,
             listOf(
-                trade(side = BondTradeSide.SELL, quantity = 2, pricePercent = 101.0),
-                trade(quantity = 3, pricePercent = 100.0)
+                trade(side = BondTradeSide.SELL, quantity = 2, price = 1010.0),
+                trade(quantity = 3, price = 1000.0)
             )
         )!!
 
         assertEquals(3, position.quantity)
-        assertTrue(position.costUAH >= 0.0)
+        assertTrue(position.cost >= 0.0)
     }
 
     @Test
@@ -239,63 +240,107 @@ class BondMathTest {
         // this being true is cheaper than rediscovering it later.
         val a = BondMath.position(
             bond,
-            listOf(trade(quantity = 1, pricePercent = 95.0), trade(quantity = 3, pricePercent = 100.0))
+            listOf(trade(quantity = 1, price = 950.0), trade(quantity = 3, price = 1000.0))
         )!!
         val b = BondMath.position(
             bond,
-            listOf(trade(quantity = 3, pricePercent = 100.0), trade(quantity = 1, pricePercent = 95.0))
+            listOf(trade(quantity = 3, price = 1000.0), trade(quantity = 1, price = 950.0))
         )!!
 
         assertEquals(a.quantity, b.quantity)
-        assertEquals(a.costUAH, b.costUAH, 0.0)
+        assertEquals(a.cost, b.cost, 0.0)
+    }
+
+    @Test
+    fun `a fully held position values it at the last price in money`() {
+        val position = BondMath.position(
+            bond,
+            listOf(trade(quantity = 3, price = 995.0), trade(quantity = 2, price = 1000.0))
+        )!!
+
+        // 5 bonds at the most recent price of 1000.00, market value in the bond's currency.
+        assertEquals(1000.0, position.lastPrice!!, 0.0)
+        assertEquals(5000.0, position.marketValue, 0.0)
+        // 5 x 995 + 2 x 1000... the pair above is 3 x 995 + 2 x 1000 = 4985, so unrealised
+        // is +15 at the mark.
+        assertEquals(4985.0, position.cost, 0.0)
+        assertEquals(15.0, position.unrealised, 0.0)
     }
 
     // MARK: - Settlement
 
     @Test
-    fun `a hryvnia trade needs no rate`() {
+    fun `settlement in the bond's own currency needs no rate`() {
         val settlement = BondMath.settlement(
-            marketUAH = 9950.0,
+            marketValue = 9950.0,
+            bondCurrency = "UAH",
             settlementCurrency = "UAH",
             actualAmount = null
         )
 
-        assertEquals(9950.0, settlement.amount!!, 0.0)
+        assertEquals(9950.0, settlement.amount, 0.0)
         // Stating a rate against itself would be inventing a 1.0 and implying a conversion
         // that never happened.
         assertNull(settlement.impliedRate)
     }
 
     @Test
-    fun `a foreign trade keeps the amount actually charged`() {
-        // The broker took 325 USD off a USD account. Converting to 9950 at any rate the app
-        // could have invented would be wrong, so the charged figure is what gets stored.
+    fun `a dollar bond settled in dollars needs no rate either`() {
+        // The previous hard-coded UAH comparison would have demanded a baked 1.0 rate on a
+        // USD-nominal bond settled in USD. The comparison is against the bond's currency.
         val settlement = BondMath.settlement(
-            marketUAH = 9950.0,
+            marketValue = 995.0,
+            bondCurrency = "USD",
+            settlementCurrency = "USD",
+            actualAmount = null
+        )
+
+        assertEquals(995.0, settlement.amount, 0.0)
+        assertNull(settlement.impliedRate)
+    }
+
+    @Test
+    fun `a foreign settlement keeps the amount actually charged`() {
+        // The broker took 325 USD off a USD account for a UAH bond. Converting to 9950 at
+        // any rate the app could have invented would be wrong, so the charged figure is what
+        // gets stored.
+        val settlement = BondMath.settlement(
+            marketValue = 9950.0,
+            bondCurrency = "UAH",
             settlementCurrency = "USD",
             actualAmount = 325.0
         )
 
-        assertEquals(325.0, settlement.amount!!, 0.0)
+        assertEquals(325.0, settlement.amount, 0.0)
         assertEquals(9950.0 / 325.0, settlement.impliedRate!!, 0.0000001)
     }
 
     @Test
-    fun `a foreign trade with no amount given falls back to the market value`() {
+    fun `a foreign settlement with no amount given falls back to the market value`() {
         // So the form is usable before the user looks the figure up, at the cost of the
         // balance being in the wrong currency until they fill it in.
-        val settlement = BondMath.settlement(marketUAH = 9950.0, settlementCurrency = "EUR", actualAmount = null)
+        val settlement = BondMath.settlement(
+            marketValue = 995.0,
+            bondCurrency = "USD",
+            settlementCurrency = "EUR",
+            actualAmount = null
+        )
 
-        assertEquals(9950.0, settlement.amount!!, 0.0)
+        assertEquals(995.0, settlement.amount, 0.0)
         assertNull(settlement.impliedRate)
     }
 
     @Test
     fun `a rate of zero has no implied rate to show`() {
         // Not a division by zero, and not an infinity: a zero charge is not a rate.
-        val settlement = BondMath.settlement(marketUAH = 9950.0, settlementCurrency = "USD", actualAmount = 0.0)
+        val settlement = BondMath.settlement(
+            marketValue = 9950.0,
+            bondCurrency = "UAH",
+            settlementCurrency = "USD",
+            actualAmount = 0.0
+        )
 
-        assertEquals(0.0, settlement.amount!!, 0.0)
+        assertEquals(0.0, settlement.amount, 0.0)
         assertNull(settlement.impliedRate)
     }
 
@@ -317,19 +362,26 @@ class BondMathTest {
     }
 
     @Test
-    fun `a price outside zero to a sensible ceiling is rejected`() {
-        // Not bounded tightly, because a distressed bond can trade far below par. Just not
-        // zero, and not a number that would mean a misplaced decimal point.
-        assertTrue(BondMath.validatePricePercent(0.0) != null)
-        assertTrue(BondMath.validatePricePercent(-1.0) != null)
-        // The ceiling is exclusive: exactly 1000 is the largest accepted figure.
-        assertTrue(BondMath.validatePricePercent(1000.01) != null)
-        assertNull(BondMath.validatePricePercent(1000.0))
-        assertNull(BondMath.validatePricePercent(99.5))
+    fun `a money price is valid at and below twice the nominal`() {
+        // The price field is money since v7, so 1020.00 on a 1000 bond is simply valid —
+        // the old build wanted 102 put in instead and the tenfold total came from that.
+        assertNull(BondMath.validatePrice(1020.0, nominal))
+        assertNull(BondMath.validatePrice(2000.0, nominal))
+        assertTrue(BondMath.validatePrice(0.0, nominal) != null)
+        assertTrue(BondMath.validatePrice(-1.0, nominal) != null)
+        // Above twice the nominal, whatever its currency, is an impossible bond price.
+        assertTrue(BondMath.validatePrice(2000.01, nominal) != null)
     }
 
     @Test
-    fun `a nominal of zero is rejected because every price depends on it`() {
+    fun `the price ceiling does not depend on knowing the nominal`() {
+        // A price typed before the nominal is filled in is checked against what is known and
+        // passed through. The ceiling is applied as soon as the nominal exists.
+        assertNull(BondMath.validatePrice(50_000.0, nominal = null))
+    }
+
+    @Test
+    fun `a nominal of zero is rejected because the coupon and price ceiling depend on it`() {
         assertTrue(BondMath.validateNominal(0.0) != null)
         assertTrue(BondMath.validateNominal(-1000.0) != null)
         assertNull(BondMath.validateNominal(1000.0))

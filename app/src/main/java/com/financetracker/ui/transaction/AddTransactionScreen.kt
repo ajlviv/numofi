@@ -54,6 +54,7 @@ import com.financetracker.model.BondTradeSide
 import com.financetracker.model.RECORDABLE_CURRENCIES
 import com.financetracker.model.TransactionType
 import com.financetracker.ui.MoneyAmount
+import com.financetracker.ui.component.RequiredLabel
 import com.financetracker.ui.component.SingleChoiceDropdown
 import java.time.Instant
 import java.time.LocalDate
@@ -181,9 +182,9 @@ fun AddTransactionScreen(
                                 bond = form.bond,
                                 side = form.side,
                                 quantity = form.quantity,
-                                pricePercent = form.pricePercent,
-                                accruedInterestUAH = form.accrued,
-                                commissionUAH = form.commission,
+                                price = form.price,
+                                accruedInterest = form.accrued,
+                                commission = form.commission,
                                 date = form.date,
                                 bank = form.bank,
                                 settlementCurrency = form.settlementCurrency,
@@ -256,7 +257,7 @@ private fun TransactionForm(
         OutlinedTextField(
             value = title,
             onValueChange = { title = it },
-            label = { Text("Title") },
+            label = { RequiredLabel("Title") },
             placeholder = { Text("e.g., Salary") },
             modifier = Modifier.fillMaxWidth(),
             isError = showError && title.isBlank(),
@@ -270,7 +271,7 @@ private fun TransactionForm(
             OutlinedTextField(
                 value = amount,
                 onValueChange = { amount = it },
-                label = { Text("Amount") },
+                label = { RequiredLabel("Amount") },
                 placeholder = { Text("0.00") },
                 modifier = Modifier.weight(1f),
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),

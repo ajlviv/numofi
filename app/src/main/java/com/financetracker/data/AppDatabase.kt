@@ -21,7 +21,7 @@ import com.financetracker.model.UserEntity
         BondEntity::class,
         BondTradeEntity::class
     ],
-    version = 6,
+    version = 7,
     exportSchema = false
 )
 @TypeConverters(Converters::class)
@@ -206,6 +206,82 @@ abstract class AppDatabase : RoomDatabase() {
         }
 
         /**
+         * Stores bond prices as money per bond and lets bonds be denominated in UAH, USD or
+         * EUR.
+         *
+         * The price the user typed into a percentage field had to be divided by the nominal
+         * to make sense — a slip in the unit produced a total ten times too large — so the
+         * stored figure is now what the broker's confirmation prints: 1020.00 for one bond,
+         * not 102%. ОВДП are not all UAH-nominal, so the bond is given a denomination and
+         * every money figure on it is carried in that currency.
+         *
+         * Both bond tables are rebuilt, and the bond trades are reinterpreted in the same
+         * pass: an old `pricePercent` of 99.5 against a 1000 nominal becomes a stored price
+         * of 995.0 via the join. The price row keeps its numeric meaning, and no bond's
+         * history is lost. Nothing outside the two bond tables changes: `searchText`, the
+         * cash rows and the rest of the statement data are untouched, and the migration test
+         * asserts that for the transactions in the target file.
+         */
+        val MIGRATION_6_7 = object : androidx.room.migration.Migration(6, 7) {
+            override fun migrate(db: androidx.sqlite.db.SupportSQLiteDatabase) {
+                // bond_trades is named aside first, so nothing is left referencing this
+                // table while its parent is being rebuilt, and its rows are still there to
+                // reinterpret afterwards.
+                db.execSQL("ALTER TABLE `bond_trades` RENAME TO `bond_trades_old`")
+                db.execSQL("ALTER TABLE `bonds` RENAME TO `bonds_old`")
+
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `bonds` (" +
+                        "`isin` TEXT NOT NULL, `name` TEXT NOT NULL, " +
+                        "`nominal` REAL NOT NULL, `nominalCurrency` TEXT NOT NULL, " +
+                        "`couponPercent` REAL, `couponPeriodMonths` INTEGER, " +
+                        "`maturityDate` INTEGER, PRIMARY KEY(`isin`))"
+                )
+                // Existing bonds were all denominated in what the app has always assumed,
+                // so they are filed as UAH. The value itself is carried over unchanged.
+                db.execSQL(
+                    "INSERT INTO `bonds` (isin, name, nominal, nominalCurrency, " +
+                        "couponPercent, couponPeriodMonths, maturityDate) " +
+                        "SELECT isin, name, nominalUAH, 'UAH', couponPercent, " +
+                        "couponPeriodMonths, maturityDate FROM `bonds_old`"
+                )
+                db.execSQL("DROP TABLE `bonds_old`")
+
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `bond_trades` (" +
+                        "`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
+                        "`isin` TEXT NOT NULL, `side` TEXT NOT NULL, " +
+                        "`quantity` INTEGER NOT NULL, `price` REAL NOT NULL, " +
+                        "`accruedInterest` REAL NOT NULL, `commission` REAL NOT NULL, " +
+                        "`tradeDate` INTEGER NOT NULL, `bankCode` TEXT, " +
+                        "`transactionId` INTEGER, " +
+                        "FOREIGN KEY(`isin`) REFERENCES `bonds`(`isin`) " +
+                        "ON UPDATE NO ACTION ON DELETE CASCADE , " +
+                        "FOREIGN KEY(`transactionId`) REFERENCES `transactions`(`id`) " +
+                        "ON UPDATE NO ACTION ON DELETE CASCADE )"
+                )
+                db.execSQL(
+                    "INSERT INTO `bond_trades` (id, isin, side, quantity, price, " +
+                        "accruedInterest, commission, tradeDate, bankCode, transactionId) " +
+                        "SELECT t.id, t.isin, t.side, t.quantity, " +
+                        "t.pricePercent * b.nominal / 100.0, t.accruedInterestUAH, " +
+                        "t.commissionUAH, t.tradeDate, t.bankCode, t.transactionId " +
+                        "FROM `bond_trades_old` t JOIN `bonds` b ON b.isin = t.isin"
+                )
+                db.execSQL("DROP TABLE `bond_trades_old`")
+
+                db.execSQL(
+                    "CREATE INDEX IF NOT EXISTS `index_bond_trades_isin` " +
+                        "ON `bond_trades` (`isin`)"
+                )
+                db.execSQL(
+                    "CREATE INDEX IF NOT EXISTS `index_bond_trades_transactionId` " +
+                        "ON `bond_trades` (`transactionId`)"
+                )
+            }
+        }
+
+        /**
          * Puts the three built-in banks into a table that has just been created.
          *
          * Shared by [MIGRATION_4_5] and [SEED_ON_CREATE], because a clean install runs no
@@ -260,7 +336,8 @@ abstract class AppDatabase : RoomDatabase() {
                     MIGRATION_2_3,
                     MIGRATION_3_4,
                     MIGRATION_4_5,
-                    MIGRATION_5_6
+                    MIGRATION_5_6,
+                    MIGRATION_6_7
                 )
                 .addCallback(SEED_ON_CREATE)
                 .build()

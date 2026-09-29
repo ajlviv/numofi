@@ -9,9 +9,10 @@ import androidx.room.PrimaryKey
  * A bond the user holds or has traded.
  *
  * The only instrument this app models is ОВДП — domestic government bonds issued by
- * Мінфін. They are denominated in UAH, which is why [nominalUAH] carries the currency in its
- * name while no other field here does: it is the one field whose unit is fixed by the issuer
- * rather than chosen by the trade.
+ * Мінфін. A bond is denominated in [nominalCurrency] (UAH, USD or EUR), and every money
+ * figure on it — nominal, price, НКД, commission, market value, coupon income — is in that
+ * same currency. Nothing here is ever converted; conversion is the broker's job and is not
+ * storable.
  *
  * Terms are nullable because the user types them in by hand from a broker's screen, and
  * someone recording a quick intraday trade may know the ISIN and nothing else. A missing
@@ -24,11 +25,10 @@ data class BondEntity(
     @PrimaryKey val isin: String,
     /** What to call it, e.g. "ОвДП 24/Б". Free text: the app has no name feed. */
     val name: String,
-    /**
-     * Face value of one bond in UAH. The unit price and the accrual are quoted against this,
-     * so it is needed to turn any percentage into money.
-     */
-    val nominalUAH: Double,
+    /** Face value of one bond in [nominalCurrency]. Price and НКД are quoted against it. */
+    val nominal: Double,
+    /** The currency the bond is denominated in — UAH, USD or EUR. */
+    val nominalCurrency: String,
     /** Annual coupon as a percentage, e.g. 9.5 for 9.5% a year. Not a fraction. */
     val couponPercent: Double? = null,
     /**
@@ -39,7 +39,7 @@ data class BondEntity(
     /** Epoch millis of redemption, or null if the user has not recorded it. */
     val maturityDate: Long? = null
 ) {
-    fun toDomain(): Bond = Bond(isin, name, nominalUAH, couponPercent, couponPeriodMonths, maturityDate)
+    fun toDomain(): Bond = Bond(isin, name, nominal, nominalCurrency, couponPercent, couponPeriodMonths, maturityDate)
 }
 
 /**
@@ -80,29 +80,31 @@ data class BondTradeEntity(
     /** How many bonds. Always positive; direction lives in [side]. */
     val quantity: Int,
     /**
-     * Percentage of nominal the trade happened at, e.g. 99.5 for 99.5% of face value.
+     * The price of one bond in money, in the bond's [BondEntity.nominalCurrency] — what the
+     * broker's confirmation prints: 1020.00 UAH, not 102%.
      *
-     * A percentage and not an absolute price because that is how these are quoted, and
-     * because it stays meaningful if the nominal is corrected afterwards.
+     * Stored directly and not derived, because this is the figure the user checks their
+     * record against. The percentage-of-nominal reading is derived at display time only.
      */
-    val pricePercent: Double,
+    val price: Double,
     /**
-     * Accrued interest in UAH for one bond, as the broker quoted it, or 0 when the trade
-     * settled on a coupon date.
+     * Accrued interest (НКД) in the bond's currency for one bond, as the broker quoted it,
+     * or 0 when the trade settled on a coupon date.
      *
      * Per bond, not per 100 and not already summed over the trade: what brokers print is a
      * number per bond, and storing the summed figure would make the per-bond reading
      * unrecoverable. [BondMath] multiplies by [quantity] to get the trade total.
      */
-    val accruedInterestUAH: Double = 0.0,
+    val accruedInterest: Double = 0.0,
     /**
-     * Broker commission for the whole trade in UAH, as charged, or 0 when there was none.
+     * Broker commission for the whole trade in the bond's currency, as charged, or 0 when
+     * there was none.
      *
      * A per-trade total and not a per-bond rate, because brokers quote it both ways and
      * there is no way to tell from a single number which the user meant. The field is defined
      * as the total so that the number entered is the number spent.
      */
-    val commissionUAH: Double = 0.0,
+    val commission: Double = 0.0,
     /** Epoch millis of the trade, which need not be the day it was entered. */
     val tradeDate: Long,
     /**
@@ -124,9 +126,9 @@ data class BondTradeEntity(
         isin = isin,
         side = side,
         quantity = quantity,
-        pricePercent = pricePercent,
-        accruedInterestUAH = accruedInterestUAH,
-        commissionUAH = commissionUAH,
+        price = price,
+        accruedInterest = accruedInterest,
+        commission = commission,
         tradeDate = tradeDate,
         bankCode = bankCode,
         transactionId = transactionId
@@ -143,7 +145,8 @@ enum class BondTradeSide {
 data class Bond(
     val isin: String,
     val name: String,
-    val nominalUAH: Double,
+    val nominal: Double,
+    val nominalCurrency: String = "UAH",
     val couponPercent: Double? = null,
     val couponPeriodMonths: Int? = null,
     val maturityDate: Long? = null
@@ -155,9 +158,9 @@ data class BondTrade(
     val isin: String,
     val side: BondTradeSide,
     val quantity: Int,
-    val pricePercent: Double,
-    val accruedInterestUAH: Double,
-    val commissionUAH: Double,
+    val price: Double,
+    val accruedInterest: Double,
+    val commission: Double,
     val tradeDate: Long,
     val bankCode: String?,
     val transactionId: Long?
@@ -168,8 +171,8 @@ data class BondTrade(
  *
  * @param amount what should be written to the cash row.
  * @param impliedRate the rate the user's own numbers imply, for showing back to them. Null
- * when the trade is in UAH, when the amount has not been entered, or when the amount is zero
- * — in none of those cases is there a conversion to show.
+ * when the trade is in the bond's own currency, when the amount has not been entered, or
+ * when the amount is zero — in none of those cases is there a conversion to show.
  */
 data class BondSettlement(val amount: Double, val impliedRate: Double?)
 
@@ -178,21 +181,21 @@ data class BondPosition(
     val bond: Bond,
     /** Positive. Zero means fully sold, which is kept rather than hidden. */
     val quantity: Int,
-    /** What the bonds still held cost, accrued interest and commission included. */
-    val costUAH: Double,
+    /** What the bonds still held cost, in the bond's currency, НКД and commission included. */
+    val cost: Double,
     /**
-     * The average cost of one bond as a percentage of nominal, or null when nothing is held
-     * and there is therefore nothing to average.
+     * The average cost of one bond in money, or null when nothing is held and there is
+     * therefore nothing to average.
      */
-    val averageCostPercent: Double?,
+    val averageCost: Double?,
     /** The price of the most recent trade, which is the only price this app knows. */
-    val lastPricePercent: Double?,
-    /** Null when the bond has no recorded coupon, see [BondMath.annualCouponIncomeUAH]. */
-    val annualCouponIncomeUAH: Double?
+    val lastPrice: Double?,
+    /** Null when the bond has no recorded coupon, see [BondMath.annualCouponIncome]. */
+    val annualCouponIncome: Double?
 ) {
-    /** What the holding is worth at the last price entered, in UAH. */
-    val marketValueUAH: Double
-        get() = quantity * (lastPricePercent ?: 0.0) / 100.0 * bond.nominalUAH
+    /** What the holding is worth at the last price entered, in the bond's currency. */
+    val marketValue: Double
+        get() = quantity * (lastPrice ?: 0.0)
 
     /**
      * Profit or loss against what was paid, at the last price entered.
@@ -201,5 +204,5 @@ data class BondPosition(
      * since. Both are absent by design, so this is labelled in the UI as being calculated at
      * the last entered price rather than shown as if it were a live valuation.
      */
-    val unrealisedUAH: Double get() = marketValueUAH - costUAH
+    val unrealised: Double get() = marketValue - cost
 }

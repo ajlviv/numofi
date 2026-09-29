@@ -37,6 +37,7 @@ import com.financetracker.model.totalsByCurrency
 import com.financetracker.ui.MoneyAmount
 import com.financetracker.ui.TransactionAppearance
 import com.financetracker.util.CategoryLabel
+import com.financetracker.util.MoneyFormat
 
 
 @Composable
@@ -75,7 +76,11 @@ fun DashboardScreen(
         // summing across currencies, and would make a sale look like spending money rather than
         // turning part of it into a bond.
         if (positions.isNotEmpty()) {
-            InvestmentCard(positions = positions)
+            // One card per bond denomination, for the same reason the balances split per
+            // currency: nothing here may be added to something it is not quoted against.
+            positions.groupBy { it.bond.nominalCurrency }.forEach { (currency, inCurrency) ->
+                InvestmentCard(positions = inCurrency, currencyCode = currency)
+            }
         }
 
         Text("Recent", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
@@ -136,35 +141,36 @@ private fun SummaryRow(totalIncome: Double, totalExpense: Double, currencyCode: 
 /**
  * What the bonds are worth, as one number, and where it is going.
  *
- * Sums across instruments but never across currencies, because a bond is quoted in UAH and
- * there is nothing else to sum it with. A holding whose trades were settled in dollars is
- * still valued in UAH, at the price that was entered for it.
+ * Sums across instruments but never across currencies: the caller hands one denomination at
+ * a time, and everything here is already in that currency. OВДП may be quoted in UAH, USD or
+ * EUR, and a card per currency keeps them apart without inventing a rate.
  */
 @Composable
-private fun InvestmentCard(positions: List<BondPosition>) {
+private fun InvestmentCard(positions: List<BondPosition>, currencyCode: String) {
     val held = positions.filter { it.quantity > 0 }
-    val value = held.sumOf { it.marketValueUAH }
-    val cost = held.sumOf { it.costUAH }
+    val value = held.sumOf { it.marketValue }
+    val cost = held.sumOf { it.cost }
     val unrealised = value - cost
     val gain = unrealised >= 0
-    val annualCoupon = held.sumOf { it.annualCouponIncomeUAH ?: 0.0 }
+    val annualCoupon = held.sumOf { it.annualCouponIncome ?: 0.0 }
+    val heldCount = held.sumOf { it.quantity }
 
     Card(elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)) {
         Column(modifier = Modifier.padding(16.dp)) {
             Text(
-                text = "Bonds",
+                text = if (positions.size > 1) "Bonds · $currencyCode" else "Bonds",
                 style = MaterialTheme.typography.bodySmall,
                 color = Color.Gray
             )
             Spacer(modifier = Modifier.height(4.dp))
             MoneyAmount(
                 amount = value,
-                currencyCode = "UAH",
+                currencyCode = currencyCode,
                 style = MaterialTheme.typography.titleLarge,
                 fontWeight = FontWeight.Bold
             )
             Text(
-                text = "%d held · cost %.2f UAH".format(held.sumOf { it.quantity }, cost),
+                text = "%d held · cost %s".format(heldCount, MoneyFormat.format(cost, currencyCode)),
                 style = MaterialTheme.typography.bodySmall,
                 color = Color.Gray
             )
@@ -172,11 +178,15 @@ private fun InvestmentCard(positions: List<BondPosition>) {
             Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
                 InvestmentFigure(
                     label = "Unrealised",
-                    value = withSign(unrealised),
+                    value = withSign(unrealised, currencyCode),
                     color = if (gain) TransactionAppearance.Income else TransactionAppearance.Expense
                 )
                 if (annualCoupon > 0.0) {
-                    InvestmentFigure(label = "Coupon a year", value = "%.2f".format(annualCoupon), color = null)
+                    InvestmentFigure(
+                        label = "Coupon a year",
+                        value = MoneyFormat.format(annualCoupon, currencyCode),
+                        color = null
+                    )
                 }
             }
             Spacer(modifier = Modifier.height(8.dp))
@@ -202,8 +212,8 @@ private fun InvestmentFigure(label: String, value: String, color: Color?) {
     }
 }
 
-private fun withSign(value: Double): String =
-    if (value > 0) "+%.2f".format(value) else "%.2f".format(value)
+private fun withSign(value: Double, currency: String): String =
+    (if (value > 0) "+" else "") + MoneyFormat.format(value, currency)
 
 @Composable
 private fun RowScope.SummaryCard(
