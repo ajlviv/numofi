@@ -1,6 +1,7 @@
 package com.financetracker.ui.settings
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Column
@@ -8,9 +9,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
@@ -24,6 +23,7 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -54,7 +54,6 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.financetracker.R
-import androidx.hilt.navigation.compose.hiltViewModel
 import com.financetracker.data.bank.BankProvider
 import com.financetracker.data.bank.BankSyncService
 import com.financetracker.data.settings.SettingsRepository
@@ -106,204 +105,232 @@ fun SettingsScreen(
                 .padding(padding)
                 .padding(16.dp)
                 .verticalScroll(rememberScrollState()),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
+            // The gap between groups is what separates them now that the dividers are gone,
+            // and everything inside one group is spaced by the card that holds it.
+            verticalArrangement = Arrangement.spacedBy(24.dp)
         ) {
-            Text(
-                text = "Appearance",
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold
-            )
-
-            SingleChoiceSegmentedButtonRow {
-                ThemeMode.entries.forEach { mode ->
-                    SegmentedButton(
-                        selected = themeMode == mode,
-                        onClick = { viewModel.setThemeMode(mode) },
-                        shape = MaterialTheme.shapes.small,
-                        modifier = Modifier.weight(1f)
-                    ) {
-                        Text(
-                            text = when (mode) {
-                                ThemeMode.SYSTEM -> "System"
-                                ThemeMode.LIGHT -> "Light"
-                                ThemeMode.DARK -> "Dark"
-                            },
-                            style = MaterialTheme.typography.bodySmall
-                        )
+            SettingsSection(title = "Preferences") {
+                RowLabel("Theme mode")
+                SingleChoiceSegmentedButtonRow {
+                    ThemeMode.entries.forEach { mode ->
+                        SegmentedButton(
+                            selected = themeMode == mode,
+                            onClick = { viewModel.setThemeMode(mode) },
+                            shape = MaterialTheme.shapes.small,
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Text(
+                                text = when (mode) {
+                                    ThemeMode.SYSTEM -> "System"
+                                    ThemeMode.LIGHT -> "Light"
+                                    ThemeMode.DARK -> "Dark"
+                                },
+                                style = MaterialTheme.typography.bodySmall
+                            )
+                        }
                     }
                 }
+
+                HorizontalDivider()
+
+                RowLabel("Language")
+                LanguagePicker(
+                    selected = language,
+                    onSelect = viewModel::setLanguage
+                )
             }
 
-            HorizontalDivider(Modifier.padding(vertical = 8.dp))
+            SettingsSection(title = "Bank connection") {
+                BankPicker(
+                    banks = viewModel.availableBanks,
+                    selectedBankId = selectedBankId,
+                    onSelect = viewModel::selectBank
+                )
 
-            Text(
-                text = "Bank connection",
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold
-            )
-
-            BankPicker(
-                banks = viewModel.availableBanks,
-                selectedBankId = selectedBankId,
-                onSelect = viewModel::selectBank
-            )
-
-            if (selectedBankId != null) {
-                if (isTokenConfigured) {
-                    Text(
-                        text = lastSyncedAt?.let {
-                            "A token is saved for this bank. Last synced ${relativeTime(it)}."
-                        } ?: "A token is saved for this bank. Not synced yet.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-
-                    SyncRangePicker(
-                        days = syncDays,
-                        enabled = !isSyncing,
-                        onSelect = viewModel::setSyncDays
-                    )
-
-                    syncProgress?.let { progress ->
+                if (selectedBankId != null) {
+                    if (isTokenConfigured) {
                         Text(
-                            text = progressText(progress),
+                            text = lastSyncedAt?.let {
+                                "A token is saved for this bank. Last synced ${relativeTime(it)}."
+                            } ?: "A token is saved for this bank. Not synced yet.",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
+
+                        SyncRangePicker(
+                            days = syncDays,
+                            enabled = !isSyncing,
+                            onSelect = viewModel::setSyncDays
+                        )
+
+                        syncProgress?.let { progress ->
+                            Text(
+                                text = progressText(progress),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    } else {
+                        OutlinedTextField(
+                            value = tokenInput,
+                            onValueChange = viewModel::onTokenChange,
+                            label = { Text("Access token") },
+                            modifier = Modifier.fillMaxWidth(),
+                            singleLine = true,
+                            visualTransformation = PasswordVisualTransformation()
+                        )
+                    }
+
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        if (isTokenConfigured) {
+                            OutlinedButton(
+                                onClick = viewModel::verifyConnection,
+                                enabled = !isSyncing
+                            ) {
+                                Text("Test")
+                            }
+                            Button(
+                                onClick = viewModel::syncNow,
+                                enabled = !isSyncing
+                            ) {
+                                if (isSyncing) {
+                                    CircularProgressIndicator(
+                                        modifier = Modifier.size(16.dp),
+                                        strokeWidth = 2.dp
+                                    )
+                                } else {
+                                    Text("Sync now")
+                                }
+                            }
+                            OutlinedButton(onClick = viewModel::clearToken) {
+                                Text("Remove token")
+                            }
+                        } else {
+                            Button(
+                                onClick = viewModel::saveToken,
+                                enabled = tokenInput.isNotBlank()
+                            ) {
+                                Text("Save token")
+                            }
+                        }
                     }
                 } else {
-                    OutlinedTextField(
-                        value = tokenInput,
-                        onValueChange = viewModel::onTokenChange,
-                        label = { Text("Access token") },
-                        modifier = Modifier.fillMaxWidth(),
-                        singleLine = true,
-                        visualTransformation = PasswordVisualTransformation()
+                    Text(
+                        text = "Select a bank to connect your accounts.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
 
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    if (isTokenConfigured) {
-                        OutlinedButton(
-                            onClick = viewModel::verifyConnection,
-                            enabled = !isSyncing
-                        ) {
-                            Text("Test")
-                        }
-                        Button(
-                            onClick = viewModel::syncNow,
-                            enabled = !isSyncing
-                        ) {
-                            if (isSyncing) {
-                                CircularProgressIndicator(
-                                    modifier = Modifier.size(16.dp),
-                                    strokeWidth = 2.dp
-                                )
-                            } else {
-                                Text("Sync now")
-                            }
-                        }
-                        OutlinedButton(onClick = viewModel::clearToken) {
-                            Text("Remove token")
-                        }
-                    } else {
-                        Button(
-                            onClick = viewModel::saveToken,
-                            enabled = tokenInput.isNotBlank()
-                        ) {
-                            Text("Save token")
-                        }
-                    }
+                statusMessage?.let { message ->
+                    Text(
+                        text = message,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.primary
+                    )
                 }
-            } else {
+            }
+
+            SettingsSection(title = "Import a statement") {
                 Text(
-                    text = "Select a bank to connect your accounts.",
+                    text = "Works with any bank: export a statement as XLSX, CSV or PDF and " +
+                        "pick it here. Nothing is uploaded.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                StatementImportSection()
+            }
+
+            SettingsSection(title = "Transaction banks") {
+                Text(
+                    text = "The names statements can be filed under. Adding one here does not " +
+                        "connect to it; it only labels transactions you import yourself.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                TransactionBanksSection(
+                    banks = banks,
+                    nameInput = bankNameInput,
+                    message = bankMessage,
+                    onNameChange = viewModel::onBankNameChange,
+                    onAdd = viewModel::addBank,
+                    onRename = viewModel::renameBank,
+                    onMoveUp = viewModel::moveBankUp,
+                    onMoveDown = viewModel::moveBankDown,
+                    onArchiveChange = viewModel::setBankArchived
+                )
+            }
+
+            SettingsSection(title = "Account") {
+                OutlinedButton(
+                    onClick = viewModel::signOut,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(
+                        text = stringResource(R.string.sign_out),
+                        color = MaterialTheme.colorScheme.error
+                    )
+                }
+                // The version belongs with sign-out rather than floating above it: it is the
+                // last thing on the page either way, and inside the card it cannot be read as
+                // belonging to the bank list.
+                Text(
+                    text = "Finance Tracker v1.0.0",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
-
-            statusMessage?.let { message ->
-                Text(
-                    text = message,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.primary
-                )
-            }
-
-            HorizontalDivider(Modifier.padding(vertical = 8.dp))
-
-            Text(
-                text = "Import a statement",
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold
-            )
-            Text(
-                text = "Works with any bank: export a statement as XLSX, CSV or PDF and " +
-                    "pick it here. Nothing is uploaded.",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            StatementImportSection()
-
-            HorizontalDivider(Modifier.padding(vertical = 8.dp))
-
-            Text(
-                text = "Transaction banks",
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold
-            )
-            Text(
-                text = "The names statements can be filed under. Adding one here does not " +
-                    "connect to it; it only labels transactions you import yourself.",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            TransactionBanksSection(
-                banks = banks,
-                nameInput = bankNameInput,
-                message = bankMessage,
-                onNameChange = viewModel::onBankNameChange,
-                onAdd = viewModel::addBank,
-                onRename = viewModel::renameBank,
-                onMoveUp = viewModel::moveBankUp,
-                onMoveDown = viewModel::moveBankDown,
-                onArchiveChange = viewModel::setBankArchived
-            )
-
-            HorizontalDivider(Modifier.padding(vertical = 8.dp))
-
-            Text(
-                text = "Language",
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold
-            )
-            LanguagePicker(
-                selected = language,
-                onSelect = viewModel::setLanguage
-            )
-
-            Spacer(modifier = Modifier.height(8.dp))
-
-            Text(
-                text = "Finance Tracker v1.0.0",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-
-            Spacer(modifier = Modifier.height(24.dp))
-
-            OutlinedButton(
-                onClick = viewModel::signOut,
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Text(
-                    text = stringResource(R.string.sign_out),
-                    color = MaterialTheme.colorScheme.error
-                )
-            }
         }
     }
+}
+
+/**
+ * A labelled group of related settings.
+ *
+ * Content sits in a [Card] so the grouping is visible without dividers, which is what the
+ * page used to rely on — a hairline between every control, so nothing read as a group of
+ * its own and the page scanned as one long list. Dividers are now reserved for separating
+ * repeating items *within* a group, where they separate like-from-like instead of competing
+ * with the card boundary.
+ */
+@Composable
+fun SettingsSection(
+    title: String,
+    content: @Composable ColumnScope.() -> Unit
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text(
+            text = title,
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.Bold
+        )
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            // Tonal rather than elevated, so a page of stacked cards stays quiet and the
+            // cards do not read as buttons.
+            colors = CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
+            )
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+                content = content
+            )
+        }
+    }
+}
+
+/** The name of a single control inside a group, e.g. "Theme mode". */
+@Composable
+fun RowLabel(text: String) {
+    Text(
+        text = text,
+        style = MaterialTheme.typography.labelLarge,
+        color = MaterialTheme.colorScheme.onSurfaceVariant
+    )
 }
 
 @Composable
@@ -381,6 +408,11 @@ private fun TransactionBanksSection(
     }
 
     banks.forEachIndexed { index, bank ->
+        // Hairlines between the rows, now that the group itself is a card: these separate
+        // items of the same kind, so they no longer compete with a group boundary.
+        if (index > 0) {
+            HorizontalDivider()
+        }
         Row(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically,
@@ -570,7 +602,7 @@ private fun StatementImportSection() {
                 Text("Reading file…", style = MaterialTheme.typography.bodyMedium)
             }
 
-        is StatementImportUiState.Preview -> ImportPreviewCard(current, banks, viewModel)
+        is StatementImportUiState.Preview -> ImportPreview(current, banks, viewModel)
 
         is StatementImportUiState.Done -> Column {
             Text(
@@ -607,106 +639,103 @@ private fun StatementImportSection() {
 }
 
 @Composable
-private fun ImportPreviewCard(
+private fun ImportPreview(
     state: StatementImportUiState.Preview,
     banks: List<Bank>,
     viewModel: StatementImportViewModel
 ) {
-    Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(top = 12.dp)
+    // Not a Card: this sits inside the statement import card, and a card inside a card reads
+    // as two unrelated things. The divider marks it as the step that follows the picker.
+    HorizontalDivider()
+
+    Column(
+        modifier = Modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
-        Column(modifier = Modifier.padding(16.dp)) {
+        Text(
+            // "in this file", because this list is the file being previewed and not the
+            // stored transactions. Reading it as the transaction list is what made the
+            // preview look like the imported rows had replaced the old ones.
+            text = "Found ${state.rows.size} transaction(s) in this file",
+            style = MaterialTheme.typography.titleSmall
+        )
+        state.unitNote?.let {
             Text(
-                // "in this file", because this list is the file being previewed and not the
-                // stored transactions. Reading it as the transaction list is what made the
-                // preview look like the imported rows had replaced the old ones.
-                text = "Found ${state.rows.size} transaction(s) in this file",
-                style = MaterialTheme.typography.titleSmall
+                text = it,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
             )
-            state.unitNote?.let {
-                Text(
-                    text = it,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-            if (state.skippedRows > 0) {
-                Text(
-                    text = "${state.skippedRows} row(s) had no usable date or amount.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-
-            Spacer(Modifier.height(12.dp))
-            Text("Bank", style = MaterialTheme.typography.labelLarge)
-            Spacer(Modifier.height(4.dp))
-            SingleChoiceDropdown(
-                label = "Choose a bank",
-                // "None" is a real option rather than an absence, because the file may be
-                // from somewhere the app has never heard of and the user still has to be
-                // able to say so instead of picking a wrong bank by accident.
-                options = listOf(null to "None") + banks.map { it.code to it.displayName },
-                selected = state.bankCode,
-                onSelect = { viewModel.onBankSelected(it) }
+        }
+        if (state.skippedRows > 0) {
+            Text(
+                text = "${state.skippedRows} row(s) had no usable date or amount.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
             )
-            if (state.bankUnresolved) {
+        }
+
+        Text("Bank", style = MaterialTheme.typography.labelLarge)
+        SingleChoiceDropdown(
+            label = "Choose a bank",
+            // "None" is a real option rather than an absence, because the file may be
+            // from somewhere the app has never heard of and the user still has to be
+            // able to say so instead of picking a wrong bank by accident.
+            options = listOf(null to "None") + banks.map { it.code to it.displayName },
+            selected = state.bankCode,
+            onSelect = { viewModel.onBankSelected(it) }
+        )
+        if (state.bankUnresolved) {
+            Text(
+                text = "This file was not recognised. Choose the bank, or the rows " +
+                    "cannot be filtered by it later.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.error
+            )
+        }
+
+        state.rows.take(PREVIEW_ROW_COUNT).forEach { row ->
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 2.dp)
+            ) {
                 Text(
-                    text = "This file was not recognised. Choose the bank, or the rows " +
-                        "cannot be filtered by it later.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.error
+                    text = formatPreviewDate(row.timestamp),
+                    style = MaterialTheme.typography.bodySmall
+                )
+                Spacer(Modifier.weight(1f))
+                Text(
+                    text = "${if (row.isExpense) "−" else "+"}${row.amount.toPlainString()}",
+                    style = MaterialTheme.typography.bodySmall
                 )
             }
-
-            Spacer(Modifier.height(8.dp))
-            state.rows.take(PREVIEW_ROW_COUNT).forEach { row ->
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(vertical = 2.dp)
-                ) {
-                    Text(
-                        text = formatPreviewDate(row.timestamp),
-                        style = MaterialTheme.typography.bodySmall
-                    )
-                    Spacer(Modifier.weight(1f))
-                    Text(
-                        text = "${if (row.isExpense) "−" else "+"}${row.amount.toPlainString()}",
-                        style = MaterialTheme.typography.bodySmall
-                    )
-                }
-                if (row.description.isNotBlank()) {
-                    Text(
-                        text = row.description,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 1
-                    )
-                }
-            }
-            if (state.rows.size > PREVIEW_ROW_COUNT) {
+            if (row.description.isNotBlank()) {
                 Text(
-                    text = "…and ${state.rows.size - PREVIEW_ROW_COUNT} more",
+                    text = row.description,
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1
                 )
             }
+        }
+        if (state.rows.size > PREVIEW_ROW_COUNT) {
+            Text(
+                text = "…and ${state.rows.size - PREVIEW_ROW_COUNT} more",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
 
-            Spacer(Modifier.height(8.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                // Disabled rather than failing after the tap, so the requirement is visible
-                // before the button is pressed. confirm() still guards it.
-                Button(
-                    onClick = viewModel::confirm,
-                    enabled = !state.bankUnresolved
-                ) {
-                    Text("Import ${state.rows.size}")
-                }
-                TextButton(onClick = viewModel::dismiss) { Text("Cancel") }
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            // Disabled rather than failing after the tap, so the requirement is visible
+            // before the button is pressed. confirm() still guards it.
+            Button(
+                onClick = viewModel::confirm,
+                enabled = !state.bankUnresolved
+            ) {
+                Text("Import ${state.rows.size}")
             }
+            TextButton(onClick = viewModel::dismiss) { Text("Cancel") }
         }
     }
 }
