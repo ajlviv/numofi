@@ -7,15 +7,20 @@ import com.financetracker.data.bank.BankProvider
 import com.financetracker.data.bank.BankSyncService
 import com.financetracker.data.bank.BankTransaction
 import com.financetracker.model.BankCode
+import com.financetracker.model.BankCodeGenerator
+import com.financetracker.model.BankEntity
 import com.financetracker.model.CardRef
 import com.financetracker.model.TransactionEntity
 import com.financetracker.model.TransactionType
+import com.financetracker.repository.BankRepository
+import com.financetracker.testing.FakeBankDao
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.math.BigDecimal
+import java.util.Random
 
 class BankSyncServiceTest {
 
@@ -95,10 +100,18 @@ class BankSyncServiceTest {
 
     private val auth = BankAuth.PersonalToken("token")
 
+    /**
+     * The sync path only reads the bank list, to resolve the bank's code into the name it
+     * bakes into the row's haystack, so the built-ins are enough.
+     */
+    private fun bankRepository() =
+        BankRepository(FakeBankDao(BankEntity.BUILT_IN), BankCodeGenerator(Random(1)))
+
     @Test
     fun `a synced row records the bank and the masked card`() = runTest {
         val dao = FakeDao()
-        BankSyncService(dao).sync(provider(listOf(account())), auth, "uid-1", 0, 1_757_000_000_000)
+        BankSyncService(dao, bankRepository())
+            .sync(provider(listOf(account())), auth, "uid-1", 0, 1_757_000_000_000)
 
         val row = dao.stored.single()
         assertEquals(BankCode.MONOBANK, row.bankCode)
@@ -108,7 +121,7 @@ class BankSyncServiceTest {
     @Test
     fun `an account with no masked number falls back to its name`() = runTest {
         val dao = FakeDao()
-        BankSyncService(dao).sync(
+        BankSyncService(dao, bankRepository()).sync(
             provider(listOf(account(maskedPan = emptyList()))),
             auth,
             "uid-1",
@@ -122,7 +135,7 @@ class BankSyncServiceTest {
     @Test
     fun `blank masked pan entries are ignored rather than joined into a label`() = runTest {
         val dao = FakeDao()
-        BankSyncService(dao).sync(
+        BankSyncService(dao, bankRepository()).sync(
             provider(listOf(account(maskedPan = listOf("", "  ")))),
             auth,
             "uid-1",
@@ -136,7 +149,7 @@ class BankSyncServiceTest {
     @Test
     fun `a synced row is searchable by title bank and card`() = runTest {
         val dao = FakeDao()
-        BankSyncService(dao).sync(provider(listOf(account())), auth, "uid-1", 0, 1_757_000_000_000)
+        BankSyncService(dao, bankRepository()).sync(provider(listOf(account())), auth, "uid-1", 0, 1_757_000_000_000)
 
         val text = dao.stored.single().searchText!!
         assertTrue(text.contains("torus"))

@@ -2,9 +2,12 @@ package com.financetracker.ui.main
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.financetracker.model.BondPosition
 import com.financetracker.model.Transaction
 import com.financetracker.model.TransactionEntity
 import com.financetracker.repository.AuthRepository
+import com.financetracker.repository.BankRepository
+import com.financetracker.repository.BondRepository
 import com.financetracker.repository.TransactionRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -24,8 +27,19 @@ import javax.inject.Inject
 @HiltViewModel
 class MainViewModel @Inject constructor(
     private val authRepository: AuthRepository,
-    private val transactionRepository: TransactionRepository
+    private val transactionRepository: TransactionRepository,
+    private val bondRepository: BondRepository,
+    bankRepository: BankRepository
 ) : ViewModel() {
+
+    /**
+     * Code to display name, for the detail card.
+     *
+     * A row's bank is stored as a code, and the name lives in the user's bank list, so
+     * something has to join them. The map is tiny and only changes when a bank is renamed.
+     */
+    val bankNames: StateFlow<Map<String, String>> = bankRepository.names
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyMap())
 
     /**
      * Every read is scoped to the signed-in uid, so switching Google accounts swaps
@@ -37,6 +51,15 @@ class MainViewModel @Inject constructor(
         .map { entities -> entities.map { it.toDomain() } }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
+    /**
+     * Holdings, folded from trades. Not scoped to a user, because the bonds an app knows
+     * about are the same for everyone who signs in on the device — they are public terms,
+     * not anyone's data, and the trades that produce a position are already only ever
+     * written by the person making them.
+     */
+    val positions: StateFlow<List<BondPosition>> = bondRepository.observePositions()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
     private val _message = MutableStateFlow<String?>(null)
     val message: StateFlow<String?> = _message.asStateFlow()
 
@@ -46,7 +69,10 @@ class MainViewModel @Inject constructor(
             val uid = authRepository.currentUid.firstOrNull() ?: return@launch
             runCatching {
                 transactionRepository.addTransaction(
-                    TransactionEntity.fromDomain(transaction, uid)
+                    // Null because the manual entry form has no bank field. Passed
+                    // explicitly rather than defaulted so that adding a bank to the form
+                    // later forces a decision about what name its rows will be findable by.
+                    TransactionEntity.fromDomain(transaction, uid, bank = null)
                 )
             }.onFailure { _message.value = it.message ?: "Could not save the transaction" }
         }

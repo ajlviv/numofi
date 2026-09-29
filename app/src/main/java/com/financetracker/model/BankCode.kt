@@ -1,35 +1,17 @@
 package com.financetracker.model
 
 /**
- * Which bank a transaction came from.
+ * The bank codes the app itself uses.
  *
- * A single column rather than a relation: the set of banks is closed and tiny, and every
- * consumer needs a label rather than a joined row. A null code means the row was typed by
- * hand, which is the only way to create a transaction with no bank behind it.
+ * The list of banks a *user* can choose from is data, in the `banks` table — see
+ * [BankEntity]. What is left here is the three codes the app is built around: two of them
+ * key [com.financetracker.data.statement.BankDetector]'s markers, and Monobank's is what
+ * [com.financetracker.data.bank.BankSyncService] stamps on every row it syncs. None of
+ * them are validated against anything, because a bank the user added is just as valid as
+ * one of these and used to be thrown away for not being on the list.
  */
 object BankCode {
-
     const val MONOBANK = "mo"
     const val UKRSIBBANK = "uk"
     const val PRIVATBANK = "pb"
-
-    /** Offered in the import preview and the filter chips, in this order. */
-    val CHOICES = listOf(MONOBANK, UKRSIBBANK, PRIVATBANK)
-
-    fun label(code: String?): String = when (code) {
-        MONOBANK -> "Monobank"
-        UKRSIBBANK -> "Ukrsibbank"
-        PRIVATBANK -> "PrivatBank"
-        null -> "Manual"
-        // Never silently blank an unknown code: it would be indistinguishable from
-        // "Manual", which is a real, different thing.
-        else -> code
-    }
-
-    /**
-     * Canonicalises a code that came from a file or a filter chip. Anything unrecognised
-     * becomes null, so a typo or a stale value cannot conjure a bank of its own.
-     */
-    fun normalize(raw: String?): String? =
-        raw?.trim()?.lowercase()?.takeIf { it in CHOICES }
 }

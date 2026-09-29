@@ -10,16 +10,20 @@ import com.financetracker.data.statement.StatementImportService
 import com.financetracker.data.statement.StatementParseOutcome
 import com.financetracker.data.statement.StatementParser
 import com.financetracker.data.statement.StatementRow
+import com.financetracker.model.Bank
 import com.financetracker.repository.AuthRepository
+import com.financetracker.repository.BankRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import java.text.DateFormat
 import java.util.Date
 import javax.inject.Inject
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
@@ -51,11 +55,19 @@ sealed interface StatementImportUiState {
 class StatementImportViewModel @Inject constructor(
     private val fileReader: StatementFileReader,
     private val importService: StatementImportService,
-    private val authRepository: AuthRepository
+    private val authRepository: AuthRepository,
+    bankRepository: BankRepository
 ) : ViewModel() {
 
     private val _state = MutableStateFlow<StatementImportUiState>(StatementImportUiState.Idle)
     val state: StateFlow<StatementImportUiState> = _state.asStateFlow()
+
+    /**
+     * Banks offered in the picker. Only the active ones, because importing is not a
+     * good moment to be looking at something the user has put away.
+     */
+    val banks: StateFlow<List<Bank>> = bankRepository.activeBanks
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
     fun onFileSelected(uri: Uri?) {
         if (uri == null) return

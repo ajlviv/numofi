@@ -10,9 +10,20 @@ package com.financetracker.model
 data class CurrencyTotals(
     val currencyCode: String?,
     val income: Double,
-    val expense: Double
+    val expense: Double,
+    /** Money that arrived by selling an asset, kept apart from [income]. */
+    val transferIn: Double = 0.0,
+    /** Money that left to buy an asset, kept apart from [expense]. */
+    val transferOut: Double = 0.0
 ) {
-    val balance: Double get() = income - expense
+    /**
+     * What is actually in the account.
+     *
+     * Counts transfers, because the balance is read as cash and cash really does leave when
+     * a bond is bought. Income and expense are untouched, so the spending figure still means
+     * spending and a bond purchase is never counted as it.
+     */
+    val balance: Double get() = income + transferIn - expense - transferOut
 }
 
 /**
@@ -29,6 +40,10 @@ fun totalsByCurrency(transactions: List<Transaction>): List<CurrencyTotals> =
             CurrencyTotals(
                 currencyCode = currency,
                 income = rows.filter { it.isIncome() }.sumOf { it.amount },
-                expense = rows.filter { it.isExpense() }.sumOf { it.amount }
+                expense = rows.filter { it.isExpense() }.sumOf { it.amount },
+                transferIn = rows.filter { it.isTransfer() && it.transferDirection == TransferDirection.IN }
+                    .sumOf { it.amount },
+                transferOut = rows.filter { it.isTransfer() && it.transferDirection == TransferDirection.OUT }
+                    .sumOf { it.amount }
             )
         }

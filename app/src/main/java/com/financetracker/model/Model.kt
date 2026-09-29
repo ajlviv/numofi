@@ -47,10 +47,28 @@ data class TransactionEntity(
      * Lowercased haystack the search query matches against, see [SearchText]. Nullable
      * only so the v4 migration can add the column without rewriting every existing row.
      */
-    val searchText: String? = null
+    val searchText: String? = null,
+    /**
+     * Nullable rather than defaulted at insert because the v6 migration adds the column
+     * without rewriting a single row, so every stored row starts out with nothing here.
+     */
+    val transferDirection: TransferDirection? = null
 ) {
     companion object {
-        fun fromDomain(transaction: Transaction, userId: String): TransactionEntity {
+        /**
+         * [bank] is passed rather than resolved here because this is a static factory with
+         * no access to the bank list, and a name is what the search haystack needs. It is
+         * a required argument rather than a defaulted one so that a caller cannot add a
+         * bank to a row and silently leave the row unfindable by that bank's name.
+         *
+         * The manual entry form has no bank field, so it passes null; that is the only
+         * production call site today.
+         */
+        fun fromDomain(
+            transaction: Transaction,
+            userId: String,
+            bank: BankRef?
+        ): TransactionEntity {
             return TransactionEntity(
                 id = transaction.id,
                 userId = userId,
@@ -63,15 +81,16 @@ data class TransactionEntity(
                 externalId = transaction.externalId,
                 source = transaction.source,
                 currencyCode = transaction.currencyCode,
-                bankCode = transaction.bankCode,
+                bankCode = bank?.code ?: transaction.bankCode,
                 cardLabel = transaction.cardLabel,
+                transferDirection = transaction.transferDirection,
                 // Derived here rather than at each call site, so no writer can forget it
                 // and leave the row permanently unfindable.
                 searchText = SearchText.of(
                     transaction.title,
                     transaction.note,
                     transaction.category,
-                    transaction.bankCode,
+                    bank,
                     transaction.cardLabel
                 )
             )
@@ -91,14 +110,33 @@ data class TransactionEntity(
             externalId = externalId,
             source = source,
             bankCode = bankCode,
-            cardLabel = cardLabel
+            cardLabel = cardLabel,
+            transferDirection = transferDirection
         )
     }
 }
 
 enum class TransactionType {
     INCOME,
-    EXPENSE
+    EXPENSE,
+
+    /**
+     * Money moving between the user's own pockets rather than being earned or spent.
+     *
+     * Buying a bond is the case this exists for. Recording it as an expense would inflate
+     * spending, which is the figure the app reports most, and recording it as neither would
+     * leave the cash balance claiming money that had left the account.
+     */
+    TRANSFER
+}
+
+/** Which way a [TransactionType.TRANSFER] moved. Null for any other type. */
+enum class TransferDirection {
+    /** Left the account, e.g. a bond purchase. */
+    OUT,
+
+    /** Arrived in the account, e.g. a bond sale. */
+    IN
 }
 
 data class Transaction(
@@ -118,10 +156,30 @@ data class Transaction(
      */
     val source: String? = null,
     val bankCode: String? = null,
-    val cardLabel: String? = null
+    val cardLabel: String? = null,
+    /**
+     * Which way a [TransactionType.TRANSFER] moved. Null for income and expense, and for
+     * any transfer written before the column existed — which is counted as neither an
+     * inflow nor an outflow rather than guessed at.
+     */
+    val transferDirection: TransferDirection? = null
 ) {
     fun isIncome(): Boolean = type == TransactionType.INCOME
     fun isExpense(): Boolean = type == TransactionType.EXPENSE
+    fun isTransfer(): Boolean = type == TransactionType.TRANSFER
+
+    /**
+     * Money that arrived in the account, counting a transfer in.
+     *
+     * Separate from [isIncome] so that the import paths and the summary panel keep meaning
+     * exactly what they meant before transfers existed.
+     */
+    fun isCashInflow(): Boolean =
+        isIncome() || (isTransfer() && transferDirection == TransferDirection.IN)
+
+    /** Money that left the account, counting a transfer out. */
+    fun isCashOutflow(): Boolean =
+        isExpense() || (isTransfer() && transferDirection == TransferDirection.OUT)
 }
 
 /**

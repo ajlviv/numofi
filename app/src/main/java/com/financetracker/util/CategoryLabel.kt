@@ -86,6 +86,11 @@ object CategoryLabel {
         return when (key.lowercase(Locale.ROOT)) {
             "imported" -> "Imported"
             "other" -> "Other"
+            // Named here rather than left to prettify, which would render the key as
+            // "Investments" only by accident of capitalisation. This is the category every
+            // bond cash movement is filed under, so it is the label users see most often on
+            // the transactions a bond purchase produces.
+            "investments" -> "Investments"
             else -> prettify(key)
         }
     }

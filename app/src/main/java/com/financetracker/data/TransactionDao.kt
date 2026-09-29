@@ -28,7 +28,7 @@ interface TransactionDao {
     @Query("DELETE FROM transactions WHERE userId = :userId")
     suspend fun deleteAllForUser(userId: String): Int
 
-    @Query("SELECT * FROM transactions WHERE userId = :userId ORDER BY timestamp DESC")
+    @Query("SELECT * FROM transactions WHERE userId = :userId ORDER BY timestamp DESC, id DESC")
     fun getAllForUser(userId: String): Flow<List<TransactionEntity>>
 
     /**
@@ -58,7 +58,7 @@ interface TransactionDao {
             "AND (:fromMillis IS NULL OR timestamp >= :fromMillis) " +
             "AND (:toMillis IS NULL OR timestamp < :toMillis) " +
             "AND (:search IS NULL OR searchText LIKE '%' || :search || '%') " +
-            "ORDER BY timestamp DESC"
+            "ORDER BY timestamp DESC, id DESC"
     )
     fun getFilteredQuery(
         userId: String,
@@ -114,7 +114,7 @@ interface TransactionDao {
     )
     fun getCardRefs(userId: String): Flow<List<CardRef>>
 
-    @Query("SELECT * FROM transactions WHERE userId = :userId AND type = :type ORDER BY timestamp DESC")
+    @Query("SELECT * FROM transactions WHERE userId = :userId AND type = :type ORDER BY timestamp DESC, id DESC")
     fun getByType(userId: String, type: String): Flow<List<TransactionEntity>>
 
     // There is deliberately no "total income"/"total expense" query here. A SUM across the
@@ -122,7 +122,7 @@ interface TransactionDao {
     // is not one. Totals are grouped by currency instead; see
     // com.financetracker.model.totalsByCurrency.
 
-    @Query("SELECT * FROM transactions WHERE userId = :userId ORDER BY timestamp DESC LIMIT :limit")
+    @Query("SELECT * FROM transactions WHERE userId = :userId ORDER BY timestamp DESC, id DESC LIMIT :limit")
     fun getRecentTransactions(userId: String, limit: Int): Flow<List<TransactionEntity>>
 
     /** External ids already imported for this account, used to skip re-imported rows. */
@@ -137,7 +137,7 @@ interface TransactionDao {
      */
     @Query(
         "SELECT * FROM transactions WHERE userId = :userId " +
-            "AND timestamp BETWEEN :from AND :to ORDER BY timestamp DESC"
+            "AND timestamp BETWEEN :from AND :to ORDER BY timestamp DESC, id DESC"
     )
     suspend fun getInRange(userId: String, from: Long, to: Long): List<TransactionEntity>
 }

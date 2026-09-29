@@ -1,6 +1,8 @@
 package com.financetracker.ui.transaction
 
+import com.financetracker.data.AppDatabase
 import com.financetracker.model.BankCode
+import com.financetracker.model.BankNames
 import com.financetracker.model.Transaction
 import com.financetracker.model.TransactionType
 import org.junit.Assert.assertEquals
@@ -41,8 +43,21 @@ class TransactionDetailsTest {
         cardLabel = cardLabel
     )
 
-    private fun fields(t: Transaction) =
-        TransactionDetails.sections(t, kyiv, dateFormat).flatMap { it.fields }
+    /**
+     * Resolved the same way the detail screen does it, rather than being handed a name.
+     *
+     * Handing it a fixed name would make every bank case render identically, so the tests
+     * below would keep passing even if resolution changed — which is exactly the part of
+     * this feature they exist to check.
+     */
+    private fun sections(t: Transaction, zone: ZoneId = kyiv) = TransactionDetails.sections(
+        t,
+        BankNames.display(t.bankCode, AppDatabase.SEEDED_BANK_NAMES),
+        zone,
+        dateFormat
+    )
+
+    private fun fields(t: Transaction) = sections(t).flatMap { it.fields }
 
     private fun value(t: Transaction, label: String) =
         fields(t).single { it.label == label }.value
@@ -126,7 +141,7 @@ class TransactionDetailsTest {
         // Proof the date is not printed in the device zone regardless of the argument: this is
         // what a timestamp means depends on where you are standing.
         val t = transaction()
-        val utc = TransactionDetails.sections(t, ZoneId.of("UTC"), dateFormat)
+        val utc = sections(t, ZoneId.of("UTC"))
             .flatMap { it.fields }
             .single { it.label == "Date" }
             .value
@@ -151,7 +166,7 @@ class TransactionDetailsTest {
 
     @Test
     fun `a section never repeats a label`() {
-        TransactionDetails.sections(transaction()).forEach { section ->
+        sections(transaction()).forEach { section ->
             val labels = section.fields.map { it.label }
             assertEquals(
                 "duplicate label in '${section.title}'",

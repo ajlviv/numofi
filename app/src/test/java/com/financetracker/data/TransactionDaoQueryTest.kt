@@ -3,6 +3,7 @@ package com.financetracker.data
 import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
 import com.financetracker.model.BankCode
+import com.financetracker.model.BankNames
 import com.financetracker.model.CardRef
 import com.financetracker.model.SearchText
 import com.financetracker.model.TransactionEntity
@@ -54,7 +55,13 @@ class TransactionDaoQueryTest {
         currencyCode = "UAH",
         bankCode = bank,
         cardLabel = card,
-        searchText = SearchText.of(title, note, "grocery", bank, card)
+        searchText = SearchText.of(
+            title,
+            note,
+            "grocery",
+            BankNames.ref(bank, AppDatabase.SEEDED_BANK_NAMES),
+            card
+        )
     )
 
     @Before
@@ -272,5 +279,20 @@ class TransactionDaoQueryTest {
         val rows = dao.getFiltered("uid-1").first()
         val timestamps = rows.map { it.timestamp }
         assertEquals(timestamps.sortedDescending(), timestamps)
+    }
+
+    @Test
+    fun `rows with the same timestamp break ties by id descending so newly added rows appear first`() = runTest {
+        dao.insertAll(
+            listOf(
+                row("Earlier Item", 10.0, TransactionType.EXPENSE, null, null, timestamp = 2_000_000_000_000L),
+                row("Later Item", 20.0, TransactionType.EXPENSE, null, null, timestamp = 2_000_000_000_000L)
+            )
+        )
+
+        val rows = dao.getFiltered("uid-1").first().filter { it.timestamp == 2_000_000_000_000L }
+        assertEquals(2, rows.size)
+        assertEquals("Later Item", rows[0].title)
+        assertEquals("Earlier Item", rows[1].title)
     }
 }

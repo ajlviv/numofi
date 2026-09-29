@@ -9,7 +9,10 @@ import com.financetracker.data.bank.BankRateLimitException
 import com.financetracker.data.bank.BankProviderRegistry
 import com.financetracker.data.settings.SettingsRepository
 import com.financetracker.data.settings.ThemeMode
+import com.financetracker.model.Bank
+import com.financetracker.repository.AddBankResult
 import com.financetracker.repository.AuthRepository
+import com.financetracker.repository.BankRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -35,6 +38,7 @@ class SettingsViewModel @Inject constructor(
     private val credentialStore: BankCredentialStore,
     private val authRepository: AuthRepository,
     private val bankSyncService: BankSyncService,
+    private val bankRepository: BankRepository,
     registry: BankProviderRegistry
 ) : ViewModel() {
 
@@ -241,6 +245,75 @@ class SettingsViewModel @Inject constructor(
 
     fun setThemeMode(mode: ThemeMode) {
         viewModelScope.launch { settingsRepository.setThemeMode(mode) }
+    }
+
+    // The user's bank list, which has nothing to do with the sync providers above: those are
+    // the institutions this build can talk to, these are the names a statement can be filed
+    // under. A custom bank has no connection and needs none.
+
+    /** Every bank, live or archived, in the order the user arranged. */
+    val banks: StateFlow<List<Bank>> = bankRepository.banks
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+    private val _bankNameInput = MutableStateFlow("")
+    val bankNameInput: StateFlow<String> = _bankNameInput.asStateFlow()
+
+    /**
+     * Kept apart from [statusMessage] because that one is rendered under the sync section,
+     * which is a screen away from here — an "already called that" about a bank would appear
+     * next to a token field and read as though the token were the problem.
+     */
+    private val _bankMessage = MutableStateFlow<String?>(null)
+    val bankMessage: StateFlow<String?> = _bankMessage.asStateFlow()
+
+    fun onBankNameChange(value: String) {
+        _bankNameInput.value = value
+        _bankMessage.value = null
+    }
+
+    fun addBank() {
+        viewModelScope.launch {
+            _bankMessage.value = when (val result = bankRepository.add(_bankNameInput.value)) {
+                is AddBankResult.Added -> {
+                    _bankNameInput.value = ""
+                    "Added ${result.bank.displayName}."
+                }
+                AddBankResult.BlankName -> "Type a name for the bank first."
+                AddBankResult.NameTaken -> "You already have a bank with that name."
+                // Retrying would change nothing, so the message has to say the bank could
+                // not be added rather than inviting another attempt at the name.
+                AddBankResult.CodeUnavailable -> "Could not create a bank right now. Try again."
+            }
+        }
+    }
+
+    fun renameBank(code: String, name: String) {
+        viewModelScope.launch {
+            _bankMessage.value = if (bankRepository.rename(code, name)) {
+                "Renamed."
+            } else {
+                "That name is blank or already in use."
+            }
+        }
+    }
+
+    fun moveBankUp(code: String) {
+        viewModelScope.launch { bankRepository.moveUp(code) }
+    }
+
+    fun moveBankDown(code: String) {
+        viewModelScope.launch { bankRepository.moveDown(code) }
+    }
+
+    fun setBankArchived(code: String, archived: Boolean) {
+        viewModelScope.launch {
+            bankRepository.setArchived(code, archived)
+            _bankMessage.value = if (archived) {
+                "Archived. Its transactions are kept, and it stays in the filter."
+            } else {
+                "Restored."
+            }
+        }
     }
 
     fun setLanguage(tag: String) {

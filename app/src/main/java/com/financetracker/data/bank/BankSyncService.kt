@@ -4,10 +4,13 @@ import com.financetracker.data.TransactionDao
 import com.financetracker.data.bank.monobank.MonobankBankProvider
 import com.financetracker.data.bank.Iso4217
 import com.financetracker.model.BankCode
+import com.financetracker.model.BankNames
 import com.financetracker.model.SearchText
 import com.financetracker.model.TransactionEntity
 import com.financetracker.model.TransactionType
+import com.financetracker.repository.BankRepository
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.first
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.math.max
@@ -26,7 +29,8 @@ import kotlin.math.max
  */
 @Singleton
 class BankSyncService @Inject constructor(
-    private val transactionDao: TransactionDao
+    private val transactionDao: TransactionDao,
+    private val bankRepository: BankRepository
 ) {
 
     data class Result(
@@ -75,6 +79,9 @@ class BankSyncService @Inject constructor(
         var lastRequestAt = 0L
 
         val existing = transactionDao.getExternalIdsForUser(userId).toMutableSet()
+        // Read once for the whole sync: every row this writes carries Monobank, and the
+        // haystack needs that bank's name so the rows stay findable by it.
+        val bankNames = bankRepository.names.first()
 
         for ((windowFrom, windowTo) in windows) {
             for (account in accounts) {
@@ -103,7 +110,14 @@ class BankSyncService @Inject constructor(
                         continue
                     }
                     transactionDao.insert(
-                        toEntity(bankTx, userId, provider.id, BankCode.MONOBANK, account)
+                        toEntity(
+                            bankTx,
+                            userId,
+                            provider.id,
+                            BankCode.MONOBANK,
+                            account,
+                            bankNames
+                        )
                     )
                     existing.add(externalId)
                     imported++
@@ -163,7 +177,8 @@ class BankSyncService @Inject constructor(
         userId: String,
         source: String,
         bankCode: String,
-        account: BankAccount
+        account: BankAccount,
+        bankNames: Map<String, String>
     ): TransactionEntity {
         // The masked number is what the user recognises on a statement; the account name is
         // the fallback when the provider withholds it. Both are stored as disclosed, never
@@ -187,7 +202,13 @@ class BankSyncService @Inject constructor(
             currencyCode = Iso4217.symbolOf(bankTx.currencyCode),
             bankCode = bankCode,
             cardLabel = card,
-            searchText = SearchText.of(title, bankTx.comment, category, bankCode, card)
+            searchText = SearchText.of(
+                title,
+                bankTx.comment,
+                category,
+                BankNames.ref(bankCode, bankNames),
+                card
+            )
         )
     }
 
