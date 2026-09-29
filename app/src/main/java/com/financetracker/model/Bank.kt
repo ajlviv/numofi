@@ -46,12 +46,11 @@ data class BankEntity(
         /**
          * The banks the app can attribute a statement to on its own.
          *
-         * The [BankEntity.displayName] values must stay byte-identical to the strings
-         * `BankCode.label()` returned. `searchText` is a lowercased concatenation baked
-         * into every row at write time and it embeds the bank name, so seeding the exact
-         * old labels is what lets the v4 -> v5 migration leave every existing row
-         * untouched. Editing one of these names silently breaks search for every row
-         * already stored; `Migration45Test` asserts the names are unchanged for that
+         * These names are what a row becomes searchable by. `searchText` is a lowercased
+         * concatenation baked into every row at write time and it embeds the bank name, and
+         * renaming a bank deliberately does not reach back into rows already stored — so
+         * editing one of the names here leaves the rows filed under it findable only by the
+         * word they were written with. `FreshInstallSeedTest` pins these names for that
          * reason, and this list is what it checks.
          */
         val BUILT_IN: List<BankEntity> = listOf(
@@ -115,10 +114,9 @@ object BankNames {
      * The name to show for [code].
      *
      * A code that is not in the list falls back to itself rather than to [MANUAL] or to
-     * nothing. An archived bank's row, or one written by a build that knew a bank this one
-     * does not, must stay visibly different from a row the user typed by hand — the two
-     * mean entirely different things, and blanking the first would make them
-     * indistinguishable.
+     * nothing. A row naming a bank the list has lost track of must stay visibly different
+     * from a row the user typed by hand — the two mean entirely different things, and
+     * blanking the first would make them indistinguishable.
      */
     fun display(code: String?, known: Map<String, String>): String =
         ref(code, known)?.label ?: MANUAL

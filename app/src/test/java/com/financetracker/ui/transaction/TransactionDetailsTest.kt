@@ -1,7 +1,7 @@
 package com.financetracker.ui.transaction
 
-import com.financetracker.data.AppDatabase
 import com.financetracker.model.BankCode
+import com.financetracker.model.BankEntity
 import com.financetracker.model.BankNames
 import com.financetracker.model.Transaction
 import com.financetracker.model.TransactionType
@@ -18,6 +18,9 @@ class TransactionDetailsTest {
 
     private val kyiv = ZoneId.of("Europe/Kyiv")
     private val dateFormat = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm", Locale.ROOT)
+
+    /** The seeded banks as a write path sees them: there is no database here to ask. */
+    private val seededBankNames = BankEntity.BUILT_IN.associate { it.code to it.displayName }
 
     private fun transaction(
         id: Long = 7,
@@ -48,11 +51,12 @@ class TransactionDetailsTest {
      *
      * Handing it a fixed name would make every bank case render identically, so the tests
      * below would keep passing even if resolution changed — which is exactly the part of
-     * this feature they exist to check.
+     * this feature they exist to check. The list is the seeded one, which is the only one a
+     * test can know about without a database.
      */
     private fun sections(t: Transaction, zone: ZoneId = kyiv) = TransactionDetails.sections(
         t,
-        BankNames.display(t.bankCode, AppDatabase.SEEDED_BANK_NAMES),
+        BankNames.display(t.bankCode, seededBankNames),
         zone,
         dateFormat
     )

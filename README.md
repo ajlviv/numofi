@@ -9,88 +9,96 @@ the login screen.
 - **Language**: Kotlin
 - **UI**: Jetpack Compose with Material 3
 - **DI**: Hilt (Dagger)
-- **Database**: Room (SQLite)
-- **Auth**: Firebase Auth + Google Sign-In
-- **Navigation**: Navigation Component (Compose)
-- **Networking**: Retrofit + OkHttp
-- **Image Loading**: Coil
+- **Database**: Room (SQLite), created from scratch at install — there are no migrations
+- **Auth**: Google Sign-In through Credential Manager, with the signed-in uid in DataStore
+- **Screen switching**: Compose state in `MainScreen`, not a NavHost
+- **Networking**: Retrofit + OkHttp (Monobank sync)
+- **Statement reading**: PDFBox-Android for PDF, an XML reader for XLSX, a plain reader for CSV
 
 ## Project Structure
 ```
 app/src/main/
 ├── java/com/financetracker/
-│   ├── FinanceTrackerApp.kt          # Application class (Hilt)
-│   ├── LoginActivity.kt              # Google Sign-In entry point
+│   ├── FinanceTrackerApp.kt          # Application class (Hilt), PDFBox assets
+│   ├── LoginActivity.kt              # Google Sign-In entry point (LAUNCHER)
 │   ├── MainActivity.kt               # Authenticated main screen
-│   ├── auth/
-│   │   ├── AuthViewModel.kt          # Auth state ViewModel
-│   │   └── LoginScreen.kt            # Google login UI
 │   ├── ui/
+│   │   ├── AppViewModel.kt           # App-wide preferences (theme)
+│   │   ├── main/MainScreen.kt        # Bottom bar, screen switching, snackbars
 │   │   ├── dashboard/DashboardScreen.kt
-│   │   ├── transaction/
-│   │   │   ├── AddTransactionScreen.kt
-│   │   │   ├── TransactionListScreen.kt
-│   │   │   └── TransactionDetailScreen.kt
-│   │   ├── main/MainScreen.kt        # Bottom nav host
+│   │   ├── transaction/              # list, detail, add, bond entry form
+│   │   ├── bond/BondListScreen.kt
 │   │   ├── settings/SettingsScreen.kt
+│   │   ├── statement/                # statement import preview
+│   │   ├── auth/                     # LoginScreen, AuthGuard, AuthViewModel
+│   │   ├── component/                # dropdowns and field labels
+│   │   ├── MoneyAmount.kt, TransactionAppearance.kt
 │   │   └── theme/Theme.kt
 │   ├── data/
-│   │   ├── AppDatabase.kt            # Room database
-│   │   ├── TransactionDao.kt
-│   │   └── Converters.kt
-│   ├── model/
-│   │   └── Model.kt                  # Data classes
-│   ├── repository/                    # Data repositories
-│   ├── di/                            # Hilt modules
-│   └── navigation/
-│       └── AppNavigation.kt          # Navigation graph
+│   │   ├── AppDatabase.kt            # Room database and the bank seed
+│   │   ├── TransactionDao.kt, BankDao.kt, BondDao.kt, UserDao.kt
+│   │   ├── bank/                     # provider registry, Monobank API, sync, token store
+│   │   ├── statement/                # CSV/XLSX/PDF readers, parser, import service
+│   │   └── settings/SettingsRepository.kt
+│   ├── model/                        # entities, domain types, ОВДП arithmetic
+│   ├── repository/                   # what the screens talk to
+│   ├── util/                         # amount and category formatting
+│   └── di/                           # Hilt modules
 ├── res/
 │   ├── values/strings.xml, themes.xml, colors.xml
-│   └── xml/auth_strings.xml          # Google Client ID
+│   └── xml/network_security_config.xml
 └── AndroidManifest.xml
 ```
 
 ## Setup Instructions
 
-### 1. Replace placeholders
-- **app/build.gradle.kts** → Replace `YOUR_GOOGLE_WEB_CLIENT_ID` with your actual Web Client ID
-- **app/google-services.json** → Download from Firebase Console and replace
-- **app/src/main/res/xml/auth_strings.xml** → Update Web Client ID
-
-### 2. Firebase setup
-1. Create a project in [Firebase Console](https://console.firebase.google.com/)
-2. Add Android app with package name `com.financetracker`
-3. Enable Google Sign-In in Firebase Auth
-4. Download `google-services.json` into `app/`
-
-### 3. Google Cloud Console
-1. Create OAuth 2.0 Web Client ID
-2. Add the SHA-1 fingerprint from your debug keystore:
+### 1. Google Sign-In
+1. Create an OAuth 2.0 **Web** client ID in the
+   [Google Cloud Console](https://console.cloud.google.com/). It is a public identifier and is
+   expected to ship inside the APK; the matching client secret is not needed.
+2. Register the SHA-1 fingerprint of the keystore you build with on that client:
    ```
    keytool -list -v -keystore ~/.android/debug.keystore -alias androiddebugkey -storepass android -keypass android
    ```
-3. Put the Web Client ID in `auth_strings.xml` and `build.gradle.kts`
+3. Put the client ID in `app/src/main/res/values/strings.xml` as `default_web_client_id`.
+   Sign-in stays disabled while that string still holds the placeholder.
 
-### 4. Build
+`app/google-services.json` is left over from an earlier Firebase-based sign-in. Firebase is no
+longer a dependency and nothing reads the file, so it can be deleted.
+
+### 2. Build
 ```bash
 ./gradlew assembleDebug
+./gradlew :app:testDebugUnitTest   # JVM + Robolectric suite
 ```
 
 ## Authentication Flow
 1. App launches → `LoginActivity` (LAUNCHER)
-2. `AuthViewModel` checks current auth state
-3. If authenticated → navigate to `MainActivity`
-4. If not → show Google Sign-In button
-5. `MainActivity` wraps UI in `AuthGuard` — redirects to login if session expires
+2. `LoginScreen` asks Credential Manager for a Google ID token and hands the credential to
+   `AuthViewModel`; the credential's id is the uid every local row is scoped to
+3. The uid is stored in DataStore, and the profile is cached in the `users` table
+4. A signed-in session sends the app on to `MainActivity`, which wraps the UI in `AuthGuard`
+   and returns to login if the session goes away — including when the user signs out from
+   Settings
+5. Signed-in state is observed rather than read once, so signing out tears the UI down
+   immediately
+
+## Database
+The database is built from its entities when it does not exist and is only ever reopened
+afterwards: `AppDatabase` ships no migrations and no destructive fallback. A file written by
+an older schema therefore makes Room refuse to open with a message saying a migration was
+required but not found, rather than rewriting or discarding somebody's rows. Taking a schema
+change means bumping `version` and clearing the app's data (or reinstalling).
 
 ## Features
-- ✅ Google Sign-In authentication
-- ✅ Auth-guarded navigation
-- ✅ Transaction CRUD (Room database)
-- ✅ Dashboard with income/expense summary
-- ✅ Transaction list with filtering
-- ✅ Add/Edit/Delete transactions
-- ✅ Settings screen
+- ✅ Google Sign-In authentication, with the main screen behind an auth guard
+- ✅ Statement import from CSV, XLSX and PDF, with the bank detected from the file
+- ✅ Monobank sync, with the API token in Keystore-backed storage
+- ✅ Transaction list with bank, card, type and date filters plus search
+- ✅ Add and delete transactions, hand-entered with a bank and a currency
+- ✅ Per-currency income and expense totals, never summed across currencies
+- ✅ ОВДП bond trades, with positions folded from the trades at read time
+- ✅ Dashboard summary, kept separate from bond value
+- ✅ Settings: theme, banks, bank connection, sign out
 - ✅ Hilt dependency injection
 - ✅ Jetpack Compose UI
-- ✅ Navigation Component

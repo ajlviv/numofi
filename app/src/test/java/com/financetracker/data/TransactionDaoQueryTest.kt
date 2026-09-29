@@ -3,6 +3,7 @@ package com.financetracker.data
 import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
 import com.financetracker.model.BankCode
+import com.financetracker.model.BankEntity
 import com.financetracker.model.BankNames
 import com.financetracker.model.CardRef
 import com.financetracker.model.SearchText
@@ -34,6 +35,9 @@ class TransactionDaoQueryTest {
 
     private val day = 1_757_000_000_000L
 
+    /** The seeded banks as a write path sees them, so the haystack carries real names. */
+    private val seededBankNames = BankEntity.BUILT_IN.associate { it.code to it.displayName }
+
     private fun row(
         title: String,
         amount: Double,
@@ -59,7 +63,7 @@ class TransactionDaoQueryTest {
             title,
             note,
             "grocery",
-            BankNames.ref(bank, AppDatabase.SEEDED_BANK_NAMES),
+            BankNames.ref(bank, seededBankNames),
             card
         )
     )

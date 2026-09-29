@@ -71,6 +71,10 @@ dependencies {
     debugImplementation("androidx.compose.ui:ui-test-manifest")
 
     // Navigation Compose
+    // The app has no NavHost of its own: screens are switched by Compose state and the whole
+    // Scaffold is replaced when a detail opens. This stays pinned because hiltViewModel()
+    // comes from hilt-navigation-compose, which resolves an older navigation-compose unless
+    // one is named here.
     implementation("androidx.navigation:navigation-compose:2.7.6")
 
     // Google Sign-In (Credential Manager - replaces the deprecated GoogleSignIn API)
@@ -79,18 +83,13 @@ dependencies {
     implementation("androidx.credentials:credentials-play-services-auth:1.3.0")
     implementation("com.google.android.libraries.identity.googleid:googleid:1.1.1")
 
-    // Firebase Auth
-    implementation(platform("com.google.firebase:firebase-bom:32.7.1"))
-    implementation("com.google.firebase:firebase-auth-ktx")
-
     // Room
     implementation("androidx.room:room-runtime:2.6.1")
     implementation("androidx.room:room-ktx:2.6.1")
     ksp("androidx.room:room-compiler:2.6.1")
 
-    // ViewModel & LiveData
+    // ViewModel
     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.7.0")
-    implementation("androidx.lifecycle:lifecycle-livedata-ktx:2.7.0")
     implementation("androidx.lifecycle:lifecycle-runtime-compose:2.8.6")
 
     // Retrofit + OkHttp
@@ -98,9 +97,6 @@ dependencies {
     implementation("com.squareup.retrofit2:converter-gson:2.11.0")
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
     implementation("com.squareup.okhttp3:logging-interceptor:4.12.0")
-
-    // Coil for images
-    implementation("io.coil-kt:coil-compose:2.5.0")
 
     // Settings persistence (theme, language, selected bank)
     implementation("androidx.datastore:datastore-preferences:1.1.1")
@@ -124,7 +120,6 @@ dependencies {
     // executed here at all.
     testImplementation("org.robolectric:robolectric:4.12.2")
     testImplementation("androidx.test:core:1.5.0")
-    testImplementation("androidx.room:room-testing:2.6.1")
     testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.7.3")
     // Desktop PDFBox for JVM tests. The app uses the Android port, which cannot be
     // loaded off-device, so the parser itself is kept free of PDFBox types and both

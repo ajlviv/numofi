@@ -44,14 +44,14 @@ data class TransactionEntity(
      */
     val cardLabel: String? = null,
     /**
-     * Lowercased haystack the search query matches against, see [SearchText]. Nullable
-     * only so the v4 migration can add the column without rewriting every existing row.
+     * Lowercased haystack the search query matches against, see [SearchText].
+     *
+     * Every write path fills this in, so a null means the row was not written by this app.
+     * The column still allows one because it was added to a table that already held rows,
+     * and nothing here can take that back.
      */
     val searchText: String? = null,
-    /**
-     * Nullable rather than defaulted at insert because the v6 migration adds the column
-     * without rewriting a single row, so every stored row starts out with nothing here.
-     */
+    /** Only a [TransactionType.TRANSFER] has a direction, so this is null for everything else. */
     val transferDirection: TransferDirection? = null
 ) {
     companion object {
@@ -61,8 +61,8 @@ data class TransactionEntity(
          * a required argument rather than a defaulted one so that a caller cannot add a
          * bank to a row and silently leave the row unfindable by that bank's name.
          *
-         * The manual entry form has no bank field, so it passes null; that is the only
-         * production call site today.
+         * The entry form passes the bank the user picked, or null when they picked none,
+         * which is what leaves a hand-entered row without one.
          */
         fun fromDomain(
             transaction: Transaction,
@@ -158,9 +158,9 @@ data class Transaction(
     val bankCode: String? = null,
     val cardLabel: String? = null,
     /**
-     * Which way a [TransactionType.TRANSFER] moved. Null for income and expense, and for
-     * any transfer written before the column existed — which is counted as neither an
-     * inflow nor an outflow rather than guessed at.
+     * Which way a [TransactionType.TRANSFER] moved. Null for income and expense, and for a
+     * transfer whose direction was not recorded — counted as neither an inflow nor an
+     * outflow rather than guessed at.
      */
     val transferDirection: TransferDirection? = null
 ) {
