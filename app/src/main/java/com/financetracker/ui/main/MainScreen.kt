@@ -35,6 +35,7 @@ import com.financetracker.model.Transaction
 import com.financetracker.ui.bond.BondListScreen
 import com.financetracker.ui.dashboard.DashboardScreen
 import com.financetracker.ui.settings.SettingsScreen
+import com.financetracker.ui.transaction.AddEntryMode
 import com.financetracker.ui.transaction.AddTransactionScreen
 import com.financetracker.ui.transaction.TransactionDetailScreen
 import com.financetracker.ui.transaction.TransactionListScreen
@@ -56,7 +57,7 @@ fun MainScreen(
     viewModel: MainViewModel = hiltViewModel()
 ) {
     var selectedTab by remember { mutableStateOf(0) }
-    var showAddTransaction by remember { mutableStateOf(false) }
+    var addEntryMode by remember { mutableStateOf<AddEntryMode?>(null) }
     var selectedTransaction by remember { mutableStateOf<Transaction?>(null) }
 
     // Held here rather than inside TransactionListScreen: opening an item replaces the
@@ -79,12 +80,13 @@ fun MainScreen(
         }
     }
 
-    if (showAddTransaction) {
+    addEntryMode?.let { initialMode ->
         AddTransactionScreen(
+            initialMode = initialMode,
             // The screen saves for itself: it owns its own ViewModel and writes the row
             // against the signed-in uid, so there is no transaction to hand back here.
-            onSaved = { showAddTransaction = false },
-            onCancel = { showAddTransaction = false },
+            onSaved = { addEntryMode = null },
+            onCancel = { addEntryMode = null },
             modifier = Modifier.fillMaxSize()
         )
         return
@@ -113,7 +115,7 @@ fun MainScreen(
             // the settings screen is a list of controls, and the bonds screen has its own
             // button in its app bar for the one thing that can be added there.
             if (items[selectedTab] == MainBottomNavDestination.DASHBOARD) {
-                FloatingActionButton(onClick = { showAddTransaction = true }) {
+                FloatingActionButton(onClick = { addEntryMode = AddEntryMode.TRANSACTION }) {
                     Icon(Icons.Default.Add, contentDescription = "Add transaction")
                 }
             }
@@ -143,7 +145,7 @@ fun MainScreen(
                     )
 
                 MainBottomNavDestination.BONDS ->
-                    BondListScreen(positions = positions, onAddTrade = { showAddTransaction = true })
+                    BondListScreen(positions = positions, onAddTrade = { addEntryMode = AddEntryMode.BOND })
 
                 MainBottomNavDestination.SETTINGS ->
                     SettingsScreen(onBack = {}, showBackButton = false)

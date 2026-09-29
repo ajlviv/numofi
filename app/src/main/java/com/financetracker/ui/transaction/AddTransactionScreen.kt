@@ -63,7 +63,7 @@ import java.time.ZoneOffset
 import java.util.Locale
 
 /** What the add screen is currently being used to record. */
-private enum class EntryMode { TRANSACTION, BOND }
+enum class AddEntryMode { TRANSACTION, BOND }
 
 /**
  * One screen for two unrelated entries, switched at the top.
@@ -78,6 +78,7 @@ fun AddTransactionScreen(
     onSaved: () -> Unit,
     onCancel: () -> Unit,
     modifier: Modifier = Modifier,
+    initialMode: AddEntryMode = AddEntryMode.TRANSACTION,
     viewModel: AddTransactionViewModel = hiltViewModel()
 ) {
     val banks by viewModel.banks.collectAsStateWithLifecycle()
@@ -86,7 +87,7 @@ fun AddTransactionScreen(
     val saving by viewModel.saving.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
 
-    var mode by remember { mutableStateOf(EntryMode.TRANSACTION) }
+    var mode by remember(initialMode) { mutableStateOf(initialMode) }
 
     LaunchedEffect(message) {
         message?.let {
@@ -133,7 +134,7 @@ fun AddTransactionScreen(
         ) {
             item {
                 SingleChoiceSegmentedButtonRow {
-                    EntryMode.entries.forEach { entry ->
+                    AddEntryMode.entries.forEach { entry ->
                         SegmentedButton(
                             selected = mode == entry,
                             onClick = { mode = entry },
@@ -141,7 +142,7 @@ fun AddTransactionScreen(
                             modifier = Modifier.weight(1f)
                         ) {
                             Text(
-                                text = if (entry == EntryMode.TRANSACTION) "Transaction" else "ОВДП",
+                                text = if (entry == AddEntryMode.TRANSACTION) "Transaction" else "ОВДП",
                                 style = MaterialTheme.typography.bodyMedium
                             )
                         }
@@ -151,7 +152,7 @@ fun AddTransactionScreen(
 
             val bankRefs = banks.map { BankRef(it.code, it.label()) }
 
-            if (mode == EntryMode.TRANSACTION) {
+            if (mode == AddEntryMode.TRANSACTION) {
                 item {
                     TransactionForm(
                         banks = bankRefs,
