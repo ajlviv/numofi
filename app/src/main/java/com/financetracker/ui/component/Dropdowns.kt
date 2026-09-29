@@ -19,11 +19,13 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
+import com.financetracker.R
 
 /**
  * A dropdown of checkable options, of which any number may be picked.
@@ -56,7 +58,7 @@ internal fun <T> MultiSelectDropdown(
                 text = when (selected.size) {
                     0 -> label
                     1 -> selected.first().second
-                    else -> "$label · ${selected.size}"
+                    else -> stringResource(R.string.drop_n_selected, label, selected.size)
                 },
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis

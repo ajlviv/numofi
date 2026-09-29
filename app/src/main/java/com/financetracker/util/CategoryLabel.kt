@@ -1,5 +1,7 @@
 package com.financetracker.util
 
+import androidx.annotation.StringRes
+import com.financetracker.R
 import java.util.Locale
 
 /**
@@ -100,6 +102,61 @@ object CategoryLabel {
         RANGES.firstOrNull { (range, _) -> code in range }?.let { return it.second }
         return "Other"
     }
+
+    /**
+     * The string resource for a stored key, or 0 when the label is not this object's to
+     * translate.
+     *
+     * 0 means [label] is echoing the user's own words back at them — the `prettify` path for
+     * free-typed categories — which no translation table can improve on; the screen then
+     * renders [label] as it is. Everything else resolves through [RESOURCE_BY_LABEL], keyed
+     * by the *English* label rather than the stored key so that the exact and range tables
+     * above stay the single source of category grouping. `CategoryResourceParityTest` pins
+     * every non-zero result against `res/values/strings.xml`, so the two cannot drift.
+     */
+    @StringRes
+    fun resource(category: String?): Int = RESOURCE_BY_LABEL[label(category)] ?: 0
+
+    private val RESOURCE_BY_LABEL: Map<String, Int> = mapOf(
+        "Phone & data" to R.string.cat_phone_data,
+        "Digital services" to R.string.cat_digital_services,
+        "Groceries" to R.string.cat_groceries,
+        "Supermarket" to R.string.cat_supermarket,
+        "Auto parts" to R.string.cat_auto_parts,
+        "Fuel" to R.string.cat_fuel,
+        "Clothing" to R.string.cat_clothing,
+        "Home & furniture" to R.string.cat_home_furniture,
+        "Electronics" to R.string.cat_electronics,
+        "Restaurant" to R.string.cat_restaurant,
+        "Bar & nightlife" to R.string.cat_bar_nightlife,
+        "Fast food" to R.string.cat_fast_food,
+        "Pharmacy" to R.string.cat_pharmacy,
+        "Cosmetics" to R.string.cat_cosmetics,
+        "Toys & games" to R.string.cat_toys_games,
+        "Health & beauty" to R.string.cat_health_beauty,
+        "General retail" to R.string.cat_general_retail,
+        "ATM & cash" to R.string.cat_atm_cash,
+        "Health services" to R.string.cat_health_services,
+        "Other services" to R.string.cat_other_services,
+        "Gambling" to R.string.cat_gambling,
+        "Professional services" to R.string.cat_professional_services,
+        "Membership & leisure" to R.string.cat_membership_leisure,
+        "Hospital" to R.string.cat_hospital,
+        "Accounting & legal" to R.string.cat_accounting_legal,
+        "Government" to R.string.cat_government,
+        "Public services" to R.string.cat_public_services,
+        "Fuel & auto" to R.string.cat_fuel_auto,
+        "Home & electronics" to R.string.cat_home_electronics,
+        "Dining & nightlife" to R.string.cat_dining_nightlife,
+        "Health & general retail" to R.string.cat_health_retail,
+        "Travel & transport" to R.string.cat_travel_transport,
+        "Services" to R.string.cat_services,
+        "Leisure & professional" to R.string.cat_leisure_professional,
+        "Imported" to R.string.cat_imported,
+        "Other" to R.string.cat_other,
+        "Investments" to R.string.cat_investments,
+        "Uncategorised" to R.string.cat_uncategorised
+    )
 
     private fun prettify(key: String): String =
         key.split('_', '-', ' ')

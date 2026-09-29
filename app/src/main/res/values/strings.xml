@@ -1,40 +1,281 @@
-<?xml version="1.0" encoding="utf-8"?>
+﻿<?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">FinanceTracker</string>
-    <string name="sign_in">Sign In with Google</string>
-    <string name="signing_in">Signing in…</string>
-    <string name="sign_out">Sign Out</string>
-    <string name="welcome">Welcome</string>
-    <string name="hello_user">Hello, %s</string>
-    <string name="auth_error">Authentication error</string>
-    <string name="loading">Loading…</string>
-    <string name="no_user">No user signed in</string>
-    <string name="login_required">Please sign in to continue</string>
-    <string name="total_balance">Total Balance</string>
-    <string name="income">Income</string>
-    <string name="expenses">Expenses</string>
-    <string name="add_transaction">Add Transaction</string>
-    <string name="transaction_title">Title</string>
-    <string name="transaction_amount">Amount</string>
-    <string name="transaction_type">Type</string>
-    <string name="transaction_type_income">Income</string>
-    <string name="transaction_type_expense">Expense</string>
-    <string name="save">Save</string>
-    <string name="cancel">Cancel</string>
-    <string name="no_transactions">No transactions yet</string>
-    <string name="settings">Settings</string>
-    <string name="logout">Logout</string>
-    <string name="home">Home</string>
-    <string name="dashboard">Dashboard</string>
-    <string name="transactions">Transactions</string>
-
-    <!--
+  <string name="app_name">FinanceTracker</string>
+  <!-- Sign-in -->
+  <string name="sign_in">Sign In with Google</string>
+  <string name="signing_in">Signing in…</string>
+  <string name="sign_out">Sign Out</string>
+  <string name="login_required">Please sign in to continue</string>
+  <string name="web_client_id_missing">Add your Google Web client ID to res/values/strings.xml to enable sign-in.</string>
+  <!--
         Google Sign-In Web client ID (Google Cloud Console > APIs & Services >
         Credentials > Create credentials > OAuth client ID > Web application).
         This is a public identifier and is expected to ship inside the APK.
         The matching client SECRET is not needed by the app - do not add it here.
         Sign-in stays disabled while this still holds the placeholder.
     -->
-    <string name="default_web_client_id" translatable="false">247805661259-k37mj1b13iuae5vpr34adh2c8buo2b95.apps.googleusercontent.com</string>
-    <string name="web_client_id_missing">Add your Google Web client ID to res/values/strings.xml to enable sign-in.</string>
+  <string name="default_web_client_id" translatable="false">247805661259-k37mj1b13iuae5vpr34adh2c8buo2b95.apps.googleusercontent.com</string>
+  <!-- Shared across screens: one key per wording, so screens cannot spell these two ways. -->
+  <string name="income">Income</string>
+  <string name="expenses">Expenses</string>
+  <string name="cancel">Cancel</string>
+  <string name="save">Save</string>
+  <string name="no_transactions">No transactions yet</string>
+  <string name="settings">Settings</string>
+  <string name="dashboard">Dashboard</string>
+  <string name="transactions">Transactions</string>
+  <string name="common_title">Title</string>
+  <string name="common_category">Category</string>
+  <string name="common_note">Note</string>
+  <string name="common_amount">Amount</string>
+  <string name="common_date">Date</string>
+  <string name="common_bank">Bank</string>
+  <string name="common_type">Type</string>
+  <string name="common_all">All</string>
+  <string name="common_expense">Expense</string>
+  <string name="common_transfer">Transfer</string>
+  <string name="common_transfers">Transfers</string>
+  <string name="common_clear">Clear</string>
+  <string name="common_back">Back</string>
+  <string name="common_delete">Delete</string>
+  <string name="common_none">None</string>
+  <string name="common_manual">Manual</string>
+  <string name="bank_archived">%1$s (archived)</string>
+  <!-- Transaction detail card. The English values are what TransactionDetails pins byte for
+         byte; the screen translates through these keys. -->
+  <string name="detail_screen_title">Transaction Details</string>
+  <string name="detail_section_transaction">Transaction</string>
+  <string name="detail_section_payment">Payment</string>
+  <string name="detail_section_provenance">Provenance</string>
+  <string name="detail_section_stored">Stored</string>
+  <string name="detail_not_set">Not set</string>
+  <string name="detail_currency_iso">Currency (ISO 4217)</string>
+  <string name="detail_amount_stored">Amount (stored)</string>
+  <string name="detail_card">Card</string>
+  <string name="detail_source">Source</string>
+  <string name="detail_external_id">External ID</string>
+  <string name="detail_row_id">Row ID</string>
+  <string name="detail_timestamp">Timestamp (epoch ms)</string>
+  <string name="detail_delete_title">Delete transaction?</string>
+  <string name="detail_delete_body">\"%1$s\" will be permanently deleted.</string>
+  <!-- Language picker. The two endonyms name themselves and never translate. -->
+  <string name="lang_system_default">System default</string>
+  <string name="lang_english" translatable="false">English</string>
+  <string name="lang_ukrainian" translatable="false">Українська</string>
+  <!-- Category labels. Values are byte-identical to CategoryLabel.label() by test. -->
+  <string name="cat_phone_data">Phone &amp; data</string>
+  <string name="cat_digital_services">Digital services</string>
+  <string name="cat_groceries">Groceries</string>
+  <string name="cat_supermarket">Supermarket</string>
+  <string name="cat_auto_parts">Auto parts</string>
+  <string name="cat_fuel">Fuel</string>
+  <string name="cat_clothing">Clothing</string>
+  <string name="cat_home_furniture">Home &amp; furniture</string>
+  <string name="cat_electronics">Electronics</string>
+  <string name="cat_restaurant">Restaurant</string>
+  <string name="cat_bar_nightlife">Bar &amp; nightlife</string>
+  <string name="cat_fast_food">Fast food</string>
+  <string name="cat_pharmacy">Pharmacy</string>
+  <string name="cat_cosmetics">Cosmetics</string>
+  <string name="cat_toys_games">Toys &amp; games</string>
+  <string name="cat_health_beauty">Health &amp; beauty</string>
+  <string name="cat_general_retail">General retail</string>
+  <string name="cat_atm_cash">ATM &amp; cash</string>
+  <string name="cat_health_services">Health services</string>
+  <string name="cat_other_services">Other services</string>
+  <string name="cat_gambling">Gambling</string>
+  <string name="cat_professional_services">Professional services</string>
+  <string name="cat_membership_leisure">Membership &amp; leisure</string>
+  <string name="cat_hospital">Hospital</string>
+  <string name="cat_accounting_legal">Accounting &amp; legal</string>
+  <string name="cat_government">Government</string>
+  <string name="cat_public_services">Public services</string>
+  <string name="cat_fuel_auto">Fuel &amp; auto</string>
+  <string name="cat_home_electronics">Home &amp; electronics</string>
+  <string name="cat_dining_nightlife">Dining &amp; nightlife</string>
+  <string name="cat_health_retail">Health &amp; general retail</string>
+  <string name="cat_travel_transport">Travel &amp; transport</string>
+  <string name="cat_services">Services</string>
+  <string name="cat_leisure_professional">Leisure &amp; professional</string>
+  <string name="cat_imported">Imported</string>
+  <string name="cat_other">Other</string>
+  <string name="cat_investments">Investments</string>
+  <string name="cat_uncategorised">Uncategorised</string>
+  <string name="add_screen_title">Add</string>
+  <string name="add_mode_transaction">Transaction</string>
+  <string name="add_mode_bond" translatable="false">ОВДП</string>
+  <string name="add_placeholder_title">e.g., Salary</string>
+  <string name="add_amount_placeholder" translatable="false">0.00</string>
+  <string name="add_currency">Currency</string>
+  <string name="add_placeholder_category">e.g., Food, Transport</string>
+  <string name="add_no_bank">No bank</string>
+  <string name="add_note_optional">Note (optional)</string>
+  <string name="add_save_transaction">Add Transaction</string>
+  <string name="add_saving">Saving…</string>
+  <string name="add_ok">OK</string>
+  <string name="add_isin" translatable="false">ISIN</string>
+  <string name="add_isin_placeholder" translatable="false">UA9000012345</string>
+  <string name="add_unknown_bond_hint">Not one you\'ve bought before — add the terms below.</string>
+  <string name="add_name">Name</string>
+  <string name="add_name_placeholder" translatable="false">ОвДП 24/Б</string>
+  <string name="add_nominal">Nominal</string>
+  <string name="add_nominal_placeholder" translatable="false">1000</string>
+  <string name="add_bond_currency">Bond currency</string>
+  <string name="add_coupon_percent">Coupon %</string>
+  <string name="add_coupon_placeholder" translatable="false">9.5</string>
+  <string name="add_coupon_period">Every (months)</string>
+  <string name="add_period_placeholder" translatable="false">3</string>
+  <string name="add_maturity">Maturity</string>
+  <string name="add_clear_maturity">Clear maturity</string>
+  <string name="add_quantity">Quantity</string>
+  <string name="add_price_per_bond">Price/bond</string>
+  <string name="add_percent_of_nominal">= %1$.2f%% of %2$s nominal</string>
+  <string name="add_percent_of_named_nominal">%% of %1$s nominal</string>
+  <string name="add_percent_of_nominal_empty">% of nominal</string>
+  <string name="add_accrued_per_bond">Accrued / bond</string>
+  <string name="add_commission">Commission</string>
+  <string name="add_settlement">Settlement</string>
+  <string name="add_amount_charged">Amount charged (%1$s)</string>
+  <string name="add_approx_rate">at about %1$.2f %2$s per %3$s</string>
+  <string name="add_buy">Buy</string>
+  <string name="add_sell">Sell</string>
+  <string name="add_error_enter_name">Enter a name</string>
+  <string name="add_error_accrued_negative">Accrued interest cannot be negative</string>
+  <string name="add_error_commission_negative">Commission cannot be negative</string>
+  <string name="add_error_charged_negative">Amount charged cannot be negative</string>
+  <string name="add_oversell">You hold only %1$d — nothing was saved</string>
+  <string name="bond_title">Bonds</string>
+  <string name="bond_add_trade_cd">Record a trade</string>
+  <string name="bond_empty_title">No bonds yet</string>
+  <string name="bond_empty_subtitle">Record a purchase and it will show up here.</string>
+  <string name="bond_at_last_price">at last entered price</string>
+  <string name="bond_figure_held">Held</string>
+  <string name="bond_figure_cost_per">Cost/bond</string>
+  <string name="bond_figure_unrealised">Unrealised</string>
+  <string name="bond_fully_sold">Fully sold. Kept here because the trades are.</string>
+  <string name="bond_coupon_full">Coupon %1$.2f%% every %2$d months — %3$s a year</string>
+  <string name="bond_coupon_period">Coupon %1$.2f%% every %2$d months</string>
+  <string name="bond_coupon_only">Coupon %1$.2f%%</string>
+  <string name="bond_matures">matures %1$s</string>
+  <string name="drop_n_selected">%1$s · %2$d</string>
+  <string name="auth_error_no_account_id">Google account has no id</string>
+  <string name="auth_error_no_result">Google sign-in returned no result</string>
+  <string name="auth_error_no_account_on_device">No Google account was returned. Check that Play Services is up to date and an account is added.</string>
+  <string name="auth_error_cancelled">Sign-in was cancelled.</string>
+  <string name="list_search">Search</string>
+  <string name="list_clear_search">Clear search</string>
+  <string name="list_show_totals">Show totals</string>
+  <string name="list_hide_totals">Hide totals</string>
+  <string name="list_banks">Banks</string>
+  <string name="list_cards">Cards</string>
+  <string name="list_summary_empty">No transactions to total</string>
+  <string name="list_summary_one">1 transaction</string>
+  <string name="list_summary_many">%1$d transactions</string>
+  <string name="list_no_currency">No currency recorded</string>
+  <string name="list_net">Net</string>
+  <string name="list_date_from">From %1$s</string>
+  <string name="list_date_until">Until %1$s</string>
+  <string name="list_date_range" translatable="false">%1$s – %2$s</string>
+  <string name="list_filter_by_date">Filter by date</string>
+  <string name="list_apply">Apply</string>
+  <string name="list_nothing_matches">Nothing matches</string>
+  <string name="list_try_clearing">Try clearing the search or filters</string>
+  <string name="list_tap_to_add">Tap + to add your first transaction</string>
+  <string name="list_this_month">This month</string>
+  <string name="list_last_month">Last month</string>
+  <string name="list_last_30_days">Last 30 days</string>
+  <string name="list_last_90_days">Last 90 days</string>
+  <string name="list_year_to_date">Year to date</string>
+  <string name="main_bonds">Bonds</string>
+  <string name="main_add_transaction">Add transaction</string>
+  <string name="main_delete_failed">Could not delete the transaction</string>
+  <string name="dash_recent">Recent</string>
+  <string name="dash_cash">Cash</string>
+  <string name="dash_bonds">Bonds</string>
+  <string name="dash_bonds_currency">Bonds · %1$s</string>
+  <string name="dash_held_cost">%1$d held · cost %2$s</string>
+  <string name="dash_unrealised">Unrealised</string>
+  <string name="dash_coupon_a_year">Coupon a year</string>
+  <string name="dash_honest_label">At the last price you entered. Not a market valuation — this app has no price feed.</string>
+  <string name="dash_tap_to_add">Tap + to add your first</string>
+  <string name="settings_preferences">Preferences</string>
+  <string name="settings_theme_mode">Theme mode</string>
+  <string name="settings_theme_system">System</string>
+  <string name="settings_theme_light">Light</string>
+  <string name="settings_theme_dark">Dark</string>
+  <string name="settings_language">Language</string>
+  <string name="settings_bank_connection">Bank connection</string>
+  <string name="settings_select_bank">Select a bank</string>
+  <string name="settings_access_token">Access token</string>
+  <string name="settings_token_saved_synced">A token is saved for this bank. Last synced %1$s.</string>
+  <string name="settings_token_not_synced">A token is saved for this bank. Not synced yet.</string>
+  <string name="settings_sync_range_help">How far back the first sync reaches</string>
+  <string name="settings_sync_range_days">%1$dd</string>
+  <string name="settings_test">Test</string>
+  <string name="settings_sync_now">Sync now</string>
+  <string name="settings_remove_token">Remove token</string>
+  <string name="settings_save_token">Save token</string>
+  <string name="settings_select_bank_hint">Select a bank to connect your accounts.</string>
+  <string name="settings_token_required">Select a bank and enter a token first</string>
+  <string name="settings_token_saved">Token saved</string>
+  <string name="settings_token_removed">Token removed</string>
+  <string name="settings_save_token_first">Save a token first</string>
+  <string name="settings_connected_accounts">Connected: %1$d account(s)</string>
+  <string name="settings_connection_failed">Connection failed</string>
+  <string name="settings_sign_in_to_sync">Sign in to sync</string>
+  <string name="settings_sync_done">Imported %1$d transaction(s) from %2$d account(s)</string>
+  <string name="settings_sync_done_with_duplicates">Imported %1$d transaction(s) from %2$d account(s) (%3$d already present)</string>
+  <string name="settings_sync_rate_limited">%1$s Retry in about %2$ds.</string>
+  <string name="settings_sync_rate_limited_partial">Imported %1$d transaction(s) before the limit. %2$s Retry in about %3$ds.</string>
+  <string name="settings_rate_limited_fallback">Rate limited.</string>
+  <string name="settings_sync_failed">Sync failed</string>
+  <string name="settings_sync_progress">Request %1$d/%2$d · %3$d imported</string>
+  <string name="settings_sync_progress_waiting">Request %1$d/%2$d · %3$d imported · rate limit, waiting %4$ds</string>
+  <string name="settings_transaction_banks">Transaction banks</string>
+  <string name="settings_transaction_banks_blurb">The names statements can be filed under. Adding one here does not connect to it; it only labels transactions you import yourself.</string>
+  <string name="settings_add_bank">Add a bank</string>
+  <string name="settings_add">Add</string>
+  <string name="settings_archived_badge">Archived</string>
+  <string name="settings_cd_move_up">Move %1$s up</string>
+  <string name="settings_cd_move_down">Move %1$s down</string>
+  <string name="settings_cd_rename_bank">Rename %1$s</string>
+  <string name="settings_cd_archive_bank">Archive %1$s</string>
+  <string name="settings_cd_restore_bank">Restore %1$s</string>
+  <string name="settings_rename_bank">Rename bank</string>
+  <string name="settings_bank_name_label">Name</string>
+  <string name="settings_bank_added">Added %1$s.</string>
+  <string name="settings_bank_name_required">Type a name for the bank first.</string>
+  <string name="settings_bank_name_taken">You already have a bank with that name.</string>
+  <string name="settings_bank_create_failed">Could not create a bank right now. Try again.</string>
+  <string name="settings_bank_renamed">Renamed.</string>
+  <string name="settings_bank_rename_invalid">That name is blank or already in use.</string>
+  <string name="settings_bank_archived_msg">Archived. Its transactions are kept, and it stays in the filter.</string>
+  <string name="settings_bank_restored">Restored.</string>
+  <string name="settings_account">Account</string>
+  <string name="settings_version" translatable="false">Finance Tracker v1.0.0</string>
+  <string name="import_section_title">Import a statement</string>
+  <string name="import_section_blurb">Works with any bank: export a statement as XLSX, CSV or PDF and pick it here. Nothing is uploaded.</string>
+  <string name="import_choose_file">Choose statement file</string>
+  <string name="import_reading_file">Reading file…</string>
+  <string name="import_done_plain">Imported %1$d transaction(s).</string>
+  <string name="import_done_synced">Imported %1$d transaction(s), skipped %2$d already synced from the bank.</string>
+  <string name="import_done_duplicates">Imported %1$d transaction(s), skipped %2$d already present.</string>
+  <string name="import_done_both">Imported %1$d transaction(s), skipped %2$d already synced from the bank, skipped %3$d already present.</string>
+  <string name="import_dismiss">Dismiss</string>
+  <string name="import_found_in_file">Found %1$d transaction(s) in this file</string>
+  <string name="import_minor_units_note">Amounts were read as kopecks and converted to hryvnias.</string>
+  <string name="import_skipped_rows">%1$d row(s) had no usable date or amount.</string>
+  <string name="import_choose_bank">Choose a bank</string>
+  <string name="import_bank_unresolved">This file was not recognised. Choose the bank, or the rows cannot be filtered by it later.</string>
+  <string name="import_import_n">Import %1$d</string>
+  <string name="import_and_more">…and %1$d more</string>
+  <string name="import_error_choose_bank">Choose which bank this statement is from.</string>
+  <string name="import_sign_in">Sign in to import</string>
+  <string name="import_error_unreadable">Could not read that file.</string>
+  <string name="import_error_unsupported">That file format is not supported. Export the statement as XLSX, CSV or PDF.</string>
+  <string name="import_error_empty">That statement has no transactions.</string>
+  <string name="import_error_no_header">Could not find the column headers in that file.</string>
+  <string name="import_error_no_date">Could not find a date column in that file.</string>
+  <string name="import_error_no_amount">Could not find an amount column in that file.</string>
+  <string name="import_error_too_large">That file is too large to import.</string>
 </resources>

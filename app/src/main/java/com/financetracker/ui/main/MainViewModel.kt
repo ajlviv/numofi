@@ -2,6 +2,7 @@ package com.financetracker.ui.main
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.financetracker.R
 import com.financetracker.model.BondPosition
 import com.financetracker.model.Transaction
 import com.financetracker.repository.AuthRepository
@@ -58,13 +59,18 @@ class MainViewModel @Inject constructor(
     val positions: StateFlow<List<BondPosition>> = bondRepository.observePositions()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
-    private val _message = MutableStateFlow<String?>(null)
-    val message: StateFlow<String?> = _message.asStateFlow()
+    /**
+     * Snackbar copy, as a resource id so the UI can resolve it in its own scope and locale.
+     * Deliberately not the exception's message: that text is developer English and may leak
+     * internals, so every failure surfaces the same fixed localized sentence instead.
+     */
+    private val _message = MutableStateFlow<Int?>(null)
+    val message: StateFlow<Int?> = _message.asStateFlow()
 
     fun deleteTransaction(id: Long) {
         viewModelScope.launch {
             runCatching { transactionRepository.deleteTransaction(id) }
-                .onFailure { _message.value = it.message ?: "Could not delete the transaction" }
+                .onFailure { _message.value = R.string.main_delete_failed }
         }
     }
 

@@ -41,12 +41,14 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
@@ -58,6 +60,10 @@ import com.financetracker.data.bank.BankProvider
 import com.financetracker.data.bank.BankSyncService
 import com.financetracker.data.settings.SettingsRepository
 import com.financetracker.model.Bank
+import android.app.Activity
+import android.content.Context
+import android.content.ContextWrapper
+import android.text.format.DateUtils
 import com.financetracker.ui.component.SingleChoiceDropdown
 import com.financetracker.ui.statement.StatementImportUiState
 import com.financetracker.ui.statement.StatementImportViewModel
@@ -86,14 +92,26 @@ fun SettingsScreen(
     val bankNameInput by viewModel.bankNameInput.collectAsStateWithLifecycle()
     val bankMessage by viewModel.bankMessage.collectAsStateWithLifecycle()
 
+    // The language picked below is applied by AppLocale in attachBaseContext, which has
+    // already run by the time this screen exists: the only way to apply a new pick is to
+    // rebuild the activity. The ViewModel emits after the tag is stored, so the recreation
+    // reads the new value instead of racing the write.
+    val context = LocalContext.current
+    LaunchedEffect(Unit) {
+        viewModel.languageChanged.collect { context.findActivity().recreate() }
+    }
+
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Settings") },
+                title = { Text(stringResource(R.string.settings)) },
                 navigationIcon = {
                     if (showBackButton) {
                         IconButton(onClick = onBack) {
-                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                            Icon(
+                                Icons.AutoMirrored.Filled.ArrowBack,
+                                contentDescription = stringResource(R.string.common_back)
+                            )
                         }
                     }
                 }
@@ -109,8 +127,8 @@ fun SettingsScreen(
             // and everything inside one group is spaced by the card that holds it.
             verticalArrangement = Arrangement.spacedBy(24.dp)
         ) {
-            SettingsSection(title = "Preferences") {
-                RowLabel("Theme mode")
+            SettingsSection(title = stringResource(R.string.settings_preferences)) {
+                RowLabel(stringResource(R.string.settings_theme_mode))
                 SingleChoiceSegmentedButtonRow {
                     ThemeMode.entries.forEach { mode ->
                         SegmentedButton(
@@ -121,9 +139,9 @@ fun SettingsScreen(
                         ) {
                             Text(
                                 text = when (mode) {
-                                    ThemeMode.SYSTEM -> "System"
-                                    ThemeMode.LIGHT -> "Light"
-                                    ThemeMode.DARK -> "Dark"
+                                    ThemeMode.SYSTEM -> stringResource(R.string.settings_theme_system)
+                                    ThemeMode.LIGHT -> stringResource(R.string.settings_theme_light)
+                                    ThemeMode.DARK -> stringResource(R.string.settings_theme_dark)
                                 },
                                 style = MaterialTheme.typography.bodySmall
                             )
@@ -133,14 +151,14 @@ fun SettingsScreen(
 
                 HorizontalDivider()
 
-                RowLabel("Language")
+                RowLabel(stringResource(R.string.settings_language))
                 LanguagePicker(
                     selected = language,
                     onSelect = viewModel::setLanguage
                 )
             }
 
-            SettingsSection(title = "Bank connection") {
+            SettingsSection(title = stringResource(R.string.settings_bank_connection)) {
                 BankPicker(
                     banks = viewModel.availableBanks,
                     selectedBankId = selectedBankId,
@@ -151,8 +169,8 @@ fun SettingsScreen(
                     if (isTokenConfigured) {
                         Text(
                             text = lastSyncedAt?.let {
-                                "A token is saved for this bank. Last synced ${relativeTime(it)}."
-                            } ?: "A token is saved for this bank. Not synced yet.",
+                                stringResource(R.string.settings_token_saved_synced, relativeTime(it))
+                            } ?: stringResource(R.string.settings_token_not_synced),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -174,7 +192,7 @@ fun SettingsScreen(
                         OutlinedTextField(
                             value = tokenInput,
                             onValueChange = viewModel::onTokenChange,
-                            label = { Text("Access token") },
+                            label = { Text(stringResource(R.string.settings_access_token)) },
                             modifier = Modifier.fillMaxWidth(),
                             singleLine = true,
                             visualTransformation = PasswordVisualTransformation()
@@ -187,7 +205,7 @@ fun SettingsScreen(
                                 onClick = viewModel::verifyConnection,
                                 enabled = !isSyncing
                             ) {
-                                Text("Test")
+                                Text(stringResource(R.string.settings_test))
                             }
                             Button(
                                 onClick = viewModel::syncNow,
@@ -199,24 +217,24 @@ fun SettingsScreen(
                                         strokeWidth = 2.dp
                                     )
                                 } else {
-                                    Text("Sync now")
+                                    Text(stringResource(R.string.settings_sync_now))
                                 }
                             }
                             OutlinedButton(onClick = viewModel::clearToken) {
-                                Text("Remove token")
+                                Text(stringResource(R.string.settings_remove_token))
                             }
                         } else {
                             Button(
                                 onClick = viewModel::saveToken,
                                 enabled = tokenInput.isNotBlank()
                             ) {
-                                Text("Save token")
+                                Text(stringResource(R.string.settings_save_token))
                             }
                         }
                     }
                 } else {
                     Text(
-                        text = "Select a bank to connect your accounts.",
+                        text = stringResource(R.string.settings_select_bank_hint),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -224,27 +242,25 @@ fun SettingsScreen(
 
                 statusMessage?.let { message ->
                     Text(
-                        text = message,
+                        text = message.resolve(),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.primary
                     )
                 }
             }
 
-            SettingsSection(title = "Import a statement") {
+            SettingsSection(title = stringResource(R.string.import_section_title)) {
                 Text(
-                    text = "Works with any bank: export a statement as XLSX, CSV or PDF and " +
-                        "pick it here. Nothing is uploaded.",
+                    text = stringResource(R.string.import_section_blurb),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 StatementImportSection()
             }
 
-            SettingsSection(title = "Transaction banks") {
+            SettingsSection(title = stringResource(R.string.settings_transaction_banks)) {
                 Text(
-                    text = "The names statements can be filed under. Adding one here does not " +
-                        "connect to it; it only labels transactions you import yourself.",
+                    text = stringResource(R.string.settings_transaction_banks_blurb),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -261,7 +277,7 @@ fun SettingsScreen(
                 )
             }
 
-            SettingsSection(title = "Account") {
+            SettingsSection(title = stringResource(R.string.settings_account)) {
                 OutlinedButton(
                     onClick = viewModel::signOut,
                     modifier = Modifier.fillMaxWidth()
@@ -275,13 +291,31 @@ fun SettingsScreen(
                 // last thing on the page either way, and inside the card it cannot be read as
                 // belonging to the bank list.
                 Text(
-                    text = "Finance Tracker v1.0.0",
+                    text = stringResource(R.string.settings_version),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
         }
     }
+}
+
+/**
+ * Resolves a [SettingsMessage] for display: [SettingsMessage.Res] goes through
+ * stringResource with its positional arguments (any nested message arguments are
+ * resolved first), while [SettingsMessage.Raw] is shown verbatim.
+ */
+@Composable
+private fun SettingsMessage.resolve(): String = when (this) {
+    is SettingsMessage.Res -> {
+        val resolved = args.map { if (it is SettingsMessage) it.resolve() else it }
+        if (resolved.isEmpty()) {
+            stringResource(id)
+        } else {
+            stringResource(id, *resolved.toTypedArray())
+        }
+    }
+    is SettingsMessage.Raw -> text
 }
 
 /**
@@ -323,7 +357,7 @@ fun SettingsSection(
     }
 }
 
-/** The name of a single control inside a group, e.g. "Theme mode". */
+/** The name of a single control inside a group, e.g. the theme-mode label. */
 @Composable
 fun RowLabel(text: String) {
     Text(
@@ -347,7 +381,7 @@ private fun BankPicker(
             onClick = { expanded = true },
             modifier = Modifier.fillMaxWidth()
         ) {
-            Text(selected?.displayName ?: "Select a bank")
+            Text(selected?.displayName ?: stringResource(R.string.settings_select_bank))
         }
         DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
             banks.forEach { bank ->
@@ -374,7 +408,7 @@ private fun BankPicker(
 private fun TransactionBanksSection(
     banks: List<Bank>,
     nameInput: String,
-    message: String?,
+    message: SettingsMessage?,
     onNameChange: (String) -> Unit,
     onAdd: () -> Unit,
     onRename: (String, String) -> Unit,
@@ -392,16 +426,18 @@ private fun TransactionBanksSection(
         OutlinedTextField(
             value = nameInput,
             onValueChange = onNameChange,
-            label = { Text("Add a bank") },
+            label = { Text(stringResource(R.string.settings_add_bank)) },
             modifier = Modifier.weight(1f),
             singleLine = true
         )
-        Button(onClick = onAdd, enabled = nameInput.isNotBlank()) { Text("Add") }
+        Button(onClick = onAdd, enabled = nameInput.isNotBlank()) {
+            Text(stringResource(R.string.settings_add))
+        }
     }
 
     message?.let {
         Text(
-            text = it,
+            text = it.resolve(),
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.primary
         )
@@ -422,7 +458,7 @@ private fun TransactionBanksSection(
                 Text(text = bank.displayName, style = MaterialTheme.typography.bodyMedium)
                 if (bank.archived) {
                     Text(
-                        text = "Archived",
+                        text = stringResource(R.string.settings_archived_badge),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -434,16 +470,25 @@ private fun TransactionBanksSection(
                 onClick = { onMoveUp(bank.code) },
                 enabled = index > 0
             ) {
-                Icon(Icons.Default.ArrowUpward, contentDescription = "Move ${bank.displayName} up")
+                Icon(
+                    Icons.Default.ArrowUpward,
+                    contentDescription = stringResource(R.string.settings_cd_move_up, bank.displayName)
+                )
             }
             IconButton(
                 onClick = { onMoveDown(bank.code) },
                 enabled = index < banks.lastIndex
             ) {
-                Icon(Icons.Default.ArrowDownward, contentDescription = "Move ${bank.displayName} down")
+                Icon(
+                    Icons.Default.ArrowDownward,
+                    contentDescription = stringResource(R.string.settings_cd_move_down, bank.displayName)
+                )
             }
             IconButton(onClick = { renaming = bank }) {
-                Icon(Icons.Default.Edit, contentDescription = "Rename ${bank.displayName}")
+                Icon(
+                    Icons.Default.Edit,
+                    contentDescription = stringResource(R.string.settings_cd_rename_bank, bank.displayName)
+                )
             }
             IconButton(onClick = { onArchiveChange(bank.code, !bank.archived) }) {
                 Icon(
@@ -453,9 +498,9 @@ private fun TransactionBanksSection(
                         Icons.Default.Archive
                     },
                     contentDescription = if (bank.archived) {
-                        "Restore ${bank.displayName}"
+                        stringResource(R.string.settings_cd_restore_bank, bank.displayName)
                     } else {
-                        "Archive ${bank.displayName}"
+                        stringResource(R.string.settings_cd_archive_bank, bank.displayName)
                     }
                 )
             }
@@ -486,19 +531,23 @@ private fun RenameBankDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Rename bank") },
+        title = { Text(stringResource(R.string.settings_rename_bank)) },
         text = {
             OutlinedTextField(
                 value = name,
                 onValueChange = { name = it },
-                label = { Text("Name") },
+                label = { Text(stringResource(R.string.settings_bank_name_label)) },
                 singleLine = true
             )
         },
         confirmButton = {
-            Button(onClick = { onConfirm(name) }, enabled = name.isNotBlank()) { Text("Save") }
+            Button(onClick = { onConfirm(name) }, enabled = name.isNotBlank()) {
+                Text(stringResource(R.string.save))
+            }
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) }
+        }
     )
 }
 
@@ -512,7 +561,7 @@ private val SYNC_RANGES = listOf(7, 30, 90)
 private fun SyncRangePicker(days: Int, enabled: Boolean, onSelect: (Int) -> Unit) {
     Column(modifier = Modifier.fillMaxWidth()) {
         Text(
-            text = "How far back the first sync reaches",
+            text = stringResource(R.string.settings_sync_range_help),
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
@@ -522,37 +571,37 @@ private fun SyncRangePicker(days: Int, enabled: Boolean, onSelect: (Int) -> Unit
                     selected = days == range,
                     enabled = enabled,
                     onClick = { onSelect(range) },
-                    label = { Text("${range}d") }
+                    label = { Text(stringResource(R.string.settings_sync_range_days, range)) }
                 )
             }
         }
     }
 }
 
-/** "2 hours ago" style stamp for the last successful sync. */
-private fun relativeTime(timestamp: Long): String {
-    val elapsed = System.currentTimeMillis() - timestamp
-    val minutes = elapsed / 60_000
-    return when {
-        minutes < 1 -> "just now"
-        minutes < 60 -> "$minutes minute(s) ago"
-        minutes < 60 * 24 -> "${minutes / 60} hour(s) ago"
-        else -> "${minutes / (60 * 24)} day(s) ago"
-    }
-}
+/**
+ * Locale-relative "2 hours ago" style stamp for the last successful sync.
+ * DateUtils formats the unit words in the active locale, so no unit strings are hardcoded.
+ */
+private fun relativeTime(timestamp: Long): String =
+    DateUtils.getRelativeTimeSpanString(timestamp).toString()
 
 /**
  * Renders sync progress, spelling out the rate-limit wait so a multi-minute import
  * does not look like a frozen app.
  */
+@Composable
 private fun progressText(progress: BankSyncService.SyncProgress): String {
-    val base = "Request ${progress.completedRequests}/${progress.totalRequests} " +
-        "· ${progress.imported} imported"
+    val requests = progress.completedRequests
+    val total = progress.totalRequests
+    val imported = progress.imported
     return if (progress.cooldownMillis > 0) {
         val seconds = (progress.cooldownMillis + 999) / 1000
-        "$base · rate limit, waiting ${seconds}s"
+        stringResource(
+            R.string.settings_sync_progress_waiting,
+            requests, total, imported, seconds
+        )
     } else {
-        base
+        stringResource(R.string.settings_sync_progress, requests, total, imported)
     }
 }
 
@@ -585,7 +634,7 @@ private fun StatementImportSection() {
         },
         enabled = state !is StatementImportUiState.Working
     ) {
-        Text("Choose statement file")
+        Text(stringResource(R.string.import_choose_file))
     }
 
     when (val current = state) {
@@ -599,39 +648,61 @@ private fun StatementImportSection() {
                     modifier = Modifier.size(20.dp),
                     strokeWidth = 2.dp
                 )
-                Text("Reading file…", style = MaterialTheme.typography.bodyMedium)
+                Text(
+                    stringResource(R.string.import_reading_file),
+                    style = MaterialTheme.typography.bodyMedium
+                )
             }
 
         is StatementImportUiState.Preview -> ImportPreview(current, banks, viewModel)
 
         is StatementImportUiState.Done -> Column {
             Text(
-                text = "Imported ${current.imported} transaction(s)" +
-                    if (current.alreadySynced > 0) {
-                        ", skipped ${current.alreadySynced} already synced from the bank"
-                    } else {
-                        ""
-                    } +
-                    if (current.duplicatesSkipped > 0) {
-                        ", skipped ${current.duplicatesSkipped} already present."
-                    } else {
-                        "."
-                    },
+                text = when {
+                    current.alreadySynced > 0 && current.duplicatesSkipped > 0 ->
+                        stringResource(
+                            R.string.import_done_both,
+                            current.imported,
+                            current.alreadySynced,
+                            current.duplicatesSkipped
+                        )
+                    current.alreadySynced > 0 ->
+                        stringResource(
+                            R.string.import_done_synced,
+                            current.imported,
+                            current.alreadySynced
+                        )
+                    current.duplicatesSkipped > 0 ->
+                        stringResource(
+                            R.string.import_done_duplicates,
+                            current.imported,
+                            current.duplicatesSkipped
+                        )
+                    else ->
+                        stringResource(R.string.import_done_plain, current.imported)
+                },
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.primary,
                 modifier = Modifier.padding(top = 8.dp)
             )
-            TextButton(onClick = viewModel::dismiss) { Text("Dismiss") }
+            TextButton(onClick = viewModel::dismiss) {
+                Text(stringResource(R.string.import_dismiss))
+            }
         }
 
         is StatementImportUiState.Error -> Column {
             Text(
-                text = current.message,
+                text = current.detail
+                    ?.takeIf { it.isNotBlank() }
+                    ?.let { detail -> stringResource(current.messageRes) + "\n" + detail }
+                    ?: stringResource(current.messageRes),
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.error,
                 modifier = Modifier.padding(top = 8.dp)
             )
-            TextButton(onClick = viewModel::dismiss) { Text("Dismiss") }
+            TextButton(onClick = viewModel::dismiss) {
+                Text(stringResource(R.string.import_dismiss))
+            }
         }
 
         StatementImportUiState.Idle -> Unit
@@ -653,41 +724,44 @@ private fun ImportPreview(
         verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
         Text(
-            // "in this file", because this list is the file being previewed and not the
-            // stored transactions. Reading it as the transaction list is what made the
-            // preview look like the imported rows had replaced the old ones.
-            text = "Found ${state.rows.size} transaction(s) in this file",
+            // import_found_in_file says "in this file", because this list is the file being
+            // previewed and not the stored transactions. Reading it as the transaction list
+            // is what made the preview look like the imported rows had replaced the old ones.
+            text = stringResource(R.string.import_found_in_file, state.rows.size),
             style = MaterialTheme.typography.titleSmall
         )
-        state.unitNote?.let {
+        state.unitNoteRes?.let { note ->
             Text(
-                text = it,
+                text = stringResource(note),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
         if (state.skippedRows > 0) {
             Text(
-                text = "${state.skippedRows} row(s) had no usable date or amount.",
+                text = stringResource(R.string.import_skipped_rows, state.skippedRows),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
 
-        Text("Bank", style = MaterialTheme.typography.labelLarge)
+        Text(
+            stringResource(R.string.common_bank),
+            style = MaterialTheme.typography.labelLarge
+        )
         SingleChoiceDropdown(
-            label = "Choose a bank",
-            // "None" is a real option rather than an absence, because the file may be
+            label = stringResource(R.string.import_choose_bank),
+            // common_none is a real option rather than an absence, because the file may be
             // from somewhere the app has never heard of and the user still has to be
             // able to say so instead of picking a wrong bank by accident.
-            options = listOf(null to "None") + banks.map { it.code to it.displayName },
+            options = listOf(null to stringResource(R.string.common_none)) +
+                banks.map { it.code to it.displayName },
             selected = state.bankCode,
             onSelect = { viewModel.onBankSelected(it) }
         )
         if (state.bankUnresolved) {
             Text(
-                text = "This file was not recognised. Choose the bank, or the rows " +
-                    "cannot be filtered by it later.",
+                text = stringResource(R.string.import_bank_unresolved),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.error
             )
@@ -720,7 +794,10 @@ private fun ImportPreview(
         }
         if (state.rows.size > PREVIEW_ROW_COUNT) {
             Text(
-                text = "…and ${state.rows.size - PREVIEW_ROW_COUNT} more",
+                text = stringResource(
+                    R.string.import_and_more,
+                    state.rows.size - PREVIEW_ROW_COUNT
+                ),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -733,9 +810,9 @@ private fun ImportPreview(
                 onClick = viewModel::confirm,
                 enabled = !state.bankUnresolved
             ) {
-                Text("Import ${state.rows.size}")
+                Text(stringResource(R.string.import_import_n, state.rows.size))
             }
-            TextButton(onClick = viewModel::dismiss) { Text("Cancel") }
+            TextButton(onClick = viewModel::dismiss) { Text(stringResource(R.string.cancel)) }
         }
     }
 }
@@ -745,18 +822,14 @@ private const val PREVIEW_ROW_COUNT = 4
 @Composable
 private fun LanguagePicker(selected: String, onSelect: (String) -> Unit) {
     var expanded by remember { mutableStateOf(false) }
-    val label = when (selected) {
-        "uk" -> "Українська"
-        "en" -> "English"
-        else -> "System default"
-    }
+    val label = languageLabel(selected)
 
     Column(modifier = Modifier.fillMaxWidth(), horizontalAlignment = Alignment.Start) {
         OutlinedButton(onClick = { expanded = true }) { Text(label) }
         DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
-            LANGUAGES.forEach { (tag, name) ->
+            LANGUAGES.forEach { tag ->
                 DropdownMenuItem(
-                    text = { Text(name) },
+                    text = { Text(languageLabel(tag)) },
                     onClick = {
                         onSelect(tag)
                         expanded = false
@@ -767,8 +840,26 @@ private fun LanguagePicker(selected: String, onSelect: (String) -> Unit) {
     }
 }
 
+/**
+ * The picker label for a language tag. The two endonyms (English, Українська) name
+ * themselves and are never translated, so they come from their translatable="false" keys.
+ */
+@Composable
+private fun languageLabel(tag: String): String = when (tag) {
+    "uk" -> stringResource(R.string.lang_ukrainian)
+    "en" -> stringResource(R.string.lang_english)
+    else -> stringResource(R.string.lang_system_default)
+}
+
 private val LANGUAGES = listOf(
-    SettingsRepository.SYSTEM_DEFAULT to "System default",
-    "en" to "English",
-    "uk" to "Українська"
+    SettingsRepository.SYSTEM_DEFAULT,
+    "en",
+    "uk"
 )
+
+/** The activity behind whatever context Compose wrapped, so it can be rebuilt. */
+private tailrec fun Context.findActivity(): Activity {
+    if (this is Activity) return this
+    if (this is ContextWrapper) return baseContext.findActivity()
+    error("No activity in the context chain")
+}

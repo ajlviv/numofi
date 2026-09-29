@@ -1,17 +1,22 @@
 package com.financetracker.ui.auth
 
+import android.content.Context
 import android.util.Log
+import androidx.annotation.StringRes
 import androidx.credentials.exceptions.GetCredentialCancellationException
 import androidx.credentials.exceptions.GetCredentialException
 import androidx.credentials.exceptions.NoCredentialException
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.financetracker.R
 import com.financetracker.model.AuthState
 import com.financetracker.model.User
 import com.financetracker.repository.AuthRepository
+import com.financetracker.util.AppLocale
 import com.google.android.gms.common.api.ApiException
 import com.google.android.libraries.identity.googleid.GoogleIdTokenCredential
 import dagger.hilt.android.lifecycle.HiltViewModel
+import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -21,7 +26,8 @@ import javax.inject.Inject
 
 @HiltViewModel
 class AuthViewModel @Inject constructor(
-    private val authRepository: AuthRepository
+    private val authRepository: AuthRepository,
+    @ApplicationContext private val context: Context
 ) : ViewModel() {
 
     private val _authState = MutableStateFlow<AuthState>(AuthState.Loading)
@@ -72,7 +78,7 @@ class AuthViewModel @Inject constructor(
 
         val uid = credential.id
         if (uid.isNullOrBlank()) {
-            _authState.value = AuthState.Unauthenticated(ERROR_NO_ACCOUNT_ID)
+            _authState.value = AuthState.Unauthenticated(string(R.string.auth_error_no_account_id))
             return
         }
 
@@ -92,7 +98,7 @@ class AuthViewModel @Inject constructor(
         _isGoogleFlowInProgress.value = false
 
         if (throwable == null) {
-            _authState.value = AuthState.Unauthenticated(ERROR_NO_RESULT)
+            _authState.value = AuthState.Unauthenticated(string(R.string.auth_error_no_result))
             return
         }
 
@@ -128,22 +134,27 @@ class AuthViewModel @Inject constructor(
     /**
      * Surfaces the real cause rather than a generic message, because Credential Manager
      * raises distinct types that call for different responses.
+     *
+     * Only the two fixed messages are translated: the branches below deliberately show what
+     * the underlying exception said, which stays in whatever language the library produced.
      */
     private fun describe(throwable: Throwable): String = when (throwable) {
-        is GetCredentialCancellationException -> ERROR_CANCELLED
-        is NoCredentialException -> ERROR_NO_ACCOUNT_ON_DEVICE
+        is GetCredentialCancellationException -> string(R.string.auth_error_cancelled)
+        is NoCredentialException -> string(R.string.auth_error_no_account_on_device)
         is GetCredentialException -> "Credential Manager error: ${throwable.message ?: throwable.type}"
         is ApiException -> "Google API error ${throwable.statusCode}: ${throwable.message}"
         else -> "${throwable::class.java.simpleName}: ${throwable.message ?: "no detail"}"
     }
 
+    /**
+     * Resolves a fixed message against the language picked in Settings: [AppLocale.wrap] is
+     * what applies that pick, and the raw application context would answer in the device
+     * language while the rest of the activity speaks the chosen one.
+     */
+    private fun string(@StringRes id: Int): String = AppLocale.wrap(context).getString(id)
+
     private companion object {
         const val TAG = "FinanceTrackerAuth"
         const val SESSION_RESOLVE_TIMEOUT_MS = 5_000L
-        const val ERROR_NO_ACCOUNT_ID = "Google account has no id"
-        const val ERROR_NO_RESULT = "Google sign-in returned no result"
-        const val ERROR_NO_ACCOUNT_ON_DEVICE =
-            "No Google account was returned. Check that Play Services is up to date and an account is added."
-        const val ERROR_CANCELLED = "Sign-in was cancelled."
     }
 }

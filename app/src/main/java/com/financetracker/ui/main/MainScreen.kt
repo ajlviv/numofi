@@ -1,5 +1,6 @@
 package com.financetracker.ui.main
 
+import androidx.annotation.StringRes
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.foundation.layout.Box
@@ -29,8 +30,10 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.res.stringResource
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.financetracker.R
 import com.financetracker.model.Transaction
 import com.financetracker.ui.bond.BondListScreen
 import com.financetracker.ui.dashboard.DashboardScreen
@@ -42,13 +45,13 @@ import com.financetracker.ui.transaction.TransactionListScreen
 
 enum class MainBottomNavDestination(
     val route: String,
-    val label: String,
+    @StringRes val labelRes: Int,
     val icon: ImageVector
 ) {
-    DASHBOARD("dashboard", "Dashboard", Icons.Default.Dashboard),
-    TRANSACTIONS("transactions", "Transactions", Icons.AutoMirrored.Filled.List),
-    BONDS("bonds", "Bonds", Icons.Default.AccountBalance),
-    SETTINGS("settings", "Settings", Icons.Default.Settings)
+    DASHBOARD("dashboard", R.string.dashboard, Icons.Default.Dashboard),
+    TRANSACTIONS("transactions", R.string.transactions, Icons.AutoMirrored.Filled.List),
+    BONDS("bonds", R.string.main_bonds, Icons.Default.AccountBalance),
+    SETTINGS("settings", R.string.settings, Icons.Default.Settings)
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -73,8 +76,11 @@ fun MainScreen(
     val bankNames by viewModel.bankNames.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
 
+    // Resolved here, in composable scope: LaunchedEffect's body is a coroutine where
+    // stringResource is not available, so the snackbar copy is fetched before it starts.
+    val snackbarText = message?.let { stringResource(it) }
     LaunchedEffect(message) {
-        message?.let {
+        snackbarText?.let {
             snackbarHostState.showSnackbar(it)
             viewModel.clearMessage()
         }
@@ -116,7 +122,7 @@ fun MainScreen(
             // button in its app bar for the one thing that can be added there.
             if (items[selectedTab] == MainBottomNavDestination.DASHBOARD) {
                 FloatingActionButton(onClick = { addEntryMode = AddEntryMode.TRANSACTION }) {
-                    Icon(Icons.Default.Add, contentDescription = "Add transaction")
+                    Icon(Icons.Default.Add, contentDescription = stringResource(R.string.main_add_transaction))
                 }
             }
         },
@@ -126,8 +132,8 @@ fun MainScreen(
                     NavigationBarItem(
                         selected = selectedTab == index,
                         onClick = { selectedTab = index },
-                        icon = { Icon(destination.icon, contentDescription = destination.label) },
-                        label = { Text(destination.label) }
+                        icon = { Icon(destination.icon, contentDescription = stringResource(destination.labelRes)) },
+                        label = { Text(stringResource(destination.labelRes)) }
                     )
                 }
             }

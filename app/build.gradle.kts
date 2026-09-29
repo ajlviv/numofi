@@ -43,6 +43,12 @@ android {
         }
     }
 
+    testOptions {
+        // Robolectric resolves real string resources (CategoryResourceParityTest compares
+        // them against the Kotlin category tables); Room tests alone never needed this.
+        unitTests.isIncludeAndroidResources = true
+    }
+
     packaging {
         resources {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"

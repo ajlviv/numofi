@@ -1,5 +1,6 @@
 package com.financetracker
 
+import android.content.Context
 import android.content.Intent
 import android.os.Bundle
 import androidx.activity.ComponentActivity
@@ -17,12 +18,19 @@ import com.financetracker.ui.auth.AuthGuard
 import com.financetracker.ui.auth.AuthViewModel
 import com.financetracker.ui.main.MainScreen
 import com.financetracker.ui.theme.FinanceTrackerTheme
+import com.financetracker.util.AppLocale
 import dagger.hilt.android.AndroidEntryPoint
 
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
 
     private val authViewModel: AuthViewModel by viewModels()
+
+    // The language picked in Settings is applied here: every string below is resolved against
+    // the context this produces, so a change only takes effect by recreating the activity.
+    override fun attachBaseContext(newBase: Context) {
+        super.attachBaseContext(AppLocale.wrap(newBase))
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)

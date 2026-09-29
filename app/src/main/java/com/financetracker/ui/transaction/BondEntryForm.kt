@@ -28,9 +28,11 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.financetracker.R
 import com.financetracker.model.BankRef
 import com.financetracker.model.Bond
 import com.financetracker.model.BondMath
@@ -65,6 +67,7 @@ private fun instantToLocalDate(millis: Long): LocalDate =
 @Composable
 internal fun BondEntryForm(
     banks: List<BankRef>,
+    noBankLabel: String,
     saving: Boolean,
     onLookup: (String) -> Unit,
     knownBond: Bond?,
@@ -87,6 +90,10 @@ internal fun BondEntryForm(
     var currency by remember { mutableStateOf("UAH") }
     var settlementAmount by remember { mutableStateOf("") }
     var error by remember { mutableStateOf<String?>(null) }
+    val errorEnterName = stringResource(R.string.add_error_enter_name)
+    val errorAccrued = stringResource(R.string.add_error_accrued_negative)
+    val errorCommission = stringResource(R.string.add_error_commission_negative)
+    val errorCharged = stringResource(R.string.add_error_charged_negative)
 
     // A found instrument fills the terms in, but every field stays editable. A bond already
     // held has a maturity date and coupon the user would not want to retype, and one that is
@@ -135,7 +142,7 @@ internal fun BondEntryForm(
                     shape = MaterialTheme.shapes.small,
                     modifier = Modifier.weight(1f)
                 ) {
-                    Text(if (entry == BondTradeSide.BUY) "Buy" else "Sell", style = MaterialTheme.typography.bodyMedium)
+                    Text(if (entry == BondTradeSide.BUY) stringResource(R.string.add_buy) else stringResource(R.string.add_sell), style = MaterialTheme.typography.bodyMedium)
                 }
             }
         }
@@ -143,8 +150,8 @@ internal fun BondEntryForm(
         OutlinedTextField(
             value = isin,
             onValueChange = { isin = it.uppercase() },
-            label = { Text("ISIN") },
-            placeholder = { Text("UA9000012345") },
+            label = { Text(stringResource(R.string.add_isin)) },
+            placeholder = { Text(stringResource(R.string.add_isin_placeholder)) },
             modifier = Modifier.fillMaxWidth(),
             singleLine = true
         )
@@ -153,7 +160,7 @@ internal fun BondEntryForm(
         // user needs to know which one they got before typing the terms they may not have.
         if (isin.isNotBlank() && knownBond == null) {
             Text(
-                text = "Not one you've bought before — add the terms below.",
+                text = stringResource(R.string.add_unknown_bond_hint),
                 style = MaterialTheme.typography.bodySmall,
                 modifier = Modifier.padding(top = 4.dp)
             )
@@ -162,8 +169,8 @@ internal fun BondEntryForm(
         OutlinedTextField(
             value = name,
             onValueChange = { name = it },
-            label = { RequiredLabel("Name") },
-            placeholder = { Text("ОвДП 24/Б") },
+            label = { RequiredLabel(stringResource(R.string.add_name)) },
+            placeholder = { Text(stringResource(R.string.add_name_placeholder)) },
             modifier = Modifier.fillMaxWidth(),
             singleLine = true
         )
@@ -174,14 +181,14 @@ internal fun BondEntryForm(
                 onValueChange = { nominal = it },
                 // Prefilled with 1000, the everyday nominal, and kept editable because a
                 // bond's face value determines the coupon and the price ceiling.
-                label = { RequiredLabel("Nominal") },
-                placeholder = { Text("1000") },
+                label = { RequiredLabel(stringResource(R.string.add_nominal)) },
+                placeholder = { Text(stringResource(R.string.add_nominal_placeholder)) },
                 modifier = Modifier.weight(1f),
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                 singleLine = true
             )
             SingleChoiceDropdown(
-                label = "Bond currency",
+                label = stringResource(R.string.add_bond_currency),
                 options = RECORDABLE_CURRENCIES.map { it to it },
                 selected = bondCurrency,
                 onSelect = {
@@ -199,8 +206,8 @@ internal fun BondEntryForm(
             OutlinedTextField(
                 value = coupon,
                 onValueChange = { coupon = it },
-                label = { Text("Coupon %") },
-                placeholder = { Text("9.5") },
+                label = { Text(stringResource(R.string.add_coupon_percent)) },
+                placeholder = { Text(stringResource(R.string.add_coupon_placeholder)) },
                 modifier = Modifier.weight(1f),
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                 singleLine = true
@@ -210,8 +217,8 @@ internal fun BondEntryForm(
                 onValueChange = { couponPeriod = it.filter(Char::isDigit) },
                 // Months rather than a frequency, because that is what a coupon calendar is
                 // written in and it is the only figure the period-income calculation needs.
-                label = { Text("Every (months)") },
-                placeholder = { Text("3") },
+                label = { Text(stringResource(R.string.add_coupon_period)) },
+                placeholder = { Text(stringResource(R.string.add_period_placeholder)) },
                 modifier = Modifier.weight(1f),
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                 singleLine = true
@@ -224,7 +231,7 @@ internal fun BondEntryForm(
             OutlinedTextField(
                 value = quantity,
                 onValueChange = { quantity = it.filter(Char::isDigit) },
-                label = { RequiredLabel("Quantity") },
+                label = { RequiredLabel(stringResource(R.string.add_quantity)) },
                 modifier = Modifier.weight(1f),
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                 singleLine = true
@@ -235,7 +242,7 @@ internal fun BondEntryForm(
                 // Money per bond in the bond's currency: what the broker's confirmation
                 // prints. Not a percentage — the whole point of the v7 change is that the
                 // number typed is the number spent, so 1020 means 1020.00, not 1020%.
-                label = { RequiredLabel("Price/bond") },
+                label = { RequiredLabel(stringResource(R.string.add_price_per_bond)) },
                 placeholder = { Text(MoneyFormat.format(995.0, bondCurrency)) },
                 modifier = Modifier.weight(1f),
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
@@ -257,7 +264,8 @@ internal fun BondEntryForm(
                 )
             nominalValue > 0.0 && priceValue > 0.0 ->
                 Text(
-                    text = "= %.2f%% of %s nominal".format(
+                    text = stringResource(
+                        R.string.add_percent_of_nominal,
                         BondMath.percentOfNominal(priceValue, nominalValue),
                         MoneyFormat.text(nominalValue, bondCurrency).plain
                     ),
@@ -265,11 +273,14 @@ internal fun BondEntryForm(
                 )
             nominalValue > 0.0 ->
                 Text(
-                    text = "% of %s nominal".format(MoneyFormat.text(nominalValue, bondCurrency).plain),
+                    text = stringResource(
+                        R.string.add_percent_of_named_nominal,
+                        MoneyFormat.text(nominalValue, bondCurrency).plain
+                    ),
                     style = MaterialTheme.typography.bodySmall
                 )
             else ->
-                Text(text = "% of nominal", style = MaterialTheme.typography.bodySmall)
+                Text(text = stringResource(R.string.add_percent_of_nominal_empty), style = MaterialTheme.typography.bodySmall)
         }
 
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -278,7 +289,7 @@ internal fun BondEntryForm(
                 onValueChange = { accrued = it },
                 // Per bond, not per trade: brokers quote it this way, and the field says so
                 // because the difference is a multiple of the lot size on the total.
-                label = { Text("Accrued / bond") },
+                label = { Text(stringResource(R.string.add_accrued_per_bond)) },
                 modifier = Modifier.weight(1f),
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                 singleLine = true
@@ -286,7 +297,7 @@ internal fun BondEntryForm(
             OutlinedTextField(
                 value = commission,
                 onValueChange = { commission = it },
-                label = { Text("Commission") },
+                label = { Text(stringResource(R.string.add_commission)) },
                 modifier = Modifier.weight(1f),
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                 singleLine = true
@@ -295,8 +306,9 @@ internal fun BondEntryForm(
 
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             SingleChoiceDropdown(
-                label = "No bank",
-                options = listOf(null to "No bank") + banks.map { it as BankRef? to it.label },
+                label = noBankLabel,
+                options = listOf(null to noBankLabel) +
+                    banks.map { ref -> ref as BankRef? to ref.label },
                 selected = bank,
                 onSelect = { bank = it },
                 modifier = Modifier.weight(1f)
@@ -305,7 +317,7 @@ internal fun BondEntryForm(
         }
 
         SingleChoiceDropdown(
-            label = "Settlement",
+            label = stringResource(R.string.add_settlement),
                 options = RECORDABLE_CURRENCIES.map { it to it },
             selected = currency,
             onSelect = { currency = it },
@@ -319,7 +331,7 @@ internal fun BondEntryForm(
             OutlinedTextField(
                 value = settlementAmount,
                 onValueChange = { settlementAmount = it },
-                label = { Text("Amount charged ($currency)") },
+                label = { Text(stringResource(R.string.add_amount_charged, currency)) },
                 modifier = Modifier.fillMaxWidth(),
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                 singleLine = true
@@ -340,7 +352,7 @@ internal fun BondEntryForm(
                         // after, at which point it is already in the balance. The bond is
                         // priced in its own currency, so the rate reads as bond currency per
                         // settlement currency.
-                        text = "at about %.2f %s per %s".format(it, bondCurrency, currency),
+                        text = stringResource(R.string.add_approx_rate, it, bondCurrency, currency),
                         style = MaterialTheme.typography.bodySmall
                     )
                 }
@@ -364,7 +376,11 @@ internal fun BondEntryForm(
                     price = priceValue,
                     accrued = accruedValue,
                     commission = commissionValue,
-                    settlementAmount = if (foreign) enteredAmount else null
+                    settlementAmount = if (foreign) enteredAmount else null,
+                    errorEnterName = errorEnterName,
+                    errorAccrued = errorAccrued,
+                    errorCommission = errorCommission,
+                    errorCharged = errorCharged
                 )
                 if (problem != null) {
                     error = problem
@@ -406,9 +422,9 @@ internal fun BondEntryForm(
         ) {
             Text(
                 when {
-                    saving -> "Saving…"
-                    side == BondTradeSide.BUY -> "Buy"
-                    else -> "Sell"
+                    saving -> stringResource(R.string.add_saving)
+                    side == BondTradeSide.BUY -> stringResource(R.string.add_buy)
+                    else -> stringResource(R.string.add_sell)
                 }
             )
         }
@@ -431,19 +447,23 @@ private fun validate(
     price: Double,
     accrued: Double,
     commission: Double,
-    settlementAmount: Double?
+    settlementAmount: Double?,
+    errorEnterName: String,
+    errorAccrued: String,
+    errorCommission: String,
+    errorCharged: String
 ): String? = when {
-    name.isBlank() -> "Enter a name"
+    name.isBlank() -> errorEnterName
     BondMath.validateNominal(nominal) != null -> BondMath.validateNominal(nominal)!!
     BondMath.validateCouponPercent(coupon) != null -> BondMath.validateCouponPercent(coupon)!!
     BondMath.validateQuantity(quantity) != null -> BondMath.validateQuantity(quantity)!!
     BondMath.validatePrice(price, nominal.takeIf { it > 0.0 }) != null ->
         BondMath.validatePrice(price, nominal.takeIf { it > 0.0 })!!
-    accrued < 0.0 -> "Accrued interest cannot be negative"
-    commission < 0.0 -> "Commission cannot be negative"
+    accrued < 0.0 -> errorAccrued
+    commission < 0.0 -> errorCommission
     // Optional, so an empty box is allowed and a typed zero is allowed; only a negative
     // amount is refused, which can only be a slip.
-    settlementAmount != null && settlementAmount < 0.0 -> "Amount charged cannot be negative"
+    settlementAmount != null && settlementAmount < 0.0 -> errorCharged
     else -> null
 }
 
@@ -460,18 +480,19 @@ private fun validate(
 private fun MaturityField(maturity: LocalDate?, onChange: (LocalDate?) -> Unit, modifier: Modifier = Modifier) {
     var showPicker by remember { mutableStateOf(false) }
     val pattern = remember { java.time.format.DateTimeFormatter.ofPattern("dd MMM yyyy", Locale.getDefault()) }
+    val maturityLabel = stringResource(R.string.add_maturity)
 
     Row(modifier = modifier, verticalAlignment = Alignment.CenterVertically) {
         OutlinedButton(onClick = { showPicker = true }, modifier = Modifier.weight(1f)) {
             Text(
-                text = maturity?.format(pattern) ?: "Maturity",
+                text = maturity?.format(pattern) ?: maturityLabel,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
         }
         if (maturity != null) {
             IconButton(onClick = { onChange(null) }) {
-                Icon(Icons.Default.Close, contentDescription = "Clear maturity")
+                Icon(Icons.Default.Close, contentDescription = stringResource(R.string.add_clear_maturity))
             }
         }
     }

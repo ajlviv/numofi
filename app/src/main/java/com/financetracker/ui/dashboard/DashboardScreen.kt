@@ -28,8 +28,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.financetracker.R
 import com.financetracker.model.BondPosition
 import com.financetracker.model.CurrencyTotals
 import com.financetracker.model.Transaction
@@ -83,7 +85,7 @@ fun DashboardScreen(
             }
         }
 
-        Text("Recent", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+        Text(stringResource(R.string.dash_recent), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
 
         if (transactions.isEmpty()) {
             EmptyState()
@@ -111,7 +113,7 @@ private fun BalanceCard(balance: Double, currencyCode: String?) {
                 // Not "Total Balance", which it is no longer the whole of. What this shows is
                 // cash; a bond holding is worth something and is reported separately, because
                 // the two cannot be added without inventing a rate.
-                text = "Cash",
+                text = stringResource(R.string.dash_cash),
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.8f)
             )
@@ -133,8 +135,8 @@ private fun BalanceCard(balance: Double, currencyCode: String?) {
 @Composable
 private fun SummaryRow(totalIncome: Double, totalExpense: Double, currencyCode: String?) {
     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-        SummaryCard(label = "Income", amount = totalIncome, color = TransactionAppearance.Income, currencyCode = currencyCode)
-        SummaryCard(label = "Expenses", amount = totalExpense, color = TransactionAppearance.Expense, currencyCode = currencyCode)
+        SummaryCard(label = stringResource(R.string.income), amount = totalIncome, color = TransactionAppearance.Income, currencyCode = currencyCode)
+        SummaryCard(label = stringResource(R.string.expenses), amount = totalExpense, color = TransactionAppearance.Expense, currencyCode = currencyCode)
     }
 }
 
@@ -158,7 +160,7 @@ private fun InvestmentCard(positions: List<BondPosition>, currencyCode: String) 
     Card(elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)) {
         Column(modifier = Modifier.padding(16.dp)) {
             Text(
-                text = if (positions.size > 1) "Bonds · $currencyCode" else "Bonds",
+                text = if (positions.size > 1) stringResource(R.string.dash_bonds_currency, currencyCode) else stringResource(R.string.dash_bonds),
                 style = MaterialTheme.typography.bodySmall,
                 color = Color.Gray
             )
@@ -170,20 +172,20 @@ private fun InvestmentCard(positions: List<BondPosition>, currencyCode: String) 
                 fontWeight = FontWeight.Bold
             )
             Text(
-                text = "%d held · cost %s".format(heldCount, MoneyFormat.format(cost, currencyCode)),
+                text = stringResource(R.string.dash_held_cost, heldCount, MoneyFormat.format(cost, currencyCode)),
                 style = MaterialTheme.typography.bodySmall,
                 color = Color.Gray
             )
             Spacer(modifier = Modifier.height(8.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
                 InvestmentFigure(
-                    label = "Unrealised",
+                    label = stringResource(R.string.dash_unrealised),
                     value = withSign(unrealised, currencyCode),
                     color = if (gain) TransactionAppearance.Income else TransactionAppearance.Expense
                 )
                 if (annualCoupon > 0.0) {
                     InvestmentFigure(
-                        label = "Coupon a year",
+                        label = stringResource(R.string.dash_coupon_a_year),
                         value = MoneyFormat.format(annualCoupon, currencyCode),
                         color = null
                     )
@@ -191,7 +193,7 @@ private fun InvestmentCard(positions: List<BondPosition>, currencyCode: String) 
             }
             Spacer(modifier = Modifier.height(8.dp))
             Text(
-                text = "At the last price you entered. Not a market valuation — this app has no price feed.",
+                text = stringResource(R.string.dash_honest_label),
                 style = MaterialTheme.typography.labelSmall,
                 color = Color.Gray
             )
@@ -239,6 +241,7 @@ private fun RowScope.SummaryCard(
 
 @Composable
 private fun TransactionRow(transaction: Transaction) {
+    val categoryRes = CategoryLabel.resource(transaction.category)
     Row(
         modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically
@@ -267,7 +270,7 @@ private fun TransactionRow(transaction: Transaction) {
                 fontWeight = FontWeight.Medium
             )
             Text(
-                text = CategoryLabel.label(transaction.category),
+                text = if (categoryRes != 0) stringResource(categoryRes) else CategoryLabel.label(transaction.category),
                 style = MaterialTheme.typography.bodySmall,
                 color = Color.Gray
             )
@@ -291,12 +294,12 @@ private fun EmptyState() {
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         Text(
-            text = "No transactions yet",
+            text = stringResource(R.string.no_transactions),
             style = MaterialTheme.typography.bodyLarge,
             color = Color.Gray
         )
         Text(
-            text = "Tap + to add your first",
+            text = stringResource(R.string.dash_tap_to_add),
             style = MaterialTheme.typography.bodySmall,
             color = Color.Gray
         )
