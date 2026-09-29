@@ -4,7 +4,6 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.financetracker.model.BondPosition
 import com.financetracker.model.Transaction
-import com.financetracker.model.TransactionEntity
 import com.financetracker.repository.AuthRepository
 import com.financetracker.repository.BankRepository
 import com.financetracker.repository.BondRepository
@@ -16,7 +15,6 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.filterNotNull
-import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
@@ -62,21 +60,6 @@ class MainViewModel @Inject constructor(
 
     private val _message = MutableStateFlow<String?>(null)
     val message: StateFlow<String?> = _message.asStateFlow()
-
-    /** Attaches the transaction to the active account; ignored when signed out. */
-    fun addTransaction(transaction: Transaction) {
-        viewModelScope.launch {
-            val uid = authRepository.currentUid.firstOrNull() ?: return@launch
-            runCatching {
-                transactionRepository.addTransaction(
-                    // Null because the manual entry form has no bank field. Passed
-                    // explicitly rather than defaulted so that adding a bank to the form
-                    // later forces a decision about what name its rows will be findable by.
-                    TransactionEntity.fromDomain(transaction, uid, bank = null)
-                )
-            }.onFailure { _message.value = it.message ?: "Could not save the transaction" }
-        }
-    }
 
     fun deleteTransaction(id: Long) {
         viewModelScope.launch {

@@ -15,11 +15,11 @@ import org.robolectric.annotation.Config
 /**
  * Checks that a clean install ends up with the built-in banks.
  *
- * [Migration45Test] covers the upgrade path, and it is easy to leave it as the only seeded
- * path by mistake: migrations do not run when Room creates the file, so a fresh install
- * would open with no banks at all — nothing to import a statement into and nothing to
- * filter transactions by, with no error to show for it. This drives the real builder
- * rather than calling the seed directly, so it fails if the callback is ever unwired.
+ * Creating the file is the only path this database has — there is no upgrade path — so the
+ * seed callback is the only thing that puts banks in the table. Without it a fresh install
+ * would open with no banks at all: nothing to import a statement into and nothing to filter
+ * transactions by, with no error to show for it. This drives the real builder rather than
+ * calling the seed directly, so it fails if the callback is ever unwired.
  */
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [33])
@@ -47,10 +47,9 @@ class FreshInstallSeedTest {
     }
 
     @Test
-    fun `a clean install seeds the same names the upgrade path does`() = runTest {
-        // The two paths build the same list from the same constant, but a clean install and
-        // an upgrade that disagreed would mean search behaves differently depending on how
-        // the app was installed.
+    fun `a clean install seeds the codes the detector and the sync service key off`() = runTest {
+        // BankDetector matches on UKRSIBBANK/PRIVATBANK and BankSyncService writes MONOBANK,
+        // so seeding different strings would silently disable both.
         val db = openSeeded()
         try {
             val codes = db.bankDao().getAllOnce().map(BankEntity::code)
