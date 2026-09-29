@@ -275,57 +275,40 @@ private fun DateFilterButton(
     onRangeChanged: (LocalDate?, LocalDate?) -> Unit,
     onDatesCleared: () -> Unit
 ) {
-    // The button opens a small menu, and the menu is what opens the calendar. These are two
-    // separate steps, so they need two separate flags: sharing one meant choosing the menu
-    // item that opens the calendar also dismissed the calendar it had just opened.
-    var menuExpanded by remember { mutableStateOf(false) }
+    // The button is the calendar's own trigger. There used to be a menu in between holding a
+    // single "Pick dates" item, which made every date the user picked cost two taps and a menu
+    // to read first.
     var pickerVisible by remember { mutableStateOf(false) }
     val from = filter.from
     val to = filter.to
 
-    Box {
-        OutlinedButton(onClick = { menuExpanded = true }) {
-            Text(
-                text = when {
-                    from == null && to == null -> "Date"
-                    from != null && to == null -> "From ${from.shortDate()}"
-                    to != null && from == null -> "Until ${to.shortDate()}"
-                    from == to -> from!!.shortDate()
-                    else -> "${from!!.shortDate()} – ${to!!.shortDate()}"
-                },
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-            Spacer(modifier = Modifier.width(4.dp))
-            Icon(Icons.Default.CalendarMonth, contentDescription = null)
-        }
-        DropdownMenu(
-            expanded = menuExpanded,
-            onDismissRequest = { menuExpanded = false }
-        ) {
-            DropdownMenuItem(
-                text = { Text("Pick dates") },
-                onClick = {
-                    menuExpanded = false
-                    pickerVisible = true
-                }
-            )
-            if (from != null || to != null) {
-                DropdownMenuItem(
-                    text = { Text("Clear dates") },
-                    onClick = {
-                        menuExpanded = false
-                        onDatesCleared()
-                    }
-                )
-            }
-        }
+    OutlinedButton(onClick = { pickerVisible = true }) {
+        Text(
+            text = when {
+                from == null && to == null -> "Date"
+                from != null && to == null -> "From ${from.shortDate()}"
+                to != null && from == null -> "Until ${to.shortDate()}"
+                from == to -> from!!.shortDate()
+                else -> "${from!!.shortDate()} – ${to!!.shortDate()}"
+            },
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
+        )
+        Spacer(modifier = Modifier.width(4.dp))
+        Icon(Icons.Default.CalendarMonth, contentDescription = null)
     }
+
     if (pickerVisible) {
         DateRangeDialog(
             from = from,
             to = to,
             onDismiss = { pickerVisible = false },
+            // Unsetting a filter is decisive and has nothing to review, so Clear applies and
+            // closes, rather than waiting for Apply the way a picked range does.
+            onClear = {
+                onDatesCleared()
+                pickerVisible = false
+            },
             onApply = { start, end ->
                 onRangeChanged(start, end)
                 pickerVisible = false
@@ -341,6 +324,9 @@ private fun DateFilterButton(
  * stays visible and reviewable in the calendar and one button commits it. A picker that
  * applied immediately would leave the user guessing what the tap behind the dialog had
  * actually selected.
+ *
+ * Clearing is the one exception: there is nothing to review in an empty range, and whoever
+ * asked for it has finished with the dialog, so Clear applies at once and closes it.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -348,6 +334,7 @@ private fun DateRangeDialog(
     from: LocalDate?,
     to: LocalDate?,
     onDismiss: () -> Unit,
+    onClear: () -> Unit,
     onApply: (LocalDate?, LocalDate?) -> Unit
 ) {
     // The picker exposes its selection read-only, so a preset is applied by rebuilding the
@@ -431,6 +418,13 @@ private fun DateRangeDialog(
                         .padding(horizontal = 16.dp),
                     horizontalArrangement = Arrangement.End
                 ) {
+                    // Offered only when there is a range to unset: with no dates applied there
+                    // is nothing here for it to clear, and an inert button beside Apply is just
+                    // a way to lose a tap.
+                    if (from != null || to != null) {
+                        TextButton(onClick = onClear) { Text("Clear") }
+                        Spacer(modifier = Modifier.weight(1f))
+                    }
                     TextButton(onClick = onDismiss) { Text("Cancel") }
                     TextButton(onClick = {
                         onApply(

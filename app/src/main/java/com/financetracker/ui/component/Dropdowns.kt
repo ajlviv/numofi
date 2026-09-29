@@ -9,11 +9,9 @@ import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -34,6 +32,11 @@ import androidx.compose.ui.unit.dp
  * next choice is usually in the same list, and each row carries a tick rather than a
  * checkbox so that the row is the only thing that toggles. A checkbox inside a menu item
  * would receive the click itself and either swallow it or toggle twice.
+ *
+ * Every pick applies the moment it is tapped, so there is no Done button to dismiss the menu
+ * with: it closes on a tap outside it or on back, like any other menu. Nothing here is waiting
+ * to be submitted, and a button whose only job was to close a list the user was still reading
+ * was one more thing between them and the next choice.
  */
 @Composable
 internal fun <T> MultiSelectDropdown(
@@ -73,11 +76,6 @@ internal fun <T> MultiSelectDropdown(
                     }
                 )
             }
-            HorizontalDivider()
-            TextButton(
-                onClick = { expanded = false },
-                modifier = Modifier.fillMaxWidth()
-            ) { Text("Done") }
         }
     }
 }
