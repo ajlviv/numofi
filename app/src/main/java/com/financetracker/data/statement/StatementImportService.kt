@@ -1,9 +1,12 @@
 package com.financetracker.data.statement
 
 import com.financetracker.data.TransactionDao
+import com.financetracker.model.BankNames
 import com.financetracker.model.SearchText
 import com.financetracker.model.TransactionEntity
 import com.financetracker.model.TransactionType
+import com.financetracker.repository.BankRepository
+import kotlinx.coroutines.flow.first
 import java.math.BigDecimal
 import java.math.RoundingMode
 import java.security.MessageDigest
@@ -25,7 +28,8 @@ import javax.inject.Singleton
  */
 @Singleton
 class StatementImportService @Inject constructor(
-    private val transactionDao: TransactionDao
+    private val transactionDao: TransactionDao,
+    private val bankRepository: BankRepository
 ) {
 
     data class Result(
@@ -38,6 +42,9 @@ class StatementImportService @Inject constructor(
     suspend fun import(userId: String, rows: List<StatementRow>): Result {
         val existing = transactionDao.getExternalIdsForUser(userId).toMutableSet()
         val content = ContentIndex.load(transactionDao, userId, rows)
+        // Read once for the whole file rather than per row: the haystack needs the bank's
+        // name so the rows stay findable by it, and that lookup is the same for every line.
+        val bankNames = bankRepository.names.first()
 
         var imported = 0
         var duplicates = 0
@@ -58,7 +65,7 @@ class StatementImportService @Inject constructor(
                 continue
             }
 
-            transactionDao.insert(row.toEntity(userId, fingerprint))
+            transactionDao.insert(row.toEntity(userId, fingerprint, bankNames))
             content.add(row.bankCode, row)
             imported++
         }
@@ -85,7 +92,11 @@ class StatementImportService @Inject constructor(
         return "${row.namespace}_$SOURCE_PREFIX${digest.joinToString("") { "%02x".format(it) }}"
     }
 
-    private fun StatementRow.toEntity(userId: String, externalId: String) = TransactionEntity(
+    private fun StatementRow.toEntity(
+        userId: String,
+        externalId: String,
+        bankNames: Map<String, String>
+    ) = TransactionEntity(
         userId = userId,
         title = description.ifBlank { "Imported transaction" },
         amount = absoluteAmount.toDouble(),
@@ -100,7 +111,13 @@ class StatementImportService @Inject constructor(
         currencyCode = currencyCode?.takeIf { it.isNotBlank() }?.uppercase() ?: DEFAULT_CURRENCY,
         bankCode = bankCode,
         cardLabel = cardLabel?.trim()?.takeIf { it.isNotEmpty() },
-        searchText = SearchText.of(description, null, CATEGORY_IMPORTED, bankCode, cardLabel)
+        searchText = SearchText.of(
+            description,
+            null,
+            CATEGORY_IMPORTED,
+            BankNames.ref(bankCode, bankNames),
+            cardLabel
+        )
     )
 
     /**

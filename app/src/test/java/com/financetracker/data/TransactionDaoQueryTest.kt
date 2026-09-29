@@ -3,6 +3,7 @@ package com.financetracker.data
 import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
 import com.financetracker.model.BankCode
+import com.financetracker.model.BankNames
 import com.financetracker.model.CardRef
 import com.financetracker.model.SearchText
 import com.financetracker.model.TransactionEntity
@@ -54,7 +55,13 @@ class TransactionDaoQueryTest {
         currencyCode = "UAH",
         bankCode = bank,
         cardLabel = card,
-        searchText = SearchText.of(title, note, "grocery", bank, card)
+        searchText = SearchText.of(
+            title,
+            note,
+            "grocery",
+            BankNames.ref(bank, AppDatabase.SEEDED_BANK_NAMES),
+            card
+        )
     )
 
     @Before

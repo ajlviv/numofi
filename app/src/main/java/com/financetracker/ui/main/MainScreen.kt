@@ -6,10 +6,13 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.AccountBalance
 import androidx.compose.material.icons.filled.Dashboard
 import androidx.compose.material.icons.filled.List
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
@@ -29,6 +32,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.financetracker.model.Transaction
+import com.financetracker.ui.bond.BondListScreen
 import com.financetracker.ui.dashboard.DashboardScreen
 import com.financetracker.ui.settings.SettingsScreen
 import com.financetracker.ui.transaction.AddTransactionScreen
@@ -42,6 +46,7 @@ enum class MainBottomNavDestination(
 ) {
     DASHBOARD("dashboard", "Dashboard", Icons.Default.Dashboard),
     TRANSACTIONS("transactions", "Transactions", Icons.Default.List),
+    BONDS("bonds", "Bonds", Icons.Default.AccountBalance),
     SETTINGS("settings", "Settings", Icons.Default.Settings)
 }
 
@@ -62,7 +67,9 @@ fun MainScreen(
     }
 
     val transactions by viewModel.transactions.collectAsStateWithLifecycle()
+    val positions by viewModel.positions.collectAsStateWithLifecycle()
     val message by viewModel.message.collectAsStateWithLifecycle()
+    val bankNames by viewModel.bankNames.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
 
     LaunchedEffect(message) {
@@ -74,10 +81,9 @@ fun MainScreen(
 
     if (showAddTransaction) {
         AddTransactionScreen(
-            onSave = { transaction ->
-                viewModel.addTransaction(transaction)
-                showAddTransaction = false
-            },
+            // The screen saves for itself: it owns its own ViewModel and writes the row
+            // against the signed-in uid, so there is no transaction to hand back here.
+            onSaved = { showAddTransaction = false },
             onCancel = { showAddTransaction = false },
             modifier = Modifier.fillMaxSize()
         )
@@ -87,6 +93,7 @@ fun MainScreen(
     selectedTransaction?.let { transaction ->
         TransactionDetailScreen(
             transaction = transaction,
+            bankNames = bankNames,
             onDelete = {
                 viewModel.deleteTransaction(transaction.id)
                 selectedTransaction = null
@@ -101,6 +108,16 @@ fun MainScreen(
 
     Scaffold(
         snackbarHost = { SnackbarHost(snackbarHostState) },
+        floatingActionButton = {
+            // Only where something can be added. The transactions list is a browsing screen,
+            // the settings screen is a list of controls, and the bonds screen has its own
+            // button in its app bar for the one thing that can be added there.
+            if (items[selectedTab] == MainBottomNavDestination.DASHBOARD) {
+                FloatingActionButton(onClick = { showAddTransaction = true }) {
+                    Icon(Icons.Default.Add, contentDescription = "Add transaction")
+                }
+            }
+        },
         bottomBar = {
             NavigationBar {
                 items.forEachIndexed { index, destination ->
@@ -117,16 +134,16 @@ fun MainScreen(
         Box(modifier = Modifier.padding(padding).fillMaxSize()) {
             when (items[selectedTab]) {
                 MainBottomNavDestination.DASHBOARD ->
-                    DashboardScreen(
-                        transactions = transactions,
-                        onAddTransaction = { showAddTransaction = true }
-                    )
+                    DashboardScreen(transactions = transactions, positions = positions)
 
                 MainBottomNavDestination.TRANSACTIONS ->
                     TransactionListScreen(
                         listState = listState,
                         onTransactionClick = { selectedTransaction = it }
                     )
+
+                MainBottomNavDestination.BONDS ->
+                    BondListScreen(positions = positions, onAddTrade = { showAddTransaction = true })
 
                 MainBottomNavDestination.SETTINGS ->
                     SettingsScreen(onBack = {}, showBackButton = false)

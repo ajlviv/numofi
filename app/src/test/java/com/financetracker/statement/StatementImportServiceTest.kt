@@ -4,9 +4,13 @@ import com.financetracker.data.TransactionDao
 import com.financetracker.data.statement.StatementImportService
 import com.financetracker.data.statement.StatementRow
 import com.financetracker.model.BankCode
+import com.financetracker.model.BankCodeGenerator
+import com.financetracker.model.BankEntity
 import com.financetracker.model.CardRef
 import com.financetracker.model.TransactionEntity
 import com.financetracker.model.TransactionType
+import com.financetracker.repository.BankRepository
+import com.financetracker.testing.FakeBankDao
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
@@ -15,6 +19,7 @@ import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.math.BigDecimal
+import java.util.Random
 
 class StatementImportServiceTest {
 
@@ -78,10 +83,17 @@ class StatementImportServiceTest {
         bankCode = bank
     )
 
+    /**
+     * The import path only reads the bank list, to resolve the chosen code into the name it
+     * bakes into the row's haystack. The built-ins cover every bank the detector returns.
+     */
+    private fun bankRepository() =
+        BankRepository(FakeBankDao(BankEntity.BUILT_IN), BankCodeGenerator(Random(1)))
+
     @Test
     fun `the chosen bank and card are stored on every row`() = runTest {
         val dao = FakeDao()
-        val result = StatementImportService(dao).import(
+        val result = StatementImportService(dao, bankRepository()).import(
             "uid-1",
             listOf(row("-100.00", BankCode.UKRSIBBANK))
         )
@@ -94,7 +106,8 @@ class StatementImportServiceTest {
     @Test
     fun `the stored row is searchable by its bank and card`() = runTest {
         val dao = FakeDao()
-        StatementImportService(dao).import("uid-1", listOf(row("-100.00", BankCode.UKRSIBBANK)))
+        StatementImportService(dao, bankRepository())
+            .import("uid-1", listOf(row("-100.00", BankCode.UKRSIBBANK)))
         val text = dao.stored.single().searchText!!
         assertTrue(text.contains("torus"))
         assertTrue(text.contains("ukrsibbank"))
@@ -104,7 +117,7 @@ class StatementImportServiceTest {
     @Test
     fun `the same payment at two banks is two rows, not one`() = runTest {
         val dao = FakeDao()
-        val service = StatementImportService(dao)
+        val service = StatementImportService(dao, bankRepository())
         service.import("uid-1", listOf(row("-100.00", BankCode.UKRSIBBANK)))
         service.import("uid-1", listOf(row("-100.00", BankCode.MONOBANK)))
 
@@ -115,7 +128,8 @@ class StatementImportServiceTest {
     @Test
     fun `an unattributable file is still imported, under its own namespace`() = runTest {
         val dao = FakeDao()
-        val result = StatementImportService(dao).import("uid-1", listOf(row("-100.00", null)))
+        val result = StatementImportService(dao, bankRepository())
+            .import("uid-1", listOf(row("-100.00", null)))
 
         assertEquals(1, result.imported)
         assertNull(dao.stored.single().bankCode)
@@ -125,14 +139,17 @@ class StatementImportServiceTest {
     @Test
     fun `a blank card cell is stored as no card rather than an empty label`() = runTest {
         val dao = FakeDao()
-        StatementImportService(dao).import("uid-1", listOf(row("-100.00", BankCode.UKRSIBBANK, card = "  ")))
+        StatementImportService(dao, bankRepository()).import(
+            "uid-1",
+            listOf(row("-100.00", BankCode.UKRSIBBANK, card = "  "))
+        )
         assertNull(dao.stored.single().cardLabel)
     }
 
     @Test
     fun `re-importing the same statement adds nothing and changes nothing`() = runTest {
         val dao = FakeDao()
-        val service = StatementImportService(dao)
+        val service = StatementImportService(dao, bankRepository())
         val rows = listOf(row("-100.00", BankCode.UKRSIBBANK))
         service.import("uid-1", rows)
         val before = dao.stored.toList()
@@ -147,7 +164,7 @@ class StatementImportServiceTest {
     @Test
     fun `an overlapping statement never modifies a row that is already stored`() = runTest {
         val dao = FakeDao()
-        val service = StatementImportService(dao)
+        val service = StatementImportService(dao, bankRepository())
         service.import(
             "uid-1",
             listOf(row("-100.00", BankCode.UKRSIBBANK), row("-50.00", BankCode.UKRSIBBANK, day = "02.09.2026"))
@@ -174,7 +191,7 @@ class StatementImportServiceTest {
     @Test
     fun `importing the same file twice is reported as duplicates, not new rows`() = runTest {
         val dao = FakeDao()
-        val service = StatementImportService(dao)
+        val service = StatementImportService(dao, bankRepository())
         val rows = listOf(row("-100.00", BankCode.UKRSIBBANK), row("-50.00", BankCode.UKRSIBBANK, day = "02.09.2026"))
 
         assertEquals(2, service.import("uid-1", rows).imported)
@@ -205,7 +222,8 @@ class StatementImportServiceTest {
             bankCode = BankCode.MONOBANK
         )
 
-        val result = StatementImportService(dao).import("uid-1", listOf(row("-100.00", BankCode.MONOBANK)))
+        val result = StatementImportService(dao, bankRepository())
+            .import("uid-1", listOf(row("-100.00", BankCode.MONOBANK)))
 
         assertEquals(0, result.imported)
         assertEquals(1, result.alreadySynced)
@@ -232,7 +250,8 @@ class StatementImportServiceTest {
 
         // Same amount, same day, same description, but a different institution: these are
         // two real payments and both have to be stored.
-        val result = StatementImportService(dao).import("uid-1", listOf(row("-100.00", BankCode.UKRSIBBANK)))
+        val result = StatementImportService(dao, bankRepository())
+            .import("uid-1", listOf(row("-100.00", BankCode.UKRSIBBANK)))
 
         assertEquals(1, result.imported)
         assertEquals(0, result.alreadySynced)
@@ -259,7 +278,8 @@ class StatementImportServiceTest {
 
         // The file's bank was never established, so the comparison stays permissive and
         // the row is treated as the same payment rather than double counted.
-        val result = StatementImportService(dao).import("uid-1", listOf(row("-100.00", null)))
+        val result = StatementImportService(dao, bankRepository())
+            .import("uid-1", listOf(row("-100.00", null)))
 
         assertEquals(0, result.imported)
         assertEquals(1, result.alreadySynced)

@@ -1,8 +1,10 @@
 package com.financetracker.ui.transaction
 
 import com.financetracker.model.BankCode
+import com.financetracker.model.BankRef
 import com.financetracker.model.Transaction
 import com.financetracker.model.TransactionType
+import com.financetracker.model.TransferDirection
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -31,13 +33,6 @@ class TransactionFilterTest {
     private val newYork = ZoneId.of("America/New_York")
 
     @Test
-    fun `an unknown bank code is dropped rather than conjured`() {
-        assertEquals(setOf(BankCode.UKRSIBBANK), TransactionFilter(bankCodes = setOf(" UK ")).normalizedBanks)
-        assertEquals(emptySet<String>(), TransactionFilter(bankCodes = setOf("paypal")).normalizedBanks)
-        assertEquals(emptySet<String>(), TransactionFilter().normalizedBanks)
-    }
-
-    @Test
     fun `toggling adds an unselected value and removes a selected one`() {
         val on = TransactionFilter().toggledBank(BankCode.PRIVATBANK)
         assertEquals(setOf(BankCode.PRIVATBANK), on.bankCodes)
@@ -51,15 +46,58 @@ class TransactionFilterTest {
     fun `toggling one filter leaves the others alone`() {
         val filter = TransactionFilter(
             bankCodes = setOf(BankCode.MONOBANK),
-            types = setOf(TransactionType.INCOME)
+            type = TransactionTypeFilter.INCOME
         )
         assertEquals(
             TransactionFilter(
                 bankCodes = setOf(BankCode.MONOBANK, BankCode.PRIVATBANK),
-                types = setOf(TransactionType.INCOME)
+                type = TransactionTypeFilter.INCOME
             ),
             filter.toggledBank(BankCode.PRIVATBANK)
         )
+    }
+
+    @Test
+    fun `the all chip asks for no type constraint at all`() {
+        // An empty list is what the DAO reads as "no constraint". Binding a list of all three
+        // types would instead be a second way of spelling the same query, and a fourth one the
+        // moment another type is added.
+        assertEquals(emptyList<TransactionType>(), TransactionFilter().types)
+    }
+
+    @Test
+    fun `each type chip binds exactly the one type it names`() {
+        assertEquals(
+            listOf(TransactionType.TRANSFER),
+            TransactionFilter(type = TransactionTypeFilter.TRANSFERS).types
+        )
+        assertEquals(
+            listOf(TransactionType.EXPENSE),
+            TransactionFilter(type = TransactionTypeFilter.EXPENSE).types
+        )
+    }
+
+    @Test
+    fun `a type other than all makes the filter active`() {
+        assertTrue(TransactionFilter(type = TransactionTypeFilter.TRANSFERS).isActive)
+    }
+
+    @Test
+    fun `a bond trade is a transfer and is not an expense`() {
+        // The whole reason TRANSFER is a type of its own. Filing a purchase under EXPENSE
+        // would make buying a bond look identical to spending the money, and the balance
+        // would have to treat the two the same way to be correct.
+        val trade = Transaction(
+            title = "Купівля ОвДП 24/Б",
+            amount = 995.0,
+            type = TransactionType.TRANSFER,
+            category = "investments",
+            timestamp = 0,
+            transferDirection = TransferDirection.OUT
+        )
+        assertFalse(trade.isExpense())
+        assertFalse(trade.isIncome())
+        assertTrue(trade.isCashOutflow())
     }
 
     @Test
@@ -162,16 +200,31 @@ class TransactionFilterTest {
     }
 
     @Test
+    fun `a user added bank code is kept verbatim`() {
+        // Bank codes used to be checked against a fixed list and an unrecognised one dropped.
+        // The list is the user's now, so a code the filter has never seen is kept and
+        // resolved against the bank table when the option is built.
+        val on = TransactionFilter().toggledBank("bank-0a1b2c")
+        assertEquals(setOf("bank-0a1b2c"), on.bankCodes)
+    }
+
+    @Test
     fun `the provenance line omits what is unknown`() {
-        val bank = Transaction(bankCode = BankCode.MONOBANK)
-        assertEquals("Monobank", bank.provenance())
-        assertEquals("Monobank • 4111****2222", bank.copy(cardLabel = "4111****2222").provenance())
+        val bank = BankRef(BankCode.MONOBANK, "Monobank")
+        val withCard = Transaction(cardLabel = "4111****2222")
+        val mono = Transaction(bankCode = BankCode.MONOBANK)
+
+        assertEquals("Monobank • 4111****2222", withCard.provenance(bank))
+        assertEquals("Monobank", mono.provenance(bank))
         // A hand-entered row has neither, so it gets no line at all.
-        assertNull(Transaction().provenance())
+        assertNull(Transaction().provenance(null))
     }
 
     @Test
     fun `an unknown stored code is still shown rather than blanked`() {
-        assertEquals("paypal", Transaction(bankCode = "paypal").provenance())
+        // The name is unresolvable, but the row definitely came from somewhere, and showing
+        // the raw code keeps it distinguishable from a hand-entered row.
+        val bank = BankRef("paypal", "paypal")
+        assertEquals("paypal", Transaction(bankCode = "paypal").provenance(bank))
     }
 }

@@ -1,6 +1,5 @@
 package com.financetracker.ui.transaction
 
-import com.financetracker.model.BankCode
 import com.financetracker.model.Transaction
 import com.financetracker.util.CategoryLabel
 import java.time.Instant
@@ -49,6 +48,7 @@ object TransactionDetails {
 
     fun sections(
         transaction: Transaction,
+        bankName: String,
         zone: ZoneId = ZoneId.systemDefault(),
         dateFormat: DateTimeFormatter = DATE
     ): List<DetailSection> {
@@ -76,9 +76,10 @@ object TransactionDetails {
             DetailSection(
                 title = "Provenance",
                 fields = listOf(
-                    // label() answers "Manual" for a hand-entered row, which is a real answer
-                    // rather than a missing one, so it is not passed through MISSING.
-                    DetailField("Bank", BankCode.label(transaction.bankCode)),
+                    // Resolved by the caller, which is the only layer that knows the bank
+                    // list. "Manual" for a hand-entered row is a real answer rather than a
+                    // missing one, so it is not passed through MISSING.
+                    DetailField("Bank", bankName),
                     DetailField("Card", transaction.cardLabel ?: MISSING, raw = true),
                     DetailField("Source", transaction.source ?: MISSING, raw = true),
                     DetailField("External ID", transaction.externalId ?: MISSING, raw = true)

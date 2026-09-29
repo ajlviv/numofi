@@ -32,7 +32,8 @@ sealed class Screen(val route: String) {
 fun AppNavigation(
     navController: NavHostController,
     isAuthenticated: Boolean,
-    transactions: List<Transaction>
+    transactions: List<Transaction>,
+    bankNames: Map<String, String> = emptyMap()
 ) {
     NavHost(
         navController = navController,
@@ -45,10 +46,7 @@ fun AppNavigation(
         composable(Screen.Main.route) { MainScreen() }
 
         composable(Screen.Dashboard.route) {
-            DashboardScreen(
-                transactions = transactions,
-                onAddTransaction = { navController.navigate(Screen.AddTransaction.route) }
-            )
+            DashboardScreen(transactions = transactions)
         }
 
         composable(Screen.Transactions.route) {
@@ -59,7 +57,7 @@ fun AppNavigation(
 
         composable(Screen.AddTransaction.route) {
             AddTransactionScreen(
-                onSave = { navController.popBackStack() },
+                onSaved = { navController.popBackStack() },
                 onCancel = { navController.popBackStack() }
             )
         }
@@ -75,6 +73,7 @@ fun AppNavigation(
             if (transaction != null) {
                 TransactionDetailScreen(
                     transaction = transaction,
+                    bankNames = bankNames,
                     onBack = { navController.popBackStack() },
                     onDelete = { navController.popBackStack() }
                 )

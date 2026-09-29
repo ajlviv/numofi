@@ -38,3 +38,4 @@ lint/tmp/
 *.tflite
 .kotlin/
 docs/
+AGENTS.md

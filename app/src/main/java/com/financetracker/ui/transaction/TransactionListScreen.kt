@@ -27,10 +27,12 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.financetracker.model.BankCode
+import com.financetracker.model.BankRef
 import com.financetracker.model.Transaction
 import com.financetracker.model.TransactionType
 import com.financetracker.ui.MoneyAmount
+import com.financetracker.ui.TransactionAppearance
+import com.financetracker.ui.component.MultiSelectDropdown
 import com.financetracker.util.CategoryLabel
 import java.time.Instant
 import java.time.LocalDate
@@ -38,8 +40,31 @@ import java.time.ZoneId
 import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
 
-private val TransactionType.label: String
-    get() = if (this == TransactionType.INCOME) "Income" else "Expense"
+@Composable
+private fun TransactionTypeChips(
+    selected: TransactionTypeFilter,
+    onSelect: (TransactionTypeFilter) -> Unit
+) {
+    // Always visible and always one of them selected, rather than hidden when no type is
+    // chosen. A filter the user has to go looking for is one they will not use to answer the
+    // question they opened the list to ask, which on a list this size is usually "what did I
+    // spend" or "what moved".
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .horizontalScroll(rememberScrollState())
+            .padding(horizontal = 16.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        TransactionTypeFilter.entries.forEach { entry ->
+            FilterChip(
+                selected = entry == selected,
+                onClick = { onSelect(entry) },
+                label = { Text(entry.label) }
+            )
+        }
+    }
+}
 
 @Composable
 fun TransactionListScreen(
@@ -52,6 +77,7 @@ fun TransactionListScreen(
     val filter by viewModel.filter.collectAsStateWithLifecycle()
     val search by viewModel.search.collectAsStateWithLifecycle()
     val cardLabels by viewModel.cardLabels.collectAsStateWithLifecycle()
+    val banks by viewModel.banks.collectAsStateWithLifecycle()
     val summary by viewModel.summary.collectAsStateWithLifecycle()
     val dateFormat = DateTimeFormatter.ofPattern("MMM dd, yyyy")
     var summaryVisible by rememberSaveable { mutableStateOf(false) }
@@ -106,15 +132,12 @@ fun TransactionListScreen(
             )
             MultiSelectDropdown(
                 label = "Banks",
-                options = BankCode.CHOICES.map { it to BankCode.label(it) },
+                // From the bank list, not a hardcoded set: an archived bank stays here
+                // while transactions still reference it, and label() marks it as archived
+                // so it is clear why a retired bank is still being offered.
+                options = banks.map { it.code to it.label() },
                 isSelected = { it in filter.bankCodes },
                 onToggle = viewModel::onBankToggled
-            )
-            MultiSelectDropdown(
-                label = "Type",
-                options = TransactionType.entries.map { it to it.label },
-                isSelected = { it in filter.types },
-                onToggle = viewModel::onTypeToggled
             )
             // Offered whenever there is anything to offer: the card filter works on its own,
             // and the list is already narrowed to the selected banks when any are picked.
@@ -130,6 +153,8 @@ fun TransactionListScreen(
                 TextButton(onClick = viewModel::clear) { Text("Clear") }
             }
         }
+
+        TransactionTypeChips(selected = filter.type, onSelect = viewModel::onTypeSelected)
 
         LazyColumn(
             state = listState,
@@ -151,6 +176,7 @@ fun TransactionListScreen(
                 TransactionListItem(
                     transaction = transaction,
                     dateFormat = dateFormat,
+                    bank = viewModel.bankOf(transaction.bankCode),
                     onClick = { onTransactionClick(transaction) }
                 )
             }
@@ -240,61 +266,6 @@ private fun FilterRow(content: @Composable RowScope.() -> Unit) {
         verticalAlignment = Alignment.CenterVertically,
         content = content
     )
-}
-
-/**
- * A dropdown of checkable options, of which any number may be picked.
- *
- * The menu stays open while picking, because the whole point of a multi-select is that the
- * next choice is usually in the same list, and each row carries a tick rather than a
- * checkbox so that the row is the only thing that toggles. A checkbox inside a menu item
- * would receive the click itself and either swallow it or toggle twice.
- */
-@Composable
-private fun <T> MultiSelectDropdown(
-    label: String,
-    options: List<Pair<T, String>>,
-    isSelected: (T) -> Boolean,
-    onToggle: (T) -> Unit
-) {
-    var expanded by remember { mutableStateOf(false) }
-    val selected = options.filter { isSelected(it.first) }
-
-    Box {
-        OutlinedButton(onClick = { expanded = true }) {
-            Text(
-                // One pick reads better than a count of one; the count only earns its place
-                // once there is more than one thing to count.
-                text = when (selected.size) {
-                    0 -> label
-                    1 -> selected.first().second
-                    else -> "$label · ${selected.size}"
-                },
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-            Spacer(modifier = Modifier.width(4.dp))
-            Icon(Icons.Default.ArrowDropDown, contentDescription = null)
-        }
-        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
-            options.forEach { (value, text) ->
-                DropdownMenuItem(
-                    text = { Text(text) },
-                    onClick = { onToggle(value) },
-                    trailingIcon = if (isSelected(value)) {
-                        { Icon(Icons.Default.Check, contentDescription = null) }
-                    } else {
-                        null
-                    }
-                )
-            }
-            HorizontalDivider()
-            TextButton(
-                onClick = { expanded = false },
-                modifier = Modifier.fillMaxWidth()
-            ) { Text("Done") }
-        }
-    }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -516,6 +487,7 @@ private fun EmptyState(hasFilters: Boolean) {
 private fun TransactionListItem(
     transaction: Transaction,
     dateFormat: DateTimeFormatter,
+    bank: BankRef?,
     onClick: () -> Unit
 ) {
     Card(
@@ -534,15 +506,13 @@ private fun TransactionListItem(
                 modifier = Modifier
                     .size(48.dp)
                     .clip(MaterialTheme.shapes.small)
-                    .background(
-                        if (transaction.isIncome()) Color(0xFFE8F5E9) else Color(0xFFFCE4EC)
-                    ),
+                    .background(TransactionAppearance.tint(transaction)),
                 contentAlignment = Alignment.Center
             ) {
                 Icon(
-                    imageVector = if (transaction.isIncome()) Icons.Default.ArrowUpward else Icons.Default.ArrowDownward,
+                    imageVector = TransactionAppearance.icon(transaction),
                     contentDescription = null,
-                    tint = if (transaction.isIncome()) Color(0xFF2E7D32) else Color(0xFFC62828),
+                    tint = TransactionAppearance.accent(transaction),
                     modifier = Modifier.size(24.dp)
                 )
             }
@@ -567,7 +537,7 @@ private fun TransactionListItem(
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
-                transaction.provenance()?.let { provenance ->
+                transaction.provenance(bank)?.let { provenance ->
                     Text(
                         text = provenance,
                         style = MaterialTheme.typography.bodySmall,
@@ -587,8 +557,8 @@ private fun TransactionListItem(
                     currencyCode = transaction.currencyCode,
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold,
-                    color = if (transaction.isIncome()) Color(0xFF2E7D32) else Color(0xFFC62828),
-                    prefix = if (transaction.isIncome()) "+" else "-"
+                    color = TransactionAppearance.accent(transaction),
+                    prefix = TransactionAppearance.signPrefix(transaction)
                 )
                 // minLines keeps the slot reserved when there is no note, so every row
                 // in the list has the same height.

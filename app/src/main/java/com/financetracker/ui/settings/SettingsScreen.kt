@@ -14,7 +14,13 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Archive
 import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.ArrowDownward
+import androidx.compose.material.icons.filled.ArrowUpward
+import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Unarchive
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -52,7 +58,8 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import com.financetracker.data.bank.BankProvider
 import com.financetracker.data.bank.BankSyncService
 import com.financetracker.data.settings.SettingsRepository
-import com.financetracker.model.BankCode
+import com.financetracker.model.Bank
+import com.financetracker.ui.component.SingleChoiceDropdown
 import com.financetracker.ui.statement.StatementImportUiState
 import com.financetracker.ui.statement.StatementImportViewModel
 import com.financetracker.ui.statement.formatPreviewDate
@@ -76,6 +83,9 @@ fun SettingsScreen(
     val syncDays by viewModel.syncDays.collectAsStateWithLifecycle()
     val syncProgress by viewModel.syncProgress.collectAsStateWithLifecycle()
     val lastSyncedAt by viewModel.lastSyncedAt.collectAsStateWithLifecycle()
+    val banks by viewModel.banks.collectAsStateWithLifecycle()
+    val bankNameInput by viewModel.bankNameInput.collectAsStateWithLifecycle()
+    val bankMessage by viewModel.bankMessage.collectAsStateWithLifecycle()
 
     Scaffold(
         topBar = {
@@ -239,6 +249,31 @@ fun SettingsScreen(
             HorizontalDivider(Modifier.padding(vertical = 8.dp))
 
             Text(
+                text = "Transaction banks",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold
+            )
+            Text(
+                text = "The names statements can be filed under. Adding one here does not " +
+                    "connect to it; it only labels transactions you import yourself.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            TransactionBanksSection(
+                banks = banks,
+                nameInput = bankNameInput,
+                message = bankMessage,
+                onNameChange = viewModel::onBankNameChange,
+                onAdd = viewModel::addBank,
+                onRename = viewModel::renameBank,
+                onMoveUp = viewModel::moveBankUp,
+                onMoveDown = viewModel::moveBankDown,
+                onArchiveChange = viewModel::setBankArchived
+            )
+
+            HorizontalDivider(Modifier.padding(vertical = 8.dp))
+
+            Text(
                 text = "Language",
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.Bold
@@ -299,6 +334,140 @@ private fun BankPicker(
             }
         }
     }
+}
+
+/**
+ * The list of names a transaction can be filed under.
+ *
+ * Archived banks stay in the list rather than disappearing, because archiving stops a bank
+ * being offered for new imports without undoing the transactions already labelled with it,
+ * and a bank the user cannot see is a bank they cannot restore.
+ */
+@Composable
+private fun TransactionBanksSection(
+    banks: List<Bank>,
+    nameInput: String,
+    message: String?,
+    onNameChange: (String) -> Unit,
+    onAdd: () -> Unit,
+    onRename: (String, String) -> Unit,
+    onMoveUp: (String) -> Unit,
+    onMoveDown: (String) -> Unit,
+    onArchiveChange: (String, Boolean) -> Unit
+) {
+    var renaming by remember { mutableStateOf<Bank?>(null) }
+
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        OutlinedTextField(
+            value = nameInput,
+            onValueChange = onNameChange,
+            label = { Text("Add a bank") },
+            modifier = Modifier.weight(1f),
+            singleLine = true
+        )
+        Button(onClick = onAdd, enabled = nameInput.isNotBlank()) { Text("Add") }
+    }
+
+    message?.let {
+        Text(
+            text = it,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.primary
+        )
+    }
+
+    banks.forEachIndexed { index, bank ->
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(text = bank.displayName, style = MaterialTheme.typography.bodyMedium)
+                if (bank.archived) {
+                    Text(
+                        text = "Archived",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+            // Disabled rather than hidden at the ends, so the row does not change width as the
+            // user works down the list.
+            IconButton(
+                onClick = { onMoveUp(bank.code) },
+                enabled = index > 0
+            ) {
+                Icon(Icons.Default.ArrowUpward, contentDescription = "Move ${bank.displayName} up")
+            }
+            IconButton(
+                onClick = { onMoveDown(bank.code) },
+                enabled = index < banks.lastIndex
+            ) {
+                Icon(Icons.Default.ArrowDownward, contentDescription = "Move ${bank.displayName} down")
+            }
+            IconButton(onClick = { renaming = bank }) {
+                Icon(Icons.Default.Edit, contentDescription = "Rename ${bank.displayName}")
+            }
+            IconButton(onClick = { onArchiveChange(bank.code, !bank.archived) }) {
+                Icon(
+                    imageVector = if (bank.archived) {
+                        Icons.Default.Unarchive
+                    } else {
+                        Icons.Default.Archive
+                    },
+                    contentDescription = if (bank.archived) {
+                        "Restore ${bank.displayName}"
+                    } else {
+                        "Archive ${bank.displayName}"
+                    }
+                )
+            }
+        }
+    }
+
+    renaming?.let { bank ->
+        RenameBankDialog(
+            bank = bank,
+            onDismiss = { renaming = null },
+            onConfirm = { name ->
+                onRename(bank.code, name)
+                renaming = null
+            }
+        )
+    }
+}
+
+@Composable
+private fun RenameBankDialog(
+    bank: Bank,
+    onDismiss: () -> Unit,
+    onConfirm: (String) -> Unit
+) {
+    // Seeded from the bank rather than held, so reopening the dialog for another bank
+    // starts from that bank instead of the last one typed.
+    var name by remember(bank.code) { mutableStateOf(bank.displayName) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Rename bank") },
+        text = {
+            OutlinedTextField(
+                value = name,
+                onValueChange = { name = it },
+                label = { Text("Name") },
+                singleLine = true
+            )
+        },
+        confirmButton = {
+            Button(onClick = { onConfirm(name) }, enabled = name.isNotBlank()) { Text("Save") }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
+    )
 }
 
 /**
@@ -363,6 +532,7 @@ private fun progressText(progress: BankSyncService.SyncProgress): String {
 private fun StatementImportSection() {
     val viewModel: StatementImportViewModel = hiltViewModel()
     val state by viewModel.state.collectAsStateWithLifecycle()
+    val banks by viewModel.banks.collectAsStateWithLifecycle()
 
     val picker = rememberLauncherForActivityResult(
         ActivityResultContracts.OpenDocument()
@@ -400,7 +570,7 @@ private fun StatementImportSection() {
                 Text("Reading file…", style = MaterialTheme.typography.bodyMedium)
             }
 
-        is StatementImportUiState.Preview -> ImportPreviewCard(current, viewModel)
+        is StatementImportUiState.Preview -> ImportPreviewCard(current, banks, viewModel)
 
         is StatementImportUiState.Done -> Column {
             Text(
@@ -439,6 +609,7 @@ private fun StatementImportSection() {
 @Composable
 private fun ImportPreviewCard(
     state: StatementImportUiState.Preview,
+    banks: List<Bank>,
     viewModel: StatementImportViewModel
 ) {
     Card(
@@ -472,15 +643,15 @@ private fun ImportPreviewCard(
             Spacer(Modifier.height(12.dp))
             Text("Bank", style = MaterialTheme.typography.labelLarge)
             Spacer(Modifier.height(4.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                BankCode.CHOICES.forEach { code ->
-                    FilterChip(
-                        selected = state.bankCode == code,
-                        onClick = { viewModel.onBankSelected(code) },
-                        label = { Text(BankCode.label(code)) }
-                    )
-                }
-            }
+            SingleChoiceDropdown(
+                label = "Choose a bank",
+                // "None" is a real option rather than an absence, because the file may be
+                // from somewhere the app has never heard of and the user still has to be
+                // able to say so instead of picking a wrong bank by accident.
+                options = listOf(null to "None") + banks.map { it.code to it.displayName },
+                selected = state.bankCode,
+                onSelect = { viewModel.onBankSelected(it) }
+            )
             if (state.bankUnresolved) {
                 Text(
                     text = "This file was not recognised. Choose the bank, or the rows " +

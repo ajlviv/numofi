@@ -2,6 +2,7 @@ package com.financetracker.data
 
 import androidx.room.TypeConverter
 import com.financetracker.model.TransactionType
+import com.financetracker.model.TransferDirection
 import java.time.Instant
 
 class Converters {
@@ -11,6 +12,12 @@ class Converters {
 
     @TypeConverter
     fun toTransactionType(value: String): TransactionType = TransactionType.valueOf(value)
+
+    @TypeConverter
+    fun fromTransferDirection(direction: TransferDirection?): String? = direction?.name
+
+    @TypeConverter
+    fun toTransferDirection(value: String?): TransferDirection? = value?.let(TransferDirection::valueOf)
 
     @TypeConverter
     fun fromInstant(instant: Instant?): Long? = instant?.toEpochMilli()

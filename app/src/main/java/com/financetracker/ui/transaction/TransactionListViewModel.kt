@@ -3,12 +3,15 @@ package com.financetracker.ui.transaction
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.financetracker.data.TransactionDao
-import com.financetracker.model.BankCode
+import com.financetracker.model.Bank
+import com.financetracker.model.BankNames
+import com.financetracker.model.BankRef
 import com.financetracker.model.CardRef
 import com.financetracker.model.Transaction
 import com.financetracker.model.TransactionEntity
 import com.financetracker.model.TransactionType
 import com.financetracker.repository.AuthRepository
+import com.financetracker.repository.BankRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.FlowPreview
@@ -29,6 +32,23 @@ import java.time.ZoneId
 import javax.inject.Inject
 
 /**
+ * The four choices the type chips offer.
+ *
+ * Single choice rather than the multi-select the bank and card filters use, and that is
+ * deliberate. A bank or card is a property a transaction can have or not have, and a user
+ * comparing two of them wants both. A type is a partition of the ledger: a row is money in,
+ * money out, or money moved between accounts, and a list of money-in and money-moved rows is
+ * not a category of anything. [ALL] is therefore an explicit choice rather than the absence
+ * of one, so the chip row always has something selected and the two states cannot look alike.
+ */
+enum class TransactionTypeFilter(val label: String, val type: TransactionType?) {
+    ALL("All", null),
+    INCOME("Income", TransactionType.INCOME),
+    EXPENSE("Expense", TransactionType.EXPENSE),
+    TRANSFERS("Transfers", TransactionType.TRANSFER)
+}
+
+/**
  * The filter state behind the transaction screen.
  *
  * Every filter is a set, and an empty set means "no constraint", which is what lets the DAO
@@ -43,22 +63,29 @@ import javax.inject.Inject
 data class TransactionFilter(
     val bankCodes: Set<String> = emptySet(),
     val cardLabels: Set<String> = emptySet(),
-    val types: Set<TransactionType> = emptySet(),
+    val type: TransactionTypeFilter = TransactionTypeFilter.ALL,
     val from: LocalDate? = null,
     val to: LocalDate? = null
 ) {
-    /** Unknown codes are dropped, so a stale value cannot conjure a bank of its own. */
-    val normalizedBanks: Set<String> get() = bankCodes.mapNotNull(BankCode::normalize).toSet()
-
     val isActive: Boolean
         get() = bankCodes.isNotEmpty() || cardLabels.isNotEmpty() ||
-            types.isNotEmpty() || from != null || to != null
+            type != TransactionTypeFilter.ALL || from != null || to != null
 
     fun toggledBank(code: String) = copy(bankCodes = bankCodes.toggle(code))
 
     fun toggledCard(label: String) = copy(cardLabels = cardLabels.toggle(label))
 
-    fun toggledType(type: TransactionType) = copy(types = types.toggle(type))
+    fun withType(type: TransactionTypeFilter) = copy(type = type)
+
+    /**
+     * What the query binds for the type chips.
+     *
+     * An empty list for [TransactionTypeFilter.ALL], which the DAO reads as no constraint.
+     * Every other choice binds one type, so a bond purchase is listed under Transfers and
+     * never under Expenses, however the user reads the word "out".
+     */
+    val types: List<TransactionType>
+        get() = listOfNotNull(type.type)
 
     /**
      * Drops the cards the current bank selection cannot have.
@@ -82,9 +109,14 @@ data class TransactionFilter(
 
 private fun <T> Set<T>.toggle(value: T): Set<T> = if (value in this) this - value else this + value
 
-/** The cards a bank selection can offer, taken from the cards the user has actually used. */
+/**
+ * The cards a bank selection can offer, taken from the cards the user has actually used.
+ *
+ * Codes are compared as stored. Nothing normalises them any more: the chips can only offer
+ * a code that is in the bank list, so a value the user never chose cannot reach the query.
+ */
 private fun List<CardRef>.offeredCards(banks: Set<String>): List<String> =
-    filter { banks.isEmpty() || BankCode.normalize(it.bankCode) in banks }
+    filter { banks.isEmpty() || it.bankCode in banks }
         .map(CardRef::cardLabel)
         .distinct()
         .sorted()
@@ -122,7 +154,7 @@ private data class FilterQuery(
 ) {
     companion object {
         fun of(filter: TransactionFilter, zone: ZoneId) = FilterQuery(
-            filter.normalizedBanks.sorted(),
+            filter.bankCodes.sorted(),
             filter.cardLabels.sorted(),
             filter.types.sortedBy { it.name },
             filter.startMillis(zone),
@@ -131,27 +163,48 @@ private data class FilterQuery(
     }
 }
 
-/**
- * The bank and card line under a transaction, or null when there is nothing to say.
- *
- * A hand-entered row has neither a bank nor a card, and a bank with an unknown card should
- * not invite the reader to invent one, so both are left out rather than padded.
- */
-fun Transaction.provenance(): String? {
-    val bank = bankCode?.let(BankCode::label)
-    return when {
-        bank != null && cardLabel != null -> "$bank • $cardLabel"
-        bank != null -> bank
-        else -> null
+    /**
+     * The bank and card line under a transaction, or null when there is nothing to say.
+     *
+     * A hand-entered row has neither a bank nor a card, and a bank with an unknown card should
+     * not invite the reader to invent one, so both are left out rather than padded.
+     *
+     * [bank] is resolved by the caller, the only layer that knows the bank list. A null one
+     * means the row has no bank at all, which is a different thing from a bank whose name
+     * resolves to something unreadable, and only the former is left off the line.
+     */
+    fun Transaction.provenance(bank: BankRef?): String? {
+        val name = bank?.label
+        return when {
+            name != null && cardLabel != null -> "$name • $cardLabel"
+            name != null -> name
+            else -> null
+        }
     }
-}
 
 @OptIn(ExperimentalCoroutinesApi::class, FlowPreview::class)
 @HiltViewModel
 class TransactionListViewModel @Inject constructor(
     private val authRepository: AuthRepository,
-    private val transactionDao: TransactionDao
+    private val transactionDao: TransactionDao,
+    bankRepository: BankRepository
 ) : ViewModel() {
+
+    /**
+     * Code to display name, for turning a row's stored code into something worth reading.
+     *
+     * Held here rather than resolved per row: the map is tiny, it changes only when a bank
+     * is renamed, and resolving inside a list item would mean a database read per row.
+     */
+    val bankNames: StateFlow<Map<String, String>> = bankRepository.names
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyMap())
+
+    /** The banks the filter offers: everything live, plus archived ones still in use. */
+    val banks: StateFlow<List<Bank>> = bankRepository.filterBanks
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+    /** The resolved bank for a row, or null when the row has no bank. */
+    fun bankOf(code: String?): BankRef? = BankNames.ref(code, bankNames.value)
 
     /**
      * The zone every day boundary is resolved in. A transaction is stored as an instant, so
@@ -227,7 +280,7 @@ class TransactionListViewModel @Inject constructor(
      * listing every card the user has ever had.
      */
     val cardLabels: StateFlow<List<String>> = combine(
-        _filter.map { it.normalizedBanks }.distinctUntilChanged(),
+        _filter.map { it.bankCodes }.distinctUntilChanged(),
         _cardRefs
     ) { banks, refs -> refs.offeredCards(banks) }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
@@ -239,7 +292,7 @@ class TransactionListViewModel @Inject constructor(
     fun onBankToggled(code: String) {
         val next = _filter.value.toggledBank(code)
         // Pruned in the same update as the bank itself, so the two can never disagree.
-        val offered = _cardRefs.value.offeredCards(next.normalizedBanks).toSet()
+        val offered = _cardRefs.value.offeredCards(next.bankCodes).toSet()
         _filter.value = next.prunedTo(offered)
     }
 
@@ -247,8 +300,8 @@ class TransactionListViewModel @Inject constructor(
         _filter.value = _filter.value.toggledCard(label)
     }
 
-    fun onTypeToggled(type: TransactionType) {
-        _filter.value = _filter.value.toggledType(type)
+    fun onTypeSelected(type: TransactionTypeFilter) {
+        _filter.value = _filter.value.withType(type)
     }
 
     fun onDateRangeChanged(from: LocalDate?, to: LocalDate?) {

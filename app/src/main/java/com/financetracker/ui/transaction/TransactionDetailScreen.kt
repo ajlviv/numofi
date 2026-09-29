@@ -13,13 +13,16 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.financetracker.model.BankNames
 import com.financetracker.model.Transaction
 import com.financetracker.ui.MoneyAmount
+import com.financetracker.ui.TransactionAppearance
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun TransactionDetailScreen(
     transaction: Transaction,
+    bankNames: Map<String, String>,
     onBack: () -> Unit,
     onDelete: () -> Unit,
     modifier: Modifier = Modifier
@@ -60,11 +63,11 @@ fun TransactionDetailScreen(
                     Text(
                         text = transaction.type.name,
                         fontWeight = FontWeight.Bold,
-                        color = if (transaction.isIncome()) Color(0xFF2E7D32) else Color(0xFFC62828)
+                        color = TransactionAppearance.accent(transaction)
                     )
                 },
                 colors = AssistChipDefaults.assistChipColors(
-                    containerColor = if (transaction.isIncome()) Color(0xFFE8F5E9) else Color(0xFFFCE4EC)
+                    containerColor = TransactionAppearance.tint(transaction)
                 )
             )
 
@@ -74,10 +77,16 @@ fun TransactionDetailScreen(
                 currencyCode = transaction.currencyCode,
                 style = MaterialTheme.typography.headlineLarge,
                 fontWeight = FontWeight.Bold,
-                color = if (transaction.isIncome()) Color(0xFF2E7D32) else Color(0xFFC62828)
+                color = TransactionAppearance.accent(transaction),
+                prefix = TransactionAppearance.signPrefix(transaction)
             )
 
-            TransactionDetails.sections(transaction).forEach { section ->
+            TransactionDetails.sections(
+                transaction = transaction,
+                // Resolved here rather than at each call site, so the one place that knows
+                // the bank list is the one place that turns a stored code into a name.
+                bankName = BankNames.display(transaction.bankCode, bankNames)
+            ).forEach { section ->
                 SectionCard(section)
             }
         }
