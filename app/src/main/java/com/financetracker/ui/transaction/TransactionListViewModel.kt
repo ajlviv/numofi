@@ -1,7 +1,9 @@
 package com.financetracker.ui.transaction
 
+import androidx.annotation.StringRes
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.financetracker.R
 import com.financetracker.data.TransactionDao
 import com.financetracker.model.Bank
 import com.financetracker.model.BankNames
@@ -41,11 +43,11 @@ import javax.inject.Inject
  * not a category of anything. [ALL] is therefore an explicit choice rather than the absence
  * of one, so the chip row always has something selected and the two states cannot look alike.
  */
-enum class TransactionTypeFilter(val label: String, val type: TransactionType?) {
-    ALL("All", null),
-    INCOME("Income", TransactionType.INCOME),
-    EXPENSE("Expense", TransactionType.EXPENSE),
-    TRANSFERS("Transfers", TransactionType.TRANSFER)
+enum class TransactionTypeFilter(@StringRes val labelRes: Int, val type: TransactionType?) {
+    ALL(R.string.common_all, null),
+    INCOME(R.string.income, TransactionType.INCOME),
+    EXPENSE(R.string.common_expense, TransactionType.EXPENSE),
+    TRANSFERS(R.string.common_transfers, TransactionType.TRANSFER)
 }
 
 /**
@@ -122,12 +124,12 @@ private fun List<CardRef>.offeredCards(banks: Set<String>): List<String> =
         .sorted()
 
 /** The periods offered beside the date picker, as inclusive day ranges ending today. */
-enum class DatePreset(val label: String) {
-    THIS_MONTH("This month"),
-    LAST_MONTH("Last month"),
-    LAST_30_DAYS("Last 30 days"),
-    LAST_90_DAYS("Last 90 days"),
-    YEAR_TO_DATE("Year to date");
+enum class DatePreset(@StringRes val labelRes: Int) {
+    THIS_MONTH(R.string.list_this_month),
+    LAST_MONTH(R.string.list_last_month),
+    LAST_30_DAYS(R.string.list_last_30_days),
+    LAST_90_DAYS(R.string.list_last_90_days),
+    YEAR_TO_DATE(R.string.list_year_to_date);
 
     fun range(today: LocalDate): Pair<LocalDate, LocalDate> = when (this) {
         THIS_MONTH -> today.withDayOfMonth(1) to today

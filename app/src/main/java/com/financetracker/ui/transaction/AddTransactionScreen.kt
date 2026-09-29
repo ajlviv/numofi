@@ -42,10 +42,12 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.financetracker.R
 import com.financetracker.model.BankRef
 import com.financetracker.model.Bond
 import com.financetracker.model.DEFAULT_RECORDABLE_CURRENCY
@@ -89,8 +91,13 @@ fun AddTransactionScreen(
 
     var mode by remember(initialMode) { mutableStateOf(initialMode) }
 
-    LaunchedEffect(message) {
-        message?.let {
+    val snackbarText = when (val m = message) {
+        is AddMessage.Res -> stringResource(m.id, *m.args.toTypedArray())
+        is AddMessage.Raw -> m.text
+        null -> null
+    }
+    LaunchedEffect(snackbarText) {
+        snackbarText?.let {
             snackbarHostState.showSnackbar(it)
             viewModel.clearMessage()
         }
@@ -113,15 +120,22 @@ fun AddTransactionScreen(
         viewModel.saved.collect { onSaved() }
     }
 
+                                // BankRef carries the label straight from Bank.label(), which already bakes the
+    // "(archived)" marker by design (model/Bank.kt). This map therefore stays plain data
+    // with no stringResource call — bankRefs is built in the composable body, above the
+    // LazyColumn content lambda (which is not a composable scope).
+    val noBankLabel = stringResource(R.string.add_no_bank)
+    val bankRefs = banks.map { BankRef(it.code, it.label()) }
+
     Scaffold(
         modifier = modifier,
         snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
             TopAppBar(
-                title = { Text("Add") },
+                title = { Text(stringResource(R.string.add_screen_title)) },
                 navigationIcon = {
                     IconButton(onClick = dismiss) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.common_back))
                     }
                 }
             )
@@ -142,7 +156,7 @@ fun AddTransactionScreen(
                             modifier = Modifier.weight(1f)
                         ) {
                             Text(
-                                text = if (entry == AddEntryMode.TRANSACTION) "Transaction" else "ОВДП",
+                                text = if (entry == AddEntryMode.TRANSACTION) stringResource(R.string.add_mode_transaction) else stringResource(R.string.add_mode_bond),
                                 style = MaterialTheme.typography.bodyMedium
                             )
                         }
@@ -150,12 +164,11 @@ fun AddTransactionScreen(
                 }
             }
 
-            val bankRefs = banks.map { BankRef(it.code, it.label()) }
-
             if (mode == AddEntryMode.TRANSACTION) {
                 item {
                     TransactionForm(
                         banks = bankRefs,
+                        noBankLabel = noBankLabel,
                         saving = saving,
                         onSave = { form ->
                             viewModel.saveTransaction(
@@ -175,6 +188,7 @@ fun AddTransactionScreen(
                 item {
                     BondEntryForm(
                         banks = bankRefs,
+                        noBankLabel = noBankLabel,
                         saving = saving,
                         onLookup = viewModel::findBond,
                         knownBond = knownBond,
@@ -222,6 +236,7 @@ private data class TransactionForm(
 @Composable
 private fun TransactionForm(
     banks: List<BankRef>,
+    noBankLabel: String,
     saving: Boolean,
     onSave: (TransactionForm) -> Unit
 ) {
@@ -248,7 +263,7 @@ private fun TransactionForm(
                     modifier = Modifier.weight(1f)
                 ) {
                     Text(
-                        text = if (type == TransactionType.INCOME) "Income" else "Expense",
+                        text = if (type == TransactionType.INCOME) stringResource(R.string.income) else stringResource(R.string.common_expense),
                         style = MaterialTheme.typography.bodyMedium
                     )
                 }
@@ -258,8 +273,8 @@ private fun TransactionForm(
         OutlinedTextField(
             value = title,
             onValueChange = { title = it },
-            label = { RequiredLabel("Title") },
-            placeholder = { Text("e.g., Salary") },
+            label = { RequiredLabel(stringResource(R.string.common_title)) },
+            placeholder = { Text(stringResource(R.string.add_placeholder_title)) },
             modifier = Modifier.fillMaxWidth(),
             isError = showError && title.isBlank(),
             singleLine = true
@@ -272,15 +287,15 @@ private fun TransactionForm(
             OutlinedTextField(
                 value = amount,
                 onValueChange = { amount = it },
-                label = { RequiredLabel("Amount") },
-                placeholder = { Text("0.00") },
+                label = { RequiredLabel(stringResource(R.string.common_amount)) },
+                placeholder = { Text(stringResource(R.string.add_amount_placeholder)) },
                 modifier = Modifier.weight(1f),
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                 isError = showError && (amount.isBlank() || amount.toDoubleOrNull() == null),
                 singleLine = true
             )
             SingleChoiceDropdown(
-                label = "Currency",
+                label = stringResource(R.string.add_currency),
                 options = RECORDABLE_CURRENCIES.map { it to it },
                 selected = currencyCode,
                 onSelect = { currencyCode = it },
@@ -291,16 +306,17 @@ private fun TransactionForm(
         OutlinedTextField(
             value = category,
             onValueChange = { category = it },
-            label = { Text("Category") },
-            placeholder = { Text("e.g., Food, Transport") },
+            label = { Text(stringResource(R.string.common_category)) },
+            placeholder = { Text(stringResource(R.string.add_placeholder_category)) },
             modifier = Modifier.fillMaxWidth(),
             singleLine = true
         )
 
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             SingleChoiceDropdown(
-                label = "No bank",
-                options = listOf(null to "No bank") + banks.map { it as BankRef? to it.label },
+                label = noBankLabel,
+                options = listOf(null to noBankLabel) +
+                    banks.map { ref -> ref as BankRef? to ref.label },
                 selected = bank,
                 onSelect = { bank = it },
                 modifier = Modifier.weight(1f)
@@ -311,7 +327,7 @@ private fun TransactionForm(
         OutlinedTextField(
             value = note,
             onValueChange = { note = it },
-            label = { Text("Note (optional)") },
+            label = { Text(stringResource(R.string.add_note_optional)) },
             modifier = Modifier.fillMaxWidth(),
             maxLines = 3
         )
@@ -342,7 +358,7 @@ private fun TransactionForm(
             // Disabled while a save is in flight, so a second tap cannot file a second row.
             enabled = title.isNotBlank() && amount.isNotBlank() && !saving
         ) {
-            Text(if (saving) "Saving…" else "Add Transaction")
+            Text(if (saving) stringResource(R.string.add_saving) else stringResource(R.string.add_save_transaction))
         }
     }
 }
@@ -386,10 +402,10 @@ internal fun DateField(date: LocalDate, onChange: (LocalDate) -> Unit) {
                         onChange(Instant.ofEpochMilli(millis).atZone(ZoneOffset.UTC).toLocalDate())
                     }
                     showPicker = false
-                }) { Text("OK") }
+                }) { Text(stringResource(R.string.add_ok)) }
             },
             dismissButton = {
-                TextButton(onClick = { showPicker = false }) { Text("Cancel") }
+                TextButton(onClick = { showPicker = false }) { Text(stringResource(R.string.cancel)) }
             }
         ) {
             DatePicker(state = state)

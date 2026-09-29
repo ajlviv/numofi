@@ -28,8 +28,10 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.financetracker.R
 import com.financetracker.model.BondPosition
 import com.financetracker.ui.MoneyAmount
 import com.financetracker.util.MoneyFormat
@@ -56,10 +58,10 @@ fun BondListScreen(
         modifier = modifier,
         topBar = {
             TopAppBar(
-                title = { Text("Bonds") },
+                title = { Text(stringResource(R.string.bond_title)) },
                 actions = {
                     IconButton(onClick = onAddTrade) {
-                        Icon(Icons.Default.Add, contentDescription = "Record a trade")
+                        Icon(Icons.Default.Add, contentDescription = stringResource(R.string.bond_add_trade_cd))
                     }
                 }
             )
@@ -75,13 +77,13 @@ fun BondListScreen(
                 verticalArrangement = Arrangement.Center
             ) {
                 Text(
-                    text = "No bonds yet",
+                    text = stringResource(R.string.bond_empty_title),
                     style = MaterialTheme.typography.bodyLarge,
                     fontWeight = FontWeight.Medium
                 )
                 Spacer(modifier = Modifier.height(8.dp))
                 Text(
-                    text = "Record a purchase and it will show up here.",
+                    text = stringResource(R.string.bond_empty_subtitle),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -143,7 +145,7 @@ private fun PositionCard(position: BondPosition) {
                     // is the one on the last trade the user entered, and a number dressed up
                     // as a current value would be read as one.
                     Text(
-                        text = "at last entered price",
+                        text = stringResource(R.string.bond_at_last_price),
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -153,15 +155,22 @@ private fun PositionCard(position: BondPosition) {
             Spacer(modifier = Modifier.height(12.dp))
 
             Row(horizontalArrangement = Arrangement.spacedBy(24.dp)) {
-                Figure("Held", "${position.quantity}")
+                Figure(stringResource(R.string.bond_figure_held), "${position.quantity}")
                 Figure(
-                    "Cost/bond",
+                    stringResource(R.string.bond_figure_cost_per),
                     position.averageCost?.let { MoneyFormat.format(it, currency) } ?: "—"
                 )
-                Figure("Unrealised", withSign(position.unrealised, currency), gainColor)
+                Figure(stringResource(R.string.bond_figure_unrealised), withSign(position.unrealised, currency), gainColor)
             }
 
-            val terms = bondTerms(position, dateFormat)
+            val terms = bondTerms(
+                position = position,
+                dateFormat = dateFormat,
+                couponFull = stringResource(R.string.bond_coupon_full),
+                couponPeriod = stringResource(R.string.bond_coupon_period),
+                couponOnly = stringResource(R.string.bond_coupon_only),
+                matures = stringResource(R.string.bond_matures)
+            )
             if (terms != null) {
                 Spacer(modifier = Modifier.height(8.dp))
                 Text(
@@ -174,7 +183,7 @@ private fun PositionCard(position: BondPosition) {
             if (position.quantity == 0) {
                 Spacer(modifier = Modifier.height(8.dp))
                 Text(
-                    text = "Fully sold. Kept here because the trades are.",
+                    text = stringResource(R.string.bond_fully_sold),
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -187,9 +196,19 @@ private fun PositionCard(position: BondPosition) {
  * The coupon and maturity line, or null when there is nothing to say.
  *
  * Each part stands on its own: a bond with a coupon but no recorded period still has one, and
- * a period with no coupon has nothing to multiply, so nothing is printed for it.
+ * a period with no coupon has nothing to multiply, so nothing is printed for it. The format
+ * templates arrive already resolved through stringResource, because this helper is not a
+ * composable; each holds a whole phrase so a translation can reorder the words around the
+ * arguments.
  */
-private fun bondTerms(position: BondPosition, dateFormat: DateTimeFormatter): String? {
+private fun bondTerms(
+    position: BondPosition,
+    dateFormat: DateTimeFormatter,
+    couponFull: String,
+    couponPeriod: String,
+    couponOnly: String,
+    matures: String
+): String? {
     val parts = mutableListOf<String>()
     val coupon = position.bond.couponPercent
     if (coupon != null) {
@@ -197,17 +216,17 @@ private fun bondTerms(position: BondPosition, dateFormat: DateTimeFormatter): St
         val annual = position.annualCouponIncome
         val currency = position.bond.nominalCurrency
         parts += when {
-            period != null && annual != null -> "Coupon %.2f%% every %d months — %s a year".format(
+            period != null && annual != null -> couponFull.format(
                 coupon, period, MoneyFormat.format(annual, currency)
             )
 
-            period != null -> "Coupon %.2f%% every %d months".format(coupon, period)
-            else -> "Coupon %.2f%%".format(coupon)
+            period != null -> couponPeriod.format(coupon, period)
+            else -> couponOnly.format(coupon)
         }
     }
     position.bond.maturityDate?.let { millis ->
         val date = Instant.ofEpochMilli(millis).atZone(ZoneId.systemDefault()).toLocalDate()
-        parts += "matures ${date.format(dateFormat)}"
+        parts += matures.format(date.format(dateFormat))
     }
     return parts.takeIf { it.isNotEmpty() }?.joinToString(" · ")
 }

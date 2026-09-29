@@ -15,10 +15,13 @@ import com.financetracker.repository.AuthRepository
 import com.financetracker.repository.BankRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
@@ -29,7 +32,24 @@ import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import androidx.annotation.StringRes
+import com.financetracker.R
 import javax.inject.Inject
+
+/**
+ * A user-visible settings message.
+ *
+ * The ViewModel cannot call `stringResource`, so fixed copy is carried as a resource id
+ * plus its positional format arguments and resolved at the display site in the screen.
+ * Provider and exception text is carried as [Raw] instead, because that is never translated.
+ */
+sealed interface SettingsMessage {
+    /** Localized copy; [args] fill the positional placeholders in order. */
+    data class Res(@StringRes val id: Int, val args: List<Any> = emptyList()) : SettingsMessage
+
+    /** Provider or exception text shown verbatim; never translated. */
+    data class Raw(val text: String) : SettingsMessage
+}
 
 @OptIn(ExperimentalCoroutinesApi::class)
 @HiltViewModel
@@ -56,8 +76,8 @@ class SettingsViewModel @Inject constructor(
     private val _tokenInput = MutableStateFlow("")
     val tokenInput: StateFlow<String> = _tokenInput.asStateFlow()
 
-    private val _statusMessage = MutableStateFlow<String?>(null)
-    val statusMessage: StateFlow<String?> = _statusMessage.asStateFlow()
+    private val _statusMessage = MutableStateFlow<SettingsMessage?>(null)
+    val statusMessage: StateFlow<SettingsMessage?> = _statusMessage.asStateFlow()
 
     private val _isSyncing = MutableStateFlow(false)
     val isSyncing: StateFlow<Boolean> = _isSyncing.asStateFlow()
@@ -113,7 +133,7 @@ class SettingsViewModel @Inject constructor(
         val bankId = selectedBankId.value
         val token = _tokenInput.value
         if (bankId == null || token.isBlank()) {
-            _statusMessage.value = "Select a bank and enter a token first"
+            _statusMessage.value = SettingsMessage.Res(R.string.settings_token_required)
             return
         }
         viewModelScope.launch {
@@ -121,7 +141,7 @@ class SettingsViewModel @Inject constructor(
             // Reveal the sync controls immediately rather than on next launch.
             credentialRevision.value++
             _tokenInput.value = ""
-            _statusMessage.value = "Token saved"
+            _statusMessage.value = SettingsMessage.Res(R.string.settings_token_saved)
         }
     }
 
@@ -130,7 +150,7 @@ class SettingsViewModel @Inject constructor(
         viewModelScope.launch {
             credentialStore.clear(bankId)
             credentialRevision.value++
-            _statusMessage.value = "Token removed"
+            _statusMessage.value = SettingsMessage.Res(R.string.settings_token_removed)
         }
     }
 
@@ -140,7 +160,7 @@ class SettingsViewModel @Inject constructor(
         val provider = availableBanks.firstOrNull { it.id == bankId }
         val auth = bankId?.let { credentialStore.authFor(it) }
         if (provider == null || auth == null) {
-            _statusMessage.value = "Save a token first"
+            _statusMessage.value = SettingsMessage.Res(R.string.settings_save_token_first)
             return
         }
 
@@ -149,10 +169,14 @@ class SettingsViewModel @Inject constructor(
             _statusMessage.value = null
             runCatching { provider.getAccounts(auth) }
                 .onSuccess { accounts ->
-                    _statusMessage.value = "Connected: ${accounts.size} account(s)"
+                    _statusMessage.value = SettingsMessage.Res(
+                        R.string.settings_connected_accounts,
+                        listOf(accounts.size)
+                    )
                 }
                 .onFailure { error ->
-                    _statusMessage.value = error.message ?: "Connection failed"
+                    _statusMessage.value = error.message?.let { SettingsMessage.Raw(it) }
+                        ?: SettingsMessage.Res(R.string.settings_connection_failed)
                 }
             _isSyncing.value = false
         }
@@ -170,7 +194,7 @@ class SettingsViewModel @Inject constructor(
         val provider = availableBanks.firstOrNull { it.id == bankId }
         val auth = bankId?.let { credentialStore.authFor(it) }
         if (provider == null || auth == null) {
-            _statusMessage.value = "Save a token first"
+            _statusMessage.value = SettingsMessage.Res(R.string.settings_save_token_first)
             return
         }
 
@@ -181,7 +205,7 @@ class SettingsViewModel @Inject constructor(
 
             val uid = authRepository.currentUid.first()
             if (uid == null) {
-                _statusMessage.value = "Sign in to sync"
+                _statusMessage.value = SettingsMessage.Res(R.string.settings_sign_in_to_sync)
                 _isSyncing.value = false
                 return@launch
             }
@@ -197,13 +221,17 @@ class SettingsViewModel @Inject constructor(
                 .onSuccess { result ->
                     settingsRepository.setLastSyncedAt(bankId, to)
                     _statusMessage.value =
-                        "Imported ${result.imported} transaction(s) from " +
-                            "${result.accounts} account(s)" +
-                            if (result.skippedDuplicates > 0) {
-                                " (${result.skippedDuplicates} already present)"
-                            } else {
-                                ""
-                            }
+                        if (result.skippedDuplicates > 0) {
+                            SettingsMessage.Res(
+                                R.string.settings_sync_done_with_duplicates,
+                                listOf(result.imported, result.accounts, result.skippedDuplicates)
+                            )
+                        } else {
+                            SettingsMessage.Res(
+                                R.string.settings_sync_done,
+                                listOf(result.imported, result.accounts)
+                            )
+                        }
                 }
                 .onFailure { error ->
                     _statusMessage.value = describeSyncFailure(error)
@@ -226,17 +254,30 @@ class SettingsViewModel @Inject constructor(
     /**
      * Rate limits are expected on a paced import, so the message says what landed and
      * when it is safe to retry rather than showing a bare error.
+     *
+     * The provider's own text is passed as an argument (a nested [SettingsMessage], so a
+     * missing message falls back to localized copy instead of leaving English in the VM).
      */
-    private fun describeSyncFailure(error: Throwable): String = when (error) {
+    private fun describeSyncFailure(error: Throwable): SettingsMessage = when (error) {
         is BankRateLimitException -> {
             val partial = _syncProgress.value?.imported ?: 0
-            val importedText =
-                if (partial > 0) "Imported $partial transaction(s) before the limit. " else ""
-            val waitSeconds = error.retryAfterMillis / 1000
-            "$importedText${error.message ?: "Rate limited."} " +
-                "Retry in about ${maxOf(waitSeconds, 1)}s."
+            val seconds = maxOf(error.retryAfterMillis / 1000, 1)
+            val providerText = error.message?.let { SettingsMessage.Raw(it) }
+                ?: SettingsMessage.Res(R.string.settings_rate_limited_fallback)
+            if (partial > 0) {
+                SettingsMessage.Res(
+                    R.string.settings_sync_rate_limited_partial,
+                    listOf(partial, providerText, seconds)
+                )
+            } else {
+                SettingsMessage.Res(
+                    R.string.settings_sync_rate_limited,
+                    listOf(providerText, seconds)
+                )
+            }
         }
-        else -> error.message ?: "Sync failed"
+        else -> error.message?.let { SettingsMessage.Raw(it) }
+            ?: SettingsMessage.Res(R.string.settings_sync_failed)
     }
 
     fun setSyncDays(days: Int) {
@@ -263,8 +304,8 @@ class SettingsViewModel @Inject constructor(
      * which is a screen away from here — an "already called that" about a bank would appear
      * next to a token field and read as though the token were the problem.
      */
-    private val _bankMessage = MutableStateFlow<String?>(null)
-    val bankMessage: StateFlow<String?> = _bankMessage.asStateFlow()
+    private val _bankMessage = MutableStateFlow<SettingsMessage?>(null)
+    val bankMessage: StateFlow<SettingsMessage?> = _bankMessage.asStateFlow()
 
     fun onBankNameChange(value: String) {
         _bankNameInput.value = value
@@ -276,13 +317,19 @@ class SettingsViewModel @Inject constructor(
             _bankMessage.value = when (val result = bankRepository.add(_bankNameInput.value)) {
                 is AddBankResult.Added -> {
                     _bankNameInput.value = ""
-                    "Added ${result.bank.displayName}."
+                    SettingsMessage.Res(
+                        R.string.settings_bank_added,
+                        listOf(result.bank.displayName)
+                    )
                 }
-                AddBankResult.BlankName -> "Type a name for the bank first."
-                AddBankResult.NameTaken -> "You already have a bank with that name."
+                AddBankResult.BlankName ->
+                    SettingsMessage.Res(R.string.settings_bank_name_required)
+                AddBankResult.NameTaken ->
+                    SettingsMessage.Res(R.string.settings_bank_name_taken)
                 // Retrying would change nothing, so the message has to say the bank could
                 // not be added rather than inviting another attempt at the name.
-                AddBankResult.CodeUnavailable -> "Could not create a bank right now. Try again."
+                AddBankResult.CodeUnavailable ->
+                    SettingsMessage.Res(R.string.settings_bank_create_failed)
             }
         }
     }
@@ -290,9 +337,9 @@ class SettingsViewModel @Inject constructor(
     fun renameBank(code: String, name: String) {
         viewModelScope.launch {
             _bankMessage.value = if (bankRepository.rename(code, name)) {
-                "Renamed."
+                SettingsMessage.Res(R.string.settings_bank_renamed)
             } else {
-                "That name is blank or already in use."
+                SettingsMessage.Res(R.string.settings_bank_rename_invalid)
             }
         }
     }
@@ -309,15 +356,29 @@ class SettingsViewModel @Inject constructor(
         viewModelScope.launch {
             bankRepository.setArchived(code, archived)
             _bankMessage.value = if (archived) {
-                "Archived. Its transactions are kept, and it stays in the filter."
+                SettingsMessage.Res(R.string.settings_bank_archived_msg)
             } else {
-                "Restored."
+                SettingsMessage.Res(R.string.settings_bank_restored)
             }
         }
     }
 
+    /**
+     * Fires after a language pick has been written to the DataStore.
+     *
+     * The tag is applied by `AppLocale` in `attachBaseContext`, which has already run by the
+     * time Settings can observe anything, so applying a pick means recreating the activity.
+     * Emitting only after the write lands is what stops that recreation from re-reading the
+     * old tag and looping.
+     */
+    private val _languageChanged = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
+    val languageChanged: SharedFlow<Unit> = _languageChanged.asSharedFlow()
+
     fun setLanguage(tag: String) {
-        viewModelScope.launch { settingsRepository.setLanguage(tag) }
+        viewModelScope.launch {
+            settingsRepository.setLanguage(tag)
+            _languageChanged.tryEmit(Unit)
+        }
     }
 
     /**

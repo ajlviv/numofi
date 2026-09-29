@@ -9,7 +9,9 @@ import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.runBlocking
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -84,5 +86,18 @@ class SettingsRepository @Inject constructor(
 
     companion object {
         const val SYSTEM_DEFAULT = "system"
+
+        /**
+         * The stored tag, read without suspending, for `Activity.attachBaseContext`.
+         *
+         * That hook runs before Hilt exists and before any coroutine scope is available, and
+         * every string the activity inflates is resolved against the context it produces — so
+         * the one disk read the language needs happens here, once per activity creation.
+         * DataStore keeps the parsed file in memory after the first read, so only the very
+         * first call of the process pays for the file.
+         */
+        fun storedLanguage(context: Context): String = runBlocking {
+            context.dataStore.data.first()[Keys.LANGUAGE] ?: SYSTEM_DEFAULT
+        }
     }
 }

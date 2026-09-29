@@ -14,6 +14,8 @@ import com.financetracker.repository.BankRepository
 import com.financetracker.repository.BondRepository
 import com.financetracker.repository.RecordTradeResult
 import com.financetracker.repository.TransactionRepository
+import androidx.annotation.StringRes
+import com.financetracker.R
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.Flow
@@ -38,6 +40,21 @@ import javax.inject.Inject
  * from the composable would mean reaching for a repository in a composable, so the split is
  * here instead.
  */
+/**
+ * A user-visible message from the add screen.
+ *
+ * The ViewModel cannot call `stringResource`, so fixed copy is carried as a resource id
+ * plus its positional format arguments and resolved at the display site in the screen.
+ * Repository and exception text is carried as [Raw] instead, because that is never translated.
+ */
+sealed interface AddMessage {
+    /** Localized copy; [args] fill the positional placeholders in order. */
+    data class Res(@StringRes val id: Int, val args: List<Any> = emptyList()) : AddMessage
+
+    /** Repository or exception text shown verbatim; never translated. */
+    data class Raw(val text: String) : AddMessage
+}
+
 @HiltViewModel
 class AddTransactionViewModel @Inject constructor(
     private val authRepository: AuthRepository,
@@ -61,8 +78,8 @@ class AddTransactionViewModel @Inject constructor(
      */
     val bondSearch: StateFlow<Bond?> = _bondSearch.asStateFlow()
 
-    private val _message = MutableStateFlow<String?>(null)
-    val message: StateFlow<String?> = _message.asStateFlow()
+    private val _message = MutableStateFlow<AddMessage?>(null)
+    val message: StateFlow<AddMessage?> = _message.asStateFlow()
 
     /**
      * Fires once per save that worked, and only to whoever is listening at the time.
@@ -211,8 +228,8 @@ class AddTransactionViewModel @Inject constructor(
         ) {
             is RecordTradeResult.Recorded -> _saved.trySend(Unit)
             is RecordTradeResult.Oversell ->
-                _message.value = "You hold only ${result.held} — nothing was saved"
-            is RecordTradeResult.Invalid -> _message.value = result.message
+                _message.value = AddMessage.Res(R.string.add_oversell, listOf(result.held))
+            is RecordTradeResult.Invalid -> _message.value = AddMessage.Raw(result.message)
         }
     }
 }

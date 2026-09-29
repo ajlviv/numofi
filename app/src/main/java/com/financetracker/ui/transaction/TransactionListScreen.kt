@@ -19,6 +19,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -27,6 +28,7 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.financetracker.R
 import com.financetracker.model.BankRef
 import com.financetracker.model.Transaction
 import com.financetracker.model.TransactionType
@@ -60,7 +62,7 @@ private fun TransactionTypeChips(
             FilterChip(
                 selected = entry == selected,
                 onClick = { onSelect(entry) },
-                label = { Text(entry.label) }
+                label = { Text(stringResource(entry.labelRes)) }
             )
         }
     }
@@ -94,12 +96,12 @@ fun TransactionListScreen(
                 onValueChange = viewModel::onSearchChange,
                 modifier = Modifier.weight(1f),
                 singleLine = true,
-                label = { Text("Search") },
+                label = { Text(stringResource(R.string.list_search)) },
                 leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
                 trailingIcon = {
                     if (search.isNotEmpty()) {
                         IconButton(onClick = { viewModel.onSearchChange("") }) {
-                            Icon(Icons.Default.Close, contentDescription = "Clear search")
+                            Icon(Icons.Default.Close, contentDescription = stringResource(R.string.list_clear_search))
                         }
                     }
                 }
@@ -110,7 +112,8 @@ fun TransactionListScreen(
             IconButton(onClick = { summaryVisible = !summaryVisible }) {
                 Icon(
                     imageVector = Icons.Default.Analytics,
-                    contentDescription = if (summaryVisible) "Hide totals" else "Show totals",
+                    contentDescription = if (summaryVisible) stringResource(R.string.list_hide_totals)
+                        else stringResource(R.string.list_show_totals),
                     tint = if (summaryVisible) {
                         MaterialTheme.colorScheme.primary
                     } else {
@@ -131,11 +134,17 @@ fun TransactionListScreen(
                 onDatesCleared = viewModel::onDatesCleared
             )
             MultiSelectDropdown(
-                label = "Banks",
+                label = stringResource(R.string.list_banks),
                 // From the bank list, not a hardcoded set: an archived bank stays here
-                // while transactions still reference it, and label() marks it as archived
-                // so it is clear why a retired bank is still being offered.
-                options = banks.map { it.code to it.label() },
+                // while transactions still reference it, and bank_archived marks it as
+                // archived so it is clear why a retired bank is still being offered.
+                options = banks.map { bank ->
+                    bank.code to if (bank.archived) {
+                        stringResource(R.string.bank_archived, bank.displayName)
+                    } else {
+                        bank.displayName
+                    }
+                },
                 isSelected = { it in filter.bankCodes },
                 onToggle = viewModel::onBankToggled
             )
@@ -143,14 +152,14 @@ fun TransactionListScreen(
             // and the list is already narrowed to the selected banks when any are picked.
             if (cardLabels.isNotEmpty()) {
                 MultiSelectDropdown(
-                    label = "Cards",
+                    label = stringResource(R.string.list_cards),
                     options = cardLabels.map { it to it },
                     isSelected = { it in filter.cardLabels },
                     onToggle = viewModel::onCardToggled
                 )
             }
             if (filter.isActive) {
-                TextButton(onClick = viewModel::clear) { Text("Clear") }
+                TextButton(onClick = viewModel::clear) { Text(stringResource(R.string.common_clear)) }
             }
         }
 
@@ -207,9 +216,9 @@ private fun SummaryPanel(summary: TransactionSummary) {
         ) {
             Text(
                 text = when {
-                    summary.isEmpty -> "No transactions to total"
-                    summary.count == 1 -> "1 transaction"
-                    else -> "${summary.count} transactions"
+                    summary.isEmpty -> stringResource(R.string.list_summary_empty)
+                    summary.count == 1 -> stringResource(R.string.list_summary_one)
+                    else -> stringResource(R.string.list_summary_many, summary.count)
                 },
                 style = MaterialTheme.typography.titleSmall,
                 color = MaterialTheme.colorScheme.primary
@@ -217,17 +226,17 @@ private fun SummaryPanel(summary: TransactionSummary) {
             summary.totals.forEach { totals ->
                 if (summary.totals.size > 1) {
                     Text(
-                        text = totals.currencyCode ?: "No currency recorded",
+                        text = totals.currencyCode ?: stringResource(R.string.list_no_currency),
                         style = MaterialTheme.typography.labelMedium,
                         color = Color.Gray
                     )
                 }
-                SummaryAmount("Income", totals.income, totals.currencyCode, Color(0xFF2E7D32))
-                SummaryAmount("Expenses", totals.expense, totals.currencyCode, Color(0xFFC62828))
+                SummaryAmount(stringResource(R.string.income), totals.income, totals.currencyCode, Color(0xFF2E7D32))
+                SummaryAmount(stringResource(R.string.expenses), totals.expense, totals.currencyCode, Color(0xFFC62828))
                 // A negative net is the number that matters, so it is the one that changes
                 // colour; the other two are coloured by what they always mean.
                 SummaryAmount(
-                    label = "Net",
+                    label = stringResource(R.string.list_net),
                     amount = totals.balance,
                     currencyCode = totals.currencyCode,
                     color = if (totals.balance < 0) Color(0xFFC62828) else Color(0xFF2E7D32)
@@ -285,11 +294,11 @@ private fun DateFilterButton(
     OutlinedButton(onClick = { pickerVisible = true }) {
         Text(
             text = when {
-                from == null && to == null -> "Date"
-                from != null && to == null -> "From ${from.shortDate()}"
-                to != null && from == null -> "Until ${to.shortDate()}"
+                from == null && to == null -> stringResource(R.string.common_date)
+                from != null && to == null -> stringResource(R.string.list_date_from, from.shortDate())
+                to != null && from == null -> stringResource(R.string.list_date_until, to.shortDate())
                 from == to -> from!!.shortDate()
-                else -> "${from!!.shortDate()} – ${to!!.shortDate()}"
+                else -> stringResource(R.string.list_date_range, from!!.shortDate(), to!!.shortDate())
             },
             maxLines = 1,
             overflow = TextOverflow.Ellipsis
@@ -372,7 +381,7 @@ private fun DateRangeDialog(
                     .padding(vertical = 8.dp)
             ) {
                 Text(
-                    text = "Filter by date",
+                    text = stringResource(R.string.list_filter_by_date),
                     style = MaterialTheme.typography.titleMedium,
                     modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp)
                 )
@@ -389,7 +398,7 @@ private fun DateRangeDialog(
                                 val (presetFrom, presetTo) = preset.range(LocalDate.now())
                                 shown = presetFrom to presetTo
                             },
-                            label = { Text(preset.label) }
+                            label = { Text(stringResource(preset.labelRes)) }
                         )
                     }
                 }
@@ -422,16 +431,16 @@ private fun DateRangeDialog(
                     // is nothing here for it to clear, and an inert button beside Apply is just
                     // a way to lose a tap.
                     if (from != null || to != null) {
-                        TextButton(onClick = onClear) { Text("Clear") }
+                        TextButton(onClick = onClear) { Text(stringResource(R.string.common_clear)) }
                         Spacer(modifier = Modifier.weight(1f))
                     }
-                    TextButton(onClick = onDismiss) { Text("Cancel") }
+                    TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) }
                     TextButton(onClick = {
                         onApply(
                             state.selectedStartDateMillis?.toPickerDate(),
                             state.selectedEndDateMillis?.toPickerDate()
                         )
-                    }) { Text("Apply") }
+                    }) { Text(stringResource(R.string.list_apply)) }
                 }
             }
         }
@@ -463,14 +472,16 @@ private fun EmptyState(hasFilters: Boolean) {
         Spacer(modifier = Modifier.height(16.dp))
         Text(
             // An empty result under a filter is a different situation from having no
-            // transactions, and telling the user to "add your first transaction" while a
-            // search is active would be nonsense.
-            text = if (hasFilters) "Nothing matches" else "No transactions yet",
+            // transactions, and offering the add-first-transaction hint while a search
+            // is active would be nonsense.
+            text = if (hasFilters) stringResource(R.string.list_nothing_matches)
+                else stringResource(R.string.no_transactions),
             style = MaterialTheme.typography.bodyLarge,
             color = Color.Gray
         )
         Text(
-            text = if (hasFilters) "Try clearing the search or filters" else "Tap + to add your first transaction",
+            text = if (hasFilters) stringResource(R.string.list_try_clearing)
+                else stringResource(R.string.list_tap_to_add),
             style = MaterialTheme.typography.bodySmall,
             color = Color.Gray
         )
@@ -484,6 +495,11 @@ private fun TransactionListItem(
     bank: BankRef?,
     onClick: () -> Unit
 ) {
+    // A mapped category translates through its cat_* resource; anything else is the
+    // user's own typed wording and stays exactly as written.
+    val categoryRes = CategoryLabel.resource(transaction.category)
+    val categoryText =
+        if (categoryRes != 0) stringResource(categoryRes) else CategoryLabel.label(transaction.category)
     Card(
         modifier = Modifier.fillMaxWidth().clickable { onClick() },
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
@@ -525,7 +541,7 @@ private fun TransactionListItem(
                     overflow = TextOverflow.Ellipsis
                 )
                 Text(
-                    text = "${CategoryLabel.label(transaction.category)} • ${Instant.ofEpochMilli(transaction.timestamp).atZone(ZoneId.systemDefault()).toLocalDateTime().format(dateFormat)}",
+                    text = "$categoryText • ${Instant.ofEpochMilli(transaction.timestamp).atZone(ZoneId.systemDefault()).toLocalDateTime().format(dateFormat)}",
                     style = MaterialTheme.typography.bodySmall,
                     color = Color.Gray,
                     maxLines = 1,

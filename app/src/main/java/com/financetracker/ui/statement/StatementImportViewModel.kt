@@ -1,8 +1,10 @@
 package com.financetracker.ui.statement
 
 import android.net.Uri
+import androidx.annotation.StringRes
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.financetracker.R
 import com.financetracker.data.statement.BankDetector
 import com.financetracker.data.statement.StatementFileReader
 import com.financetracker.data.statement.StatementImportFailure
@@ -35,7 +37,8 @@ sealed interface StatementImportUiState {
     data class Preview(
         val rows: List<StatementRow>,
         val skippedRows: Int,
-        val unitNote: String?,
+        /** Resource id of the minor-units note, resolved by the screen; null when not needed. */
+        @StringRes val unitNoteRes: Int?,
         /** Pre-filled from the file's own headers; null until the user picks one. */
         val bankCode: String?,
         /** True when nothing recognised the file, so a bank has to be chosen by hand. */
@@ -48,7 +51,15 @@ sealed interface StatementImportUiState {
         /** Lines bank sync had already stored, so these were not added again. */
         val alreadySynced: Int
     ) : StatementImportUiState
-    data class Error(val message: String) : StatementImportUiState
+
+    /**
+     * Fixed copy as a resource id; [detail] carries the raw failure detail (exception text)
+     * which is appended verbatim after a newline and never translated.
+     */
+    data class Error(
+        @StringRes val messageRes: Int,
+        val detail: String? = null
+    ) : StatementImportUiState
 }
 
 @HiltViewModel
@@ -91,15 +102,18 @@ class StatementImportViewModel @Inject constructor(
 
             _state.value = when (outcome) {
                 is StatementParseOutcome.Failed ->
-                    StatementImportUiState.Error(outcome.failure.toMessage(outcome.detail))
+                    StatementImportUiState.Error(
+                        outcome.failure.toMessageRes(),
+                        outcome.detail
+                    )
 
                 is StatementParseOutcome.Parsed -> {
                     val result = outcome.result
                     StatementImportUiState.Preview(
                         rows = result.rows.map { it.copy(bankCode = detectedBank) },
                         skippedRows = result.skippedRows,
-                        unitNote = if (result.columns.amountsAreMinorUnits) {
-                            "Amounts were read as kopecks and converted to hryvnias."
+                        unitNoteRes = if (result.columns.amountsAreMinorUnits) {
+                            R.string.import_minor_units_note
                         } else {
                             null
                         },
@@ -130,14 +144,14 @@ class StatementImportViewModel @Inject constructor(
         // column is being able to filter by bank later, and an unrecognised file has to be
         // attributed deliberately.
         if (preview.bankCode == null) {
-            _state.value = StatementImportUiState.Error("Choose which bank this statement is from.")
+            _state.value = StatementImportUiState.Error(R.string.import_error_choose_bank)
             return
         }
         viewModelScope.launch {
             _state.value = StatementImportUiState.Working
             val uid = authRepository.currentUid.first()
             if (uid == null) {
-                _state.value = StatementImportUiState.Error("Sign in to import")
+                _state.value = StatementImportUiState.Error(R.string.import_sign_in)
                 return@launch
             }
             val result = withContext(Dispatchers.IO) {
@@ -156,18 +170,15 @@ class StatementImportViewModel @Inject constructor(
     }
 }
 
-private fun StatementImportFailure.toMessage(detail: String? = null): String {
-    val base = when (this) {
-        StatementImportFailure.UNREADABLE_FILE -> "Could not read that file."
-        StatementImportFailure.UNSUPPORTED_FORMAT ->
-            "That file format is not supported. Export the statement as XLSX, CSV or PDF."
-        StatementImportFailure.EMPTY_FILE -> "That statement has no transactions."
-        StatementImportFailure.NO_HEADER_ROW -> "Could not find the column headers in that file."
-        StatementImportFailure.NO_DATE_COLUMN -> "Could not find a date column in that file."
-        StatementImportFailure.NO_AMOUNT_COLUMN -> "Could not find an amount column in that file."
-        StatementImportFailure.TOO_LARGE -> "That file is too large to import."
-    }
-    return if (detail.isNullOrBlank()) base else "$base\n$detail"
+/** The resource for a parse failure; the optional failure detail rides along in [StatementImportUiState.Error.detail]. */
+private fun StatementImportFailure.toMessageRes(): Int = when (this) {
+    StatementImportFailure.UNREADABLE_FILE -> R.string.import_error_unreadable
+    StatementImportFailure.UNSUPPORTED_FORMAT -> R.string.import_error_unsupported
+    StatementImportFailure.EMPTY_FILE -> R.string.import_error_empty
+    StatementImportFailure.NO_HEADER_ROW -> R.string.import_error_no_header
+    StatementImportFailure.NO_DATE_COLUMN -> R.string.import_error_no_date
+    StatementImportFailure.NO_AMOUNT_COLUMN -> R.string.import_error_no_amount
+    StatementImportFailure.TOO_LARGE -> R.string.import_error_too_large
 }
 
 /** Preview rows render with the same short format the transaction list uses. */

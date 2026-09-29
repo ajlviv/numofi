@@ -1,5 +1,6 @@
 package com.financetracker
 
+import android.content.Context
 import android.content.Intent
 import android.os.Bundle
 import androidx.activity.ComponentActivity
@@ -12,6 +13,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.financetracker.ui.AppViewModel
 import com.financetracker.ui.auth.LoginScreen
 import com.financetracker.ui.theme.FinanceTrackerTheme
+import com.financetracker.util.AppLocale
 import dagger.hilt.android.AndroidEntryPoint
 
 /**
@@ -20,6 +22,11 @@ import dagger.hilt.android.AndroidEntryPoint
  */
 @AndroidEntryPoint
 class LoginActivity : ComponentActivity() {
+
+    // Same contract as MainActivity: the language is applied before the first string resolves.
+    override fun attachBaseContext(newBase: Context) {
+        super.attachBaseContext(AppLocale.wrap(newBase))
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
