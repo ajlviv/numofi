@@ -280,4 +280,19 @@ class TransactionDaoQueryTest {
         val timestamps = rows.map { it.timestamp }
         assertEquals(timestamps.sortedDescending(), timestamps)
     }
+
+    @Test
+    fun `rows with the same timestamp break ties by id descending so newly added rows appear first`() = runTest {
+        dao.insertAll(
+            listOf(
+                row("Earlier Item", 10.0, TransactionType.EXPENSE, null, null, timestamp = 2_000_000_000_000L),
+                row("Later Item", 20.0, TransactionType.EXPENSE, null, null, timestamp = 2_000_000_000_000L)
+            )
+        )
+
+        val rows = dao.getFiltered("uid-1").first().filter { it.timestamp == 2_000_000_000_000L }
+        assertEquals(2, rows.size)
+        assertEquals("Later Item", rows[0].title)
+        assertEquals("Earlier Item", rows[1].title)
+    }
 }
