@@ -278,4 +278,30 @@
   <string name="import_error_no_date">Could not find a date column in that file.</string>
   <string name="import_error_no_amount">Could not find an amount column in that file.</string>
   <string name="import_error_too_large">That file is too large to import.</string>
+<!-- Backup -->
+  <string name="settings_backup">Backup to your Google Drive folder</string>
+  <string name="settings_backup_blurb">One file, overwritten in place. Changes are backed up after each new import and after every transaction or bank change. Backing up does not delete anything.</string>
+  <string name="settings_backup_pick_folder">Pick a Drive folder</string>
+  <string name="settings_backup_switch_on">Back up to Drive</string>
+  <string name="settings_backup_switch_off">Backup is off</string>
+  <string name="settings_backup_last_saved">Last backed up %1$s</string>
+  <string name="settings_backup_never">Never backed up</string>
+  <string name="settings_backup_in_progress">Backing up now</string>
+  <string name="settings_backup_failed">Backup failed — no file written. The last good backup was %1$s. Try again.</string>
+  <string name="settings_backup_no_access">The folder could not be opened. Try picking it again.</string>
+  <string name="settings_backup_backup_now">Back up now</string>
+  <string name="settings_backup_change_folder">Change folder</string>
+  <string name="settings_backup_disable">Turn off backup</string>
+  <string name="settings_restore">Restore from a backup file</string>
+  <string name="settings_restore_blurb">Adds anything from the file that is not already here. Nothing is deleted or replaced, so a file can be restored more than once.</string>
+  <string name="settings_restore_pick">Choose a backup file</string>
+  <string name="settings_restore_in_progress">Restoring…</string>
+  <string name="settings_restore_done">Restored %1$d new entries. %2$d were already here.</string>
+  <string name="settings_restore_nothing_new">Nothing new in that file — all %1$d entries were already here.</string>
+  <string name="settings_restore_wrong_account">That file belongs to a different account, so nothing was restored. Sign in as that account and try again.</string>
+  <string name="settings_restore_unreadable">That file could not be read as a backup. Nothing was restored.</string>
+  <string name="settings_restore_too_new">That file was written by a newer version of the app. Nothing was restored.</string>
+  <string name="settings_restore_sign_in_first">Sign in before restoring a backup.</string>
+  <string name="settings_restore_failed">Restore failed. Nothing was restored.</string>
+
 </resources>

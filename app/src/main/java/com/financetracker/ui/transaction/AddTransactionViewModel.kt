@@ -8,6 +8,7 @@ import com.financetracker.model.Bond
 import com.financetracker.model.BondTradeSide
 import com.financetracker.model.Transaction
 import com.financetracker.model.TransactionEntity
+import com.financetracker.model.TransactionInstant
 import com.financetracker.model.TransactionType
 import com.financetracker.repository.AuthRepository
 import com.financetracker.repository.BankRepository
@@ -29,6 +30,7 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import java.time.LocalDate
+import java.time.LocalDateTime
 import java.time.ZoneId
 import javax.inject.Inject
 
@@ -169,6 +171,10 @@ class AddTransactionViewModel @Inject constructor(
         // that is not the one signed in. Every read is scoped the same way, so a row
         // saved under a stale uid would simply never be seen again.
         val uid = authRepository.currentUid.firstOrNull() ?: return@saveIfIdle
+        // One reading of the clock and the zone, so the day "now" falls on is compared
+        // against the chosen date in the same zone the row is finally stamped in.
+        val zone = ZoneId.systemDefault()
+        val enteredAt = LocalDateTime.now(zone)
         transactionRepository.addTransaction(
             TransactionEntity.fromDomain(
                 transaction = Transaction(
@@ -176,9 +182,11 @@ class AddTransactionViewModel @Inject constructor(
                     amount = amount,
                     type = type,
                     category = category,
-                    // Midnight local, so a transaction dated on the 3rd groups under the
-                    // 3rd regardless of the hour the user entered it.
-                    timestamp = date.atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli(),
+                    // A row dated today carries the time it was entered, so it sorts above an
+                    // import of the same day stamped at the bank's own hour. Any other day
+                    // keeps the start of that day, so it groups under the right heading
+                    // regardless of when it was typed. See [TransactionInstant].
+                    timestamp = TransactionInstant.forEnteredDate(date, enteredAt, zone),
                     note = note,
                     currencyCode = currencyCode
                 ),

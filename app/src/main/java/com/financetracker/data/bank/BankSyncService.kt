@@ -1,6 +1,8 @@
 package com.financetracker.data.bank
 
 import com.financetracker.data.TransactionDao
+import com.financetracker.data.backup.BackupReason
+import com.financetracker.data.backup.BackupRequests
 import com.financetracker.data.bank.monobank.MonobankBankProvider
 import com.financetracker.data.bank.Iso4217
 import com.financetracker.model.BankCode
@@ -30,7 +32,8 @@ import kotlin.math.max
 @Singleton
 class BankSyncService @Inject constructor(
     private val transactionDao: TransactionDao,
-    private val bankRepository: BankRepository
+    private val bankRepository: BankRepository,
+    private val backupRequests: BackupRequests
 ) {
 
     data class Result(
@@ -128,6 +131,13 @@ class BankSyncService @Inject constructor(
         }
 
         return Result(accounts = accounts.size, imported = imported, skippedDuplicates = skipped)
+            .also {
+                // Only when rows actually landed. A sync that found everything it had already
+                // stored has not changed anything, and the file already in Drive is current.
+                if (it.imported > 0) {
+                    backupRequests.requestUpload(BackupReason.BANK_SYNC)
+                }
+            }
     }
 
     /**

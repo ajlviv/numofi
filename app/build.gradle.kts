@@ -22,6 +22,9 @@ android {
 
     buildFeatures {
         compose = true
+        // The backup file records which build wrote it, so a later restore can say what
+        // produced a file it is being asked to read.
+        buildConfig = true
     }
 
     kotlinOptions {

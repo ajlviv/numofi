@@ -3,6 +3,8 @@ package com.financetracker.repository
 import androidx.room.withTransaction
 import com.financetracker.data.AppDatabase
 import com.financetracker.data.BondDao
+import com.financetracker.data.backup.BackupReason
+import com.financetracker.data.backup.BackupRequests
 import com.financetracker.model.Bank
 import com.financetracker.model.BankNames
 import com.financetracker.model.BankRef
@@ -37,7 +39,8 @@ import javax.inject.Singleton
 @Singleton
 class BondRepository @Inject constructor(
     private val db: AppDatabase,
-    private val bondDao: BondDao
+    private val bondDao: BondDao,
+    private val backupRequests: BackupRequests
 ) {
 
     private val transactionDao = db.transactionDao()
@@ -123,9 +126,8 @@ class BondRepository @Inject constructor(
         BondMath.validatePrice(price, bond.nominal.takeIf { it > 0.0 })?.let { return RecordTradeResult.Invalid(it) }
         BondMath.validateNominal(bond.nominal)?.let { return RecordTradeResult.Invalid(it) }
 
-        return db.withTransaction {
+        val result = db.withTransaction {
             val existing = bondDao.getByIsin(isin)
-
             // Checked against what is already held, before the insert, so a sale of an
             // instrument the app has never seen is refused as the oversell it is rather than
             // creating the instrument in order to sell it.
@@ -214,8 +216,15 @@ class BondRepository @Inject constructor(
             )
             RecordTradeResult.Recorded(tradeId = tradeId, transactionId = cashId)
         }
-    }
 
+        // Asked for outside the transaction, never inside it. The upload runs on its own scope
+        // and could otherwise read the database before this commit landed, writing a backup
+        // that is missing the very trade it was triggered for.
+        if (result is RecordTradeResult.Recorded) {
+            backupRequests.requestUpload(BackupReason.BOND_TRADE)
+        }
+        return result
+    }
     /**
      * The instrument name, as a cash row reads in the list.
      *

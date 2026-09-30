@@ -2,6 +2,16 @@ package com.financetracker.ui.settings
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import android.net.Uri
+import com.financetracker.data.backup.BackupReason
+import com.financetracker.data.backup.BackupSnapshotCodec
+import com.financetracker.data.backup.BackupStatus
+import com.financetracker.data.backup.BackupStore
+import com.financetracker.data.backup.BackupUploader
+import com.financetracker.data.backup.BackupRestorer
+import com.financetracker.data.backup.RestoreResult
+import com.financetracker.data.backup.UnreadableBackupException
+import com.financetracker.data.backup.UnsupportedFormatException
 import com.financetracker.data.bank.BankCredentialStore
 import com.financetracker.data.bank.BankSyncService
 import com.financetracker.data.bank.BankProvider
@@ -59,6 +69,10 @@ class SettingsViewModel @Inject constructor(
     private val authRepository: AuthRepository,
     private val bankSyncService: BankSyncService,
     private val bankRepository: BankRepository,
+    private val uploader: BackupUploader,
+    private val backupStore: BackupStore,
+    private val restorer: BackupRestorer,
+    private val codec: BackupSnapshotCodec,
     registry: BankProviderRegistry
 ) : ViewModel() {
 
@@ -387,6 +401,154 @@ class SettingsViewModel @Inject constructor(
      */
     fun signOut() {
         viewModelScope.launch { authRepository.signOut() }
+    }
+
+    // Backup
+
+    /**
+     * Where backups stand, straight off the uploader.
+     *
+     * Read from the singleton rather than held here, because the uploads it describes belong
+     * to the application and not to this screen: a change made on the transactions screen
+     * uploads with nobody in Settings, and coming back to the page has to show that.
+     */
+    val backupStatus: StateFlow<BackupStatus> = uploader.status
+
+    /**
+     * Kept apart from [statusMessage] for the same reason as [bankMessage]: that one is
+     * rendered under the sync section, a screen away, and "that folder could not be opened"
+     * appearing next to a token field would read as though the token were the problem.
+     */
+    private val _backupMessage = MutableStateFlow<SettingsMessage?>(null)
+    val backupMessage: StateFlow<SettingsMessage?> = _backupMessage.asStateFlow()
+
+    /**
+     * Up for the length of a restore, which is a file read and then a few hundred inserts.
+     * Separate from the upload status because the upload this triggers is the one place a
+     * restore can leave the status saying "backed up" while the user is still waiting.
+     */
+    private val _isRestoring = MutableStateFlow(false)
+    val isRestoring: StateFlow<Boolean> = _isRestoring.asStateFlow()
+
+    /**
+     * Kept apart from [backupMessage] for the third time, for the same reason as the other
+     * two: the upload message is rendered under the folder controls, and "that file belongs
+     * to another account" appearing under them would read as though the folder were at fault.
+     */
+    private val _restoreMessage = MutableStateFlow<SettingsMessage?>(null)
+    val restoreMessage: StateFlow<SettingsMessage?> = _restoreMessage.asStateFlow()
+
+    /**
+     * Turns backup on for the folder the user just picked, and takes the first backup.
+     *
+     * Also the path for changing the folder later, so the previous grant is given up first —
+     * a persisted write grant into a Drive folder outlives the choice to use it, and holding
+     * one the app no longer writes to is a permission nothing is using.
+     */
+    fun onBackupFolderPicked(tree: Uri) {
+        viewModelScope.launch {
+            _backupMessage.value = null
+            val previous = settingsRepository.backupTreeUri.first()
+            if (previous != null && previous != tree.toString()) {
+                backupStore.release(Uri.parse(previous))
+            }
+            runCatching { backupStore.persist(tree) }
+                .onSuccess {
+                    settingsRepository.setBackupTreeUri(tree.toString())
+                    // The first backup is taken here rather than waiting for the next write.
+                    // Enabling backup and having nothing in Drive until the user happens to
+                    // change something would leave it looking broken for as long as it took to
+                    // notice.
+                    uploader.requestUpload(BackupReason.ENABLED)
+                }
+                .onFailure {
+                    _backupMessage.value = SettingsMessage.Res(R.string.settings_backup_no_access)
+                }
+        }
+    }
+
+    fun backupNow() {
+        uploader.requestUpload(BackupReason.MANUAL)
+    }
+
+    /**
+     * Merges a backup file the user picked into the signed-in account.
+     *
+     * Everything that can go wrong here is reported as a distinct message rather than a
+     * generic failure, because the three failures a user can actually cause each have a
+     * different next step: a file from another account needs a different sign-in, a newer
+     * format needs a newer app, and an unreadable file needs a different file. Collapsing
+     * them into "restore failed" would leave the user picking files at random.
+     *
+     * Nothing is asked of the user before this point beyond choosing a file, and nothing is
+     * deleted by it, so there is no confirmation step: a restore only ever adds rows that
+     * were missing.
+     */
+    fun onRestoreFilePicked(document: Uri) {
+        viewModelScope.launch {
+            _restoreMessage.value = null
+
+            val uid = authRepository.currentUid.first()
+            if (uid == null) {
+                _restoreMessage.value = SettingsMessage.Res(R.string.settings_restore_sign_in_first)
+                return@launch
+            }
+
+            // Read and decoded before the flag goes up only in the sense that these two calls
+            // are what the flag is for: a file off Drive is a network read of unknown length,
+            // and the restore itself is hundreds of inserts.
+            _isRestoring.value = true
+            val outcome = runCatching {
+                val snapshot = codec.decode(backupStore.read(document))
+                restorer.restore(snapshot, uid)
+            }
+            _isRestoring.value = false
+
+            _restoreMessage.value = outcome.fold(
+                onSuccess = { result ->
+                    when (result) {
+                        is RestoreResult.WrongAccount ->
+                            SettingsMessage.Res(R.string.settings_restore_wrong_account)
+                        // Says plainly that nothing was added, because "restored" for a file
+                        // whose every row was already here is the opposite of what happened.
+                        is RestoreResult.Done -> if (result.changed) {
+                            SettingsMessage.Res(
+                                R.string.settings_restore_done,
+                                listOf(result.restored, result.skipped)
+                            )
+                        } else {
+                            SettingsMessage.Res(
+                                R.string.settings_restore_nothing_new,
+                                listOf(result.skipped)
+                            )
+                        }
+                    }
+                },
+                onFailure = { error ->
+                    when (error) {
+                        is UnsupportedFormatException ->
+                            SettingsMessage.Res(R.string.settings_restore_too_new)
+                        is UnreadableBackupException ->
+                            SettingsMessage.Res(R.string.settings_restore_unreadable)
+                        else -> SettingsMessage.Res(R.string.settings_restore_failed)
+                    }
+                }
+            )
+        }
+    }
+
+    /**
+     * Stops backing up and gives the folder grant back.
+     *
+     * The file already in Drive is left alone. It belongs to the user, it may be the only copy
+     * of something this device then loses, and switching a feature off is not a request to
+     * destroy what it produced.
+     */
+    fun disableBackup() {
+        viewModelScope.launch {
+            settingsRepository.backupTreeUri.first()?.let { backupStore.release(Uri.parse(it)) }
+            settingsRepository.setBackupTreeUri(null)
+        }
     }
 
     private companion object {
