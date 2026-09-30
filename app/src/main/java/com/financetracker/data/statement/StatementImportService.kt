@@ -1,6 +1,8 @@
 package com.financetracker.data.statement
 
 import com.financetracker.data.TransactionDao
+import com.financetracker.data.backup.BackupReason
+import com.financetracker.data.backup.BackupRequests
 import com.financetracker.model.BankNames
 import com.financetracker.model.SearchText
 import com.financetracker.model.TransactionEntity
@@ -29,7 +31,8 @@ import javax.inject.Singleton
 @Singleton
 class StatementImportService @Inject constructor(
     private val transactionDao: TransactionDao,
-    private val bankRepository: BankRepository
+    private val bankRepository: BankRepository,
+    private val backupRequests: BackupRequests
 ) {
 
     data class Result(
@@ -68,6 +71,15 @@ class StatementImportService @Inject constructor(
             transactionDao.insert(row.toEntity(userId, fingerprint, bankNames))
             content.add(row.bankCode, row)
             imported++
+        }
+        // Asked for once, after the file rather than per row: the burst of requests a row-at-a-
+        // time import would produce collapses into a single extra upload anyway, and saying
+        // why is what lets the status line report "after an import" rather than just "now".
+        //
+        // Not asked for when nothing was written, because a file that was entirely duplicates
+        // has not changed the data and the backup already in Drive is still correct.
+        if (imported > 0) {
+            backupRequests.requestUpload(BackupReason.IMPORT)
         }
         return Result(imported, duplicates, alreadySynced)
     }

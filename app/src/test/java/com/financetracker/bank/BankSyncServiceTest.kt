@@ -6,6 +6,7 @@ import com.financetracker.data.bank.BankAuth
 import com.financetracker.data.bank.BankProvider
 import com.financetracker.data.bank.BankSyncService
 import com.financetracker.data.bank.BankTransaction
+import com.financetracker.data.backup.BackupReason
 import com.financetracker.model.BankCode
 import com.financetracker.model.BankCodeGenerator
 import com.financetracker.model.BankEntity
@@ -13,6 +14,7 @@ import com.financetracker.model.CardRef
 import com.financetracker.model.TransactionEntity
 import com.financetracker.model.TransactionType
 import com.financetracker.repository.BankRepository
+import com.financetracker.testing.FakeBackupRequests
 import com.financetracker.testing.FakeBankDao
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.test.runTest
@@ -105,12 +107,36 @@ class BankSyncServiceTest {
      * bakes into the row's haystack, so the built-ins are enough.
      */
     private fun bankRepository() =
-        BankRepository(FakeBankDao(BankEntity.BUILT_IN), BankCodeGenerator(Random(1)))
+        BankRepository(FakeBankDao(BankEntity.BUILT_IN), BankCodeGenerator(Random(1)), FakeBackupRequests())
+
+    @Test
+    fun `a sync that stored rows asks for a backup`() = runTest {
+        val backups = FakeBackupRequests()
+        BankSyncService(FakeDao(), bankRepository(), backups)
+            .sync(provider(listOf(account())), auth, "uid-1", 0, 1_757_000_000_000)
+
+        assertEquals(listOf(BackupReason.BANK_SYNC), backups.reasons)
+    }
+
+    @Test
+    fun `a sync that found nothing new asks for no backup`() = runTest {
+        val dao = FakeDao()
+        val backups = FakeBackupRequests()
+        val service = BankSyncService(dao, bankRepository(), backups)
+        service.sync(provider(listOf(account())), auth, "uid-1", 0, 1_757_000_000_000)
+
+        // A sync that imported nothing usually means every statement has been seen already,
+        // and the file in Drive is already the state this device is in.
+        val second = service.sync(provider(listOf(account())), auth, "uid-1", 0, 1_757_000_000_000)
+
+        assertEquals(0, second.imported)
+        assertEquals(listOf(BackupReason.BANK_SYNC), backups.reasons)
+    }
 
     @Test
     fun `a synced row records the bank and the masked card`() = runTest {
         val dao = FakeDao()
-        BankSyncService(dao, bankRepository())
+        BankSyncService(dao, bankRepository(), FakeBackupRequests())
             .sync(provider(listOf(account())), auth, "uid-1", 0, 1_757_000_000_000)
 
         val row = dao.stored.single()
@@ -121,7 +147,7 @@ class BankSyncServiceTest {
     @Test
     fun `an account with no masked number falls back to its name`() = runTest {
         val dao = FakeDao()
-        BankSyncService(dao, bankRepository()).sync(
+        BankSyncService(dao, bankRepository(), FakeBackupRequests()).sync(
             provider(listOf(account(maskedPan = emptyList()))),
             auth,
             "uid-1",
@@ -135,7 +161,7 @@ class BankSyncServiceTest {
     @Test
     fun `blank masked pan entries are ignored rather than joined into a label`() = runTest {
         val dao = FakeDao()
-        BankSyncService(dao, bankRepository()).sync(
+        BankSyncService(dao, bankRepository(), FakeBackupRequests()).sync(
             provider(listOf(account(maskedPan = listOf("", "  ")))),
             auth,
             "uid-1",
@@ -149,7 +175,7 @@ class BankSyncServiceTest {
     @Test
     fun `a synced row is searchable by title bank and card`() = runTest {
         val dao = FakeDao()
-        BankSyncService(dao, bankRepository()).sync(provider(listOf(account())), auth, "uid-1", 0, 1_757_000_000_000)
+        BankSyncService(dao, bankRepository(), FakeBackupRequests()).sync(provider(listOf(account())), auth, "uid-1", 0, 1_757_000_000_000)
 
         val text = dao.stored.single().searchText!!
         assertTrue(text.contains("torus"))

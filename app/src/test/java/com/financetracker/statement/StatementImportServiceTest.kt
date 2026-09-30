@@ -1,6 +1,7 @@
 package com.financetracker.statement
 
 import com.financetracker.data.TransactionDao
+import com.financetracker.data.backup.BackupReason
 import com.financetracker.data.statement.StatementImportService
 import com.financetracker.data.statement.StatementRow
 import com.financetracker.model.BankCode
@@ -10,6 +11,7 @@ import com.financetracker.model.CardRef
 import com.financetracker.model.TransactionEntity
 import com.financetracker.model.TransactionType
 import com.financetracker.repository.BankRepository
+import com.financetracker.testing.FakeBackupRequests
 import com.financetracker.testing.FakeBankDao
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.test.runTest
@@ -88,12 +90,12 @@ class StatementImportServiceTest {
      * bakes into the row's haystack. The built-ins cover every bank the detector returns.
      */
     private fun bankRepository() =
-        BankRepository(FakeBankDao(BankEntity.BUILT_IN), BankCodeGenerator(Random(1)))
+        BankRepository(FakeBankDao(BankEntity.BUILT_IN), BankCodeGenerator(Random(1)), FakeBackupRequests())
 
     @Test
     fun `the chosen bank and card are stored on every row`() = runTest {
         val dao = FakeDao()
-        val result = StatementImportService(dao, bankRepository()).import(
+        val result = StatementImportService(dao, bankRepository(), FakeBackupRequests()).import(
             "uid-1",
             listOf(row("-100.00", BankCode.UKRSIBBANK))
         )
@@ -104,9 +106,36 @@ class StatementImportServiceTest {
     }
 
     @Test
+    fun `a fresh import asks for a backup`() = runTest {
+        val backups = FakeBackupRequests()
+        StatementImportService(FakeDao(), bankRepository(), backups).import(
+            "uid-1",
+            listOf(row("-100.00", BankCode.UKRSIBBANK))
+        )
+
+        assertEquals(listOf(BackupReason.IMPORT), backups.reasons)
+    }
+
+    @Test
+    fun `an import that only skipped duplicates asks for no backup`() = runTest {
+        val dao = FakeDao()
+        val backups = FakeBackupRequests()
+        val service = StatementImportService(dao, bankRepository(), backups)
+        val rows = listOf(row("-100.00", BankCode.UKRSIBBANK))
+        service.import("uid-1", rows)
+
+        // Nothing was written, so the file in Drive already says everything this device
+        // knows. Uploading it again would be a rewrite of identical content.
+        val second = service.import("uid-1", rows)
+
+        assertEquals(0, second.imported)
+        assertEquals(listOf(BackupReason.IMPORT), backups.reasons)
+    }
+
+    @Test
     fun `the stored row is searchable by its bank and card`() = runTest {
         val dao = FakeDao()
-        StatementImportService(dao, bankRepository())
+        StatementImportService(dao, bankRepository(), FakeBackupRequests())
             .import("uid-1", listOf(row("-100.00", BankCode.UKRSIBBANK)))
         val text = dao.stored.single().searchText!!
         assertTrue(text.contains("torus"))
@@ -117,7 +146,7 @@ class StatementImportServiceTest {
     @Test
     fun `the same payment at two banks is two rows, not one`() = runTest {
         val dao = FakeDao()
-        val service = StatementImportService(dao, bankRepository())
+        val service = StatementImportService(dao, bankRepository(), FakeBackupRequests())
         service.import("uid-1", listOf(row("-100.00", BankCode.UKRSIBBANK)))
         service.import("uid-1", listOf(row("-100.00", BankCode.MONOBANK)))
 
@@ -128,7 +157,7 @@ class StatementImportServiceTest {
     @Test
     fun `an unattributable file is still imported, under its own namespace`() = runTest {
         val dao = FakeDao()
-        val result = StatementImportService(dao, bankRepository())
+        val result = StatementImportService(dao, bankRepository(), FakeBackupRequests())
             .import("uid-1", listOf(row("-100.00", null)))
 
         assertEquals(1, result.imported)
@@ -139,7 +168,7 @@ class StatementImportServiceTest {
     @Test
     fun `a blank card cell is stored as no card rather than an empty label`() = runTest {
         val dao = FakeDao()
-        StatementImportService(dao, bankRepository()).import(
+        StatementImportService(dao, bankRepository(), FakeBackupRequests()).import(
             "uid-1",
             listOf(row("-100.00", BankCode.UKRSIBBANK, card = "  "))
         )
@@ -149,7 +178,7 @@ class StatementImportServiceTest {
     @Test
     fun `re-importing the same statement adds nothing and changes nothing`() = runTest {
         val dao = FakeDao()
-        val service = StatementImportService(dao, bankRepository())
+        val service = StatementImportService(dao, bankRepository(), FakeBackupRequests())
         val rows = listOf(row("-100.00", BankCode.UKRSIBBANK))
         service.import("uid-1", rows)
         val before = dao.stored.toList()
@@ -164,7 +193,7 @@ class StatementImportServiceTest {
     @Test
     fun `an overlapping statement never modifies a row that is already stored`() = runTest {
         val dao = FakeDao()
-        val service = StatementImportService(dao, bankRepository())
+        val service = StatementImportService(dao, bankRepository(), FakeBackupRequests())
         service.import(
             "uid-1",
             listOf(row("-100.00", BankCode.UKRSIBBANK), row("-50.00", BankCode.UKRSIBBANK, day = "02.09.2026"))
@@ -191,7 +220,7 @@ class StatementImportServiceTest {
     @Test
     fun `importing the same file twice is reported as duplicates, not new rows`() = runTest {
         val dao = FakeDao()
-        val service = StatementImportService(dao, bankRepository())
+        val service = StatementImportService(dao, bankRepository(), FakeBackupRequests())
         val rows = listOf(row("-100.00", BankCode.UKRSIBBANK), row("-50.00", BankCode.UKRSIBBANK, day = "02.09.2026"))
 
         assertEquals(2, service.import("uid-1", rows).imported)
@@ -222,7 +251,7 @@ class StatementImportServiceTest {
             bankCode = BankCode.MONOBANK
         )
 
-        val result = StatementImportService(dao, bankRepository())
+        val result = StatementImportService(dao, bankRepository(), FakeBackupRequests())
             .import("uid-1", listOf(row("-100.00", BankCode.MONOBANK)))
 
         assertEquals(0, result.imported)
@@ -250,7 +279,7 @@ class StatementImportServiceTest {
 
         // Same amount, same day, same description, but a different institution: these are
         // two real payments and both have to be stored.
-        val result = StatementImportService(dao, bankRepository())
+        val result = StatementImportService(dao, bankRepository(), FakeBackupRequests())
             .import("uid-1", listOf(row("-100.00", BankCode.UKRSIBBANK)))
 
         assertEquals(1, result.imported)
@@ -278,7 +307,7 @@ class StatementImportServiceTest {
 
         // The file's bank was never established, so the comparison stays permissive and
         // the row is treated as the same payment rather than double counted.
-        val result = StatementImportService(dao, bankRepository())
+        val result = StatementImportService(dao, bankRepository(), FakeBackupRequests())
             .import("uid-1", listOf(row("-100.00", null)))
 
         assertEquals(0, result.imported)

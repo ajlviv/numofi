@@ -2,6 +2,11 @@ package com.financetracker.ui.settings
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import android.net.Uri
+import com.financetracker.data.backup.BackupReason
+import com.financetracker.data.backup.BackupStatus
+import com.financetracker.data.backup.BackupStore
+import com.financetracker.data.backup.BackupUploader
 import com.financetracker.data.bank.BankCredentialStore
 import com.financetracker.data.bank.BankSyncService
 import com.financetracker.data.bank.BankProvider
@@ -59,6 +64,8 @@ class SettingsViewModel @Inject constructor(
     private val authRepository: AuthRepository,
     private val bankSyncService: BankSyncService,
     private val bankRepository: BankRepository,
+    private val uploader: BackupUploader,
+    private val backupStore: BackupStore,
     registry: BankProviderRegistry
 ) : ViewModel() {
 
@@ -387,6 +394,72 @@ class SettingsViewModel @Inject constructor(
      */
     fun signOut() {
         viewModelScope.launch { authRepository.signOut() }
+    }
+
+    // Backup
+
+    /**
+     * Where backups stand, straight off the uploader.
+     *
+     * Read from the singleton rather than held here, because the uploads it describes belong
+     * to the application and not to this screen: a change made on the transactions screen
+     * uploads with nobody in Settings, and coming back to the page has to show that.
+     */
+    val backupStatus: StateFlow<BackupStatus> = uploader.status
+
+    /**
+     * Kept apart from [statusMessage] for the same reason as [bankMessage]: that one is
+     * rendered under the sync section, a screen away, and "that folder could not be opened"
+     * appearing next to a token field would read as though the token were the problem.
+     */
+    private val _backupMessage = MutableStateFlow<SettingsMessage?>(null)
+    val backupMessage: StateFlow<SettingsMessage?> = _backupMessage.asStateFlow()
+
+    /**
+     * Turns backup on for the folder the user just picked, and takes the first backup.
+     *
+     * Also the path for changing the folder later, so the previous grant is given up first —
+     * a persisted write grant into a Drive folder outlives the choice to use it, and holding
+     * one the app no longer writes to is a permission nothing is using.
+     */
+    fun onBackupFolderPicked(tree: Uri) {
+        viewModelScope.launch {
+            _backupMessage.value = null
+            val previous = settingsRepository.backupTreeUri.first()
+            if (previous != null && previous != tree.toString()) {
+                backupStore.release(Uri.parse(previous))
+            }
+            runCatching { backupStore.persist(tree) }
+                .onSuccess {
+                    settingsRepository.setBackupTreeUri(tree.toString())
+                    // The first backup is taken here rather than waiting for the next write.
+                    // Enabling backup and having nothing in Drive until the user happens to
+                    // change something would leave it looking broken for as long as it took to
+                    // notice.
+                    uploader.requestUpload(BackupReason.ENABLED)
+                }
+                .onFailure {
+                    _backupMessage.value = SettingsMessage.Res(R.string.settings_backup_no_access)
+                }
+        }
+    }
+
+    fun backupNow() {
+        uploader.requestUpload(BackupReason.MANUAL)
+    }
+
+    /**
+     * Stops backing up and gives the folder grant back.
+     *
+     * The file already in Drive is left alone. It belongs to the user, it may be the only copy
+     * of something this device then loses, and switching a feature off is not a request to
+     * destroy what it produced.
+     */
+    fun disableBackup() {
+        viewModelScope.launch {
+            settingsRepository.backupTreeUri.first()?.let { backupStore.release(Uri.parse(it)) }
+            settingsRepository.setBackupTreeUri(null)
+        }
     }
 
     private companion object {

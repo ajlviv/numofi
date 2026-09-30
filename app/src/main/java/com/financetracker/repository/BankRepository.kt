@@ -2,6 +2,8 @@ package com.financetracker.repository
 
 import android.database.sqlite.SQLiteConstraintException
 import com.financetracker.data.BankDao
+import com.financetracker.data.backup.BackupReason
+import com.financetracker.data.backup.BackupRequests
 import com.financetracker.model.Bank
 import com.financetracker.model.BankCodeGenerator
 import com.financetracker.model.BankEntity
@@ -39,7 +41,8 @@ sealed interface AddBankResult {
 @Singleton
 class BankRepository @Inject constructor(
     private val dao: BankDao,
-    private val codes: BankCodeGenerator
+    private val codes: BankCodeGenerator,
+    private val backupRequests: BackupRequests
 ) {
 
     /** Every bank, live or archived, in the order the user arranged. */
@@ -86,6 +89,7 @@ class BankRepository @Inject constructor(
             val code = codes.next()
             try {
                 dao.insert(BankEntity(code, trimmed, position))
+                backupRequests.requestUpload(BackupReason.BANK)
                 return AddBankResult.Added(Bank(code, trimmed, position))
             } catch (_: SQLiteConstraintException) {
                 // Minted code already taken; try again.
@@ -99,11 +103,28 @@ class BankRepository @Inject constructor(
         val trimmed = name.trim()
         if (trimmed.isEmpty()) return false
         if (dao.getAllOnce().hasName(trimmed, code)) return false
-        return dao.rename(code, trimmed) > 0
+        return (dao.rename(code, trimmed) > 0).also { renamed ->
+            // A rename is a change to the stored data even though the rows filed under this
+            // bank keep the old name in their search haystack, by design. The backup carries
+            // both facts, and it is the one place both have to be readable together.
+            if (renamed) backupRequests.requestUpload(BackupReason.BANK)
+        }
     }
 
+    /**
+     * Archives or restores a bank, asking for a backup only when a row actually changed.
+     *
+     * A toggle in the UI can produce a request for a code that is not in the list, or for a
+     * bank that is already in the state it is being put into, and neither is a change worth
+     * an upload. The row count the update returns is not enough to tell the two apart — SQLite
+     * counts rows matched, so re-archiving an archived bank still reports one — so the
+     * current value is read first, as [rename] also does before it writes.
+     */
     suspend fun setArchived(code: String, archived: Boolean) {
+        val current = dao.getByCode(code) ?: return
+        if (current.archived == archived) return
         dao.setArchived(code, archived)
+        backupRequests.requestUpload(BackupReason.BANK)
     }
 
     suspend fun moveUp(code: String): Boolean = move(code, by = -1)
@@ -123,7 +144,11 @@ class BankRepository @Inject constructor(
         if (from < 0 || to < 0 || to >= ordered.size) return false
 
         dao.replaceOrder(ordered.map { it.code }.toMutableList().apply { add(to, removeAt(from)) })
-        return true
+        return true.also { moved ->
+            // The order is stored, so it is data like any other, but only a real move is worth
+            // an upload: a button that did nothing is not a change.
+            if (moved) backupRequests.requestUpload(BackupReason.BANK)
+        }
     }
 
     /**

@@ -32,6 +32,8 @@ class SettingsRepository @Inject constructor(
         val THEME_MODE = stringPreferencesKey("theme_mode")
         val LANGUAGE = stringPreferencesKey("language")
         val SELECTED_BANK = stringPreferencesKey("selected_bank")
+        val BACKUP_TREE_URI = stringPreferencesKey("backup_tree_uri")
+        val BACKUP_UPLOADED_AT = longPreferencesKey("backup_uploaded_at")
     }
 
     val themeMode: Flow<ThemeMode> = context.dataStore.data.map { prefs ->
@@ -83,6 +85,46 @@ class SettingsRepository @Inject constructor(
     }
 
     private fun lastSyncedKey(bankId: String) = "last_sync_$bankId"
+
+    // Backup
+
+    /**
+     * The Drive folder backups are written to, or null when backup is off.
+     *
+     * Storing the folder URI is what makes backup off, rather than a separate flag: there is
+     * nothing to switch off that is not "a folder has been chosen", and two settings that
+     * have to agree would eventually not.
+     *
+     * The grant behind this URI is held by the system, not by this file, so the two can be
+     * out of step — the user can revoke access in their Drive settings. The uploader treats a
+     * write that fails as a failure to report rather than as a reason to forget the folder,
+     * so the user is told instead of silently losing their backups.
+     */
+    val backupTreeUri: Flow<String?> = context.dataStore.data.map { prefs ->
+        prefs[Keys.BACKUP_TREE_URI]?.takeIf { it.isNotBlank() }
+    }
+
+    suspend fun setBackupTreeUri(uri: String?) {
+        context.dataStore.edit { prefs ->
+            if (uri == null) prefs.remove(Keys.BACKUP_TREE_URI)
+            else prefs[Keys.BACKUP_TREE_URI] = uri
+        }
+    }
+
+    /** When a backup last wrote successfully, or null if none ever has. */
+    val lastBackupAt: Flow<Long?> = context.dataStore.data.map { prefs ->
+        prefs[Keys.BACKUP_UPLOADED_AT]?.takeIf { it > 0 }
+    }
+
+    /**
+     * Only ever called after the file has been written.
+     *
+     * A failed attempt must leave the previous value alone, or the screen would report the
+     * backup as current when the newest one in Drive is not.
+     */
+    suspend fun setBackupUploadedAt(timestamp: Long) {
+        context.dataStore.edit { it[Keys.BACKUP_UPLOADED_AT] = timestamp }
+    }
 
     companion object {
         const val SYSTEM_DEFAULT = "system"

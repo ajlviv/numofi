@@ -255,4 +255,19 @@
   <string name="import_error_no_date">Не вдалося знайти стовпець дат у цьому файлі.</string>
   <string name="import_error_no_amount">Не вдалося знайти стовпець суми у цьому файлі.</string>
   <string name="import_error_too_large">Цей файл завеликий для імпорту.</string>
+<!-- Backup -->
+  <string name="settings_backup">Резервна копія у папці Google Drive</string>
+  <string name="settings_backup_blurb">Один файл, що перезаписується щоразу. Зміни копіюються після кожного нового імпорту та після кожної транзакції або зміни банку. Резервне копіювання нічого не видаляє.</string>
+  <string name="settings_backup_pick_folder">Вибрати папку Drive</string>
+  <string name="settings_backup_switch_on">Резервне копіювання увімкнено</string>
+  <string name="settings_backup_switch_off">Резервне копіювання вимкнено</string>
+  <string name="settings_backup_last_saved">Остання копія %1$s</string>
+  <string name="settings_backup_never">Ще не копіювалось</string>
+  <string name="settings_backup_in_progress">Копіюється зараз</string>
+  <string name="settings_backup_failed">Не вдалося зробити резервну копію. Остання успішна — %1$s. Спробуйте ще раз.</string>
+  <string name="settings_backup_no_access">Не вдалося відкрити папку. Виберіть її знову.</string>
+  <string name="settings_backup_backup_now">Зробити копію зараз</string>
+  <string name="settings_backup_change_folder">Змінити папку</string>
+  <string name="settings_backup_disable">Вимкнути резервне копіювання</string>
+
 </resources>

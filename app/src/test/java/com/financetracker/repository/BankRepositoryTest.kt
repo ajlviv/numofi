@@ -10,6 +10,8 @@ import com.financetracker.model.TransactionEntity
 import com.financetracker.model.TransactionType
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
+import com.financetracker.data.backup.BackupReason
+import com.financetracker.testing.FakeBackupRequests
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -38,16 +40,19 @@ class BankRepositoryTest {
 
     private lateinit var db: AppDatabase
     private lateinit var repository: BankRepository
+    private lateinit var backups: FakeBackupRequests
 
-    private fun open(codes: BankCodeGenerator = BankCodeGenerator(Random(1234))) {        db = Room.inMemoryDatabaseBuilder(
+    private fun open(codes: BankCodeGenerator = BankCodeGenerator(Random(1234))) {
+        db = Room.inMemoryDatabaseBuilder(
             ApplicationProvider.getApplicationContext(),
             AppDatabase::class.java
         ).allowMainThreadQueries().build()
-        repository = BankRepository(db.bankDao(), codes)
+        repository = BankRepository(db.bankDao(), codes, backups)
     }
 
     @Before
     fun setUp() {
+        backups = FakeBackupRequests()
         open()
     }
 
@@ -83,6 +88,64 @@ class BankRepositoryTest {
     private suspend fun activeNames() = repository.activeBanks.first().map { it.displayName }
 
     private suspend fun allNames() = repository.banks.first().map { it.displayName }
+
+    // MARK: - Backing up
+
+    @Test
+    fun `adding a bank asks for a backup`() = runTest {
+        repository.add("Sense Bank")
+
+        assertEquals(listOf(BackupReason.BANK), backups.reasons)
+    }
+
+    @Test
+    fun `a bank refused for a duplicate name asks for no backup`() = runTest {
+        repository.add("Sense Bank")
+        val result = repository.add("SENSE BANK")
+
+        // Nothing was written, so the bank list in Drive is already correct.
+        assertTrue(result is AddBankResult.NameTaken)
+        assertEquals(listOf(BackupReason.BANK), backups.reasons)
+    }
+
+    @Test
+    fun `renaming a bank asks for a backup`() = runTest {
+        val added = repository.add("Sense Bank") as AddBankResult.Added
+        backups.reasons.clear()
+
+        repository.rename(added.bank.code, "Feel Bank")
+
+        assertEquals(listOf(BackupReason.BANK), backups.reasons)
+    }
+
+    @Test
+    fun `archiving a bank that does not exist asks for no backup`() = runTest {
+        repository.setArchived("not-a-bank", true)
+
+        assertEquals(emptyList<BackupReason>(), backups.reasons)
+    }
+
+    @Test
+    fun `archiving a bank that is already archived asks for no backup`() = runTest {
+        val added = repository.add("Sense Bank") as AddBankResult.Added
+        repository.setArchived(added.bank.code, true)
+        backups.reasons.clear()
+
+        repository.setArchived(added.bank.code, true)
+
+        assertEquals(emptyList<BackupReason>(), backups.reasons)
+    }
+
+    @Test
+    fun `a move at the end of the list asks for no backup`() = runTest {
+        val added = repository.add("Sense Bank") as AddBankResult.Added
+        backups.reasons.clear()
+
+        repository.moveDown(added.bank.code)
+
+        // Already last, so the order in the file is unchanged.
+        assertEquals(emptyList<BackupReason>(), backups.reasons)
+    }
 
     @Test
     fun `a new bank gets a generated code the user never sees`() = runTest {

@@ -4,6 +4,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import android.net.Uri
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -37,6 +38,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -50,12 +52,15 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.financetracker.R
+import com.financetracker.data.backup.BackupStatus
 import com.financetracker.data.bank.BankProvider
 import com.financetracker.data.bank.BankSyncService
 import com.financetracker.data.settings.SettingsRepository
@@ -91,6 +96,8 @@ fun SettingsScreen(
     val banks by viewModel.banks.collectAsStateWithLifecycle()
     val bankNameInput by viewModel.bankNameInput.collectAsStateWithLifecycle()
     val bankMessage by viewModel.bankMessage.collectAsStateWithLifecycle()
+    val backupStatus by viewModel.backupStatus.collectAsStateWithLifecycle()
+    val backupMessage by viewModel.backupMessage.collectAsStateWithLifecycle()
 
     // The language picked below is applied by AppLocale in attachBaseContext, which has
     // already run by the time this screen exists: the only way to apply a new pick is to
@@ -296,6 +303,21 @@ fun SettingsScreen(
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
+
+            SettingsSection(title = stringResource(R.string.settings_backup)) {
+                Text(
+                    text = stringResource(R.string.settings_backup_blurb),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                BackupSection(
+                    status = backupStatus,
+                    message = backupMessage,
+                    onPick = viewModel::onBackupFolderPicked,
+                    onBackupNow = viewModel::backupNow,
+                    onDisable = viewModel::disableBackup
+                )
+            }
         }
     }
 }
@@ -365,6 +387,129 @@ fun RowLabel(text: String) {
         style = MaterialTheme.typography.labelLarge,
         color = MaterialTheme.colorScheme.onSurfaceVariant
     )
+}
+
+/**
+ * Picking the Drive folder to back up into, and what the last attempt did.
+ *
+ * The folder picker is launched from here rather than from the ViewModel because it has to
+ * come from an activity: there is no way to ask the system for a folder from a plain object,
+ * and the chosen URI is handed straight back to [onPick].
+ *
+ * The switch is the only switch on this screen, and it is here rather than as a button pair
+ * because switching a standing preference on and off is exactly what a switch is for — the
+ * bank rows above it use buttons because each of those does something different from its
+ * unpressed state, rather than being a mode.
+ */
+@Composable
+private fun BackupSection(
+    status: BackupStatus,
+    message: SettingsMessage?,
+    onPick: (Uri) -> Unit,
+    onBackupNow: () -> Unit,
+    onDisable: () -> Unit
+) {
+    val picker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { tree ->
+        // Null when the user backs out of the picker, which is not a change to anything.
+        tree?.let(onPick)
+    }
+    val disableLabel = stringResource(R.string.settings_backup_disable)
+
+    if (status is BackupStatus.Off) {
+        // Said outright rather than left to the absence of a switch: the button alone would
+        // read as an offer, not as a report that nothing is being copied anywhere.
+        Text(
+            text = backupStatusText(status),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Button(
+            onClick = { picker.launch(null) },
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Text(stringResource(R.string.settings_backup_pick_folder))
+        }
+    } else {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = stringResource(R.string.settings_backup_switch_on),
+                    style = MaterialTheme.typography.bodyMedium
+                )
+                Text(
+                    text = backupStatusText(status),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = if (status is BackupStatus.Failed) {
+                        MaterialTheme.colorScheme.error
+                    } else {
+                        MaterialTheme.colorScheme.onSurfaceVariant
+                    }
+                )
+            }
+            Switch(
+                checked = true,
+                onCheckedChange = { onDisable() },
+                // The text beside it is not read as a label on its own, so the switch carries
+                // what turning it off actually does. Hoisted because semantics is not a
+                // composable scope and cannot resolve a string resource itself.
+                modifier = Modifier.semantics {
+                    contentDescription = disableLabel
+                },
+                thumbContent = null
+            )
+        }
+
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            OutlinedButton(onClick = { picker.launch(null) }) {
+                Text(stringResource(R.string.settings_backup_change_folder))
+            }
+            Button(
+                onClick = onBackupNow,
+                enabled = status !is BackupStatus.Running
+            ) {
+                if (status is BackupStatus.Running) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(16.dp),
+                        strokeWidth = 2.dp
+                    )
+                } else {
+                    Text(stringResource(R.string.settings_backup_backup_now))
+                }
+            }
+        }
+    }
+
+    message?.let { message ->
+        Text(
+            text = message.resolve(),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.primary
+        )
+    }
+}
+
+/**
+ * What the last backup did, in words.
+ *
+ * A failure names the last backup that *worked* rather than the time of the attempt, so the
+ * line is a statement about what is in Drive — which is the thing the user cares about when
+ * deciding whether to worry.
+ */
+@Composable
+private fun backupStatusText(status: BackupStatus): String = when (status) {
+    is BackupStatus.Off -> stringResource(R.string.settings_backup_switch_off)
+    is BackupStatus.Running -> stringResource(R.string.settings_backup_in_progress)
+    is BackupStatus.Failed -> stringResource(
+        R.string.settings_backup_failed,
+        status.lastUploadedAt?.let { relativeTime(it) }
+            ?: stringResource(R.string.settings_backup_never)
+    )
+    is BackupStatus.Idle -> status.lastUploadedAt
+        ?.let { stringResource(R.string.settings_backup_last_saved, relativeTime(it)) }
+        ?: stringResource(R.string.settings_backup_never)
 }
 
 @Composable

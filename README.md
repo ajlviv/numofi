@@ -100,5 +100,28 @@ change means bumping `version` and clearing the app's data (or reinstalling).
 - ✅ ОВДП bond trades, with positions folded from the trades at read time
 - ✅ Dashboard summary, kept separate from bond value
 - ✅ Settings: theme, banks, bank connection, sign out
+- ✅ Backup to a user-chosen Google Drive folder, after each import and each change
 - ✅ Hilt dependency injection
 - ✅ Jetpack Compose UI
+
+## Backup
+The user picks a folder in Drive once, and the app keeps a single
+`finance-tracker-backup.json` in it, overwritten in place. Drive's own revision history is
+what provides older copies; the app keeps no history of its own, because preserving one would
+mean reading the file back before every write.
+
+Access is the Storage Access Framework, not the Drive API: there is no OAuth consent screen
+and no app registration. The grant is persisted, so it survives a restart but not a
+reinstall, and it is released again when the user turns backup off or points it at a
+different folder. The file already in Drive is never deleted by either.
+
+The upload is a logical export rather than a copy of the SQLite file, so it survives a schema
+change: transactions for the signed-in account, plus every bank, bond and trade, which are
+device-wide rather than per-account. A restore is not implemented yet, but the format is
+versioned (`BackupSnapshot.FORMAT`) and the JSON is readable — see
+`docs/plans/2026-09-30-google-drive-backup-design.md` for what a restore would have to remap.
+
+Uploads are asked for explicitly by the five places that write to the database, and
+coalesced by a conflated channel, so a burst of changes produces one extra upload rather
+than one per row. A change that writes nothing — an import of only duplicates, a failed
+rename, a move past the end of the list — asks for nothing.

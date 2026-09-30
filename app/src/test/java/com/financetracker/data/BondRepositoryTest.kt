@@ -2,6 +2,7 @@ package com.financetracker.data
 
 import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
+import com.financetracker.data.backup.BackupReason
 import com.financetracker.model.BankRef
 import com.financetracker.model.Bond
 import com.financetracker.model.BondTradeSide
@@ -17,6 +18,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.withTimeout
+import com.financetracker.testing.FakeBackupRequests
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
@@ -50,6 +52,7 @@ class BondRepositoryTest {
     )
 
     private val bank = BankRef("mo", "Monobank")
+    private lateinit var backups: FakeBackupRequests
 
     @Before
     fun setUp() = runTest {
@@ -57,7 +60,8 @@ class BondRepositoryTest {
             ApplicationProvider.getApplicationContext(),
             AppDatabase::class.java
         ).allowMainThreadQueries().build()
-        repo = BondRepository(db, db.bondDao())
+        backups = FakeBackupRequests()
+        repo = BondRepository(db, db.bondDao(), backups)
     }
 
     @After
@@ -105,6 +109,24 @@ class BondRepositoryTest {
     )
 
     private suspend fun cashRows() = db.transactionDao().getAllForUser("uid-1").first()
+
+    // MARK: - Backing up
+
+    @Test
+    fun `a recorded trade asks for a backup once the rows are committed`() = runTest {
+        buy()
+
+        assertEquals(listOf(BackupReason.BOND_TRADE), backups.reasons)
+    }
+
+    @Test
+    fun `a refused trade asks for no backup`() = runTest {
+        // The refund path writes nothing at all, so Drive already holds what the app holds.
+        val result = buy(quantity = -1)
+
+        assertTrue(result !is RecordTradeResult.Recorded)
+        assertEquals(emptyList<BackupReason>(), backups.reasons)
+    }
 
     // MARK: - The pairing
 
