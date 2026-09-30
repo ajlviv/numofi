@@ -269,5 +269,16 @@
   <string name="settings_backup_backup_now">Зробити копію зараз</string>
   <string name="settings_backup_change_folder">Змінити папку</string>
   <string name="settings_backup_disable">Вимкнути резервне копіювання</string>
+  <string name="settings_restore">Відновити з файлу резервної копії</string>
+  <string name="settings_restore_blurb">Додає з файлу все, чого тут ще немає. Нічого не видаляється й не замінюється, тому файл можна відновити кілька разів.</string>
+  <string name="settings_restore_pick">Вибрати файл резервної копії</string>
+  <string name="settings_restore_in_progress">Відновлення…</string>
+  <string name="settings_restore_done">Відновлено %1$d нових записів. %2$d уже були тут.</string>
+  <string name="settings_restore_nothing_new">У цьому файлі нічого нового — усі %1$d записів уже були тут.</string>
+  <string name="settings_restore_wrong_account">Цей файл належить іншому обліковому запису, тому нічого не відновлено. Увійдіть як цей обліковий запис і спробуйте ще раз.</string>
+  <string name="settings_restore_unreadable">Не вдалося прочитати цей файл як резервну копію. Нічого не відновлено.</string>
+  <string name="settings_restore_too_new">Цей файл створено новішою версією застосунку. Нічого не відновлено.</string>
+  <string name="settings_restore_sign_in_first">Увійдіть, перш ніж відновлювати резервну копію.</string>
+  <string name="settings_restore_failed">Не вдалося відновити. Нічого не відновлено.</string>
 
 </resources>

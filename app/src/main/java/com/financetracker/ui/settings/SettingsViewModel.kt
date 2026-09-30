@@ -4,9 +4,14 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import android.net.Uri
 import com.financetracker.data.backup.BackupReason
+import com.financetracker.data.backup.BackupSnapshotCodec
 import com.financetracker.data.backup.BackupStatus
 import com.financetracker.data.backup.BackupStore
 import com.financetracker.data.backup.BackupUploader
+import com.financetracker.data.backup.BackupRestorer
+import com.financetracker.data.backup.RestoreResult
+import com.financetracker.data.backup.UnreadableBackupException
+import com.financetracker.data.backup.UnsupportedFormatException
 import com.financetracker.data.bank.BankCredentialStore
 import com.financetracker.data.bank.BankSyncService
 import com.financetracker.data.bank.BankProvider
@@ -66,6 +71,8 @@ class SettingsViewModel @Inject constructor(
     private val bankRepository: BankRepository,
     private val uploader: BackupUploader,
     private val backupStore: BackupStore,
+    private val restorer: BackupRestorer,
+    private val codec: BackupSnapshotCodec,
     registry: BankProviderRegistry
 ) : ViewModel() {
 
@@ -416,6 +423,22 @@ class SettingsViewModel @Inject constructor(
     val backupMessage: StateFlow<SettingsMessage?> = _backupMessage.asStateFlow()
 
     /**
+     * Up for the length of a restore, which is a file read and then a few hundred inserts.
+     * Separate from the upload status because the upload this triggers is the one place a
+     * restore can leave the status saying "backed up" while the user is still waiting.
+     */
+    private val _isRestoring = MutableStateFlow(false)
+    val isRestoring: StateFlow<Boolean> = _isRestoring.asStateFlow()
+
+    /**
+     * Kept apart from [backupMessage] for the third time, for the same reason as the other
+     * two: the upload message is rendered under the folder controls, and "that file belongs
+     * to another account" appearing under them would read as though the folder were at fault.
+     */
+    private val _restoreMessage = MutableStateFlow<SettingsMessage?>(null)
+    val restoreMessage: StateFlow<SettingsMessage?> = _restoreMessage.asStateFlow()
+
+    /**
      * Turns backup on for the folder the user just picked, and takes the first backup.
      *
      * Also the path for changing the folder later, so the previous grant is given up first —
@@ -446,6 +469,72 @@ class SettingsViewModel @Inject constructor(
 
     fun backupNow() {
         uploader.requestUpload(BackupReason.MANUAL)
+    }
+
+    /**
+     * Merges a backup file the user picked into the signed-in account.
+     *
+     * Everything that can go wrong here is reported as a distinct message rather than a
+     * generic failure, because the three failures a user can actually cause each have a
+     * different next step: a file from another account needs a different sign-in, a newer
+     * format needs a newer app, and an unreadable file needs a different file. Collapsing
+     * them into "restore failed" would leave the user picking files at random.
+     *
+     * Nothing is asked of the user before this point beyond choosing a file, and nothing is
+     * deleted by it, so there is no confirmation step: a restore only ever adds rows that
+     * were missing.
+     */
+    fun onRestoreFilePicked(document: Uri) {
+        viewModelScope.launch {
+            _restoreMessage.value = null
+
+            val uid = authRepository.currentUid.first()
+            if (uid == null) {
+                _restoreMessage.value = SettingsMessage.Res(R.string.settings_restore_sign_in_first)
+                return@launch
+            }
+
+            // Read and decoded before the flag goes up only in the sense that these two calls
+            // are what the flag is for: a file off Drive is a network read of unknown length,
+            // and the restore itself is hundreds of inserts.
+            _isRestoring.value = true
+            val outcome = runCatching {
+                val snapshot = codec.decode(backupStore.read(document))
+                restorer.restore(snapshot, uid)
+            }
+            _isRestoring.value = false
+
+            _restoreMessage.value = outcome.fold(
+                onSuccess = { result ->
+                    when (result) {
+                        is RestoreResult.WrongAccount ->
+                            SettingsMessage.Res(R.string.settings_restore_wrong_account)
+                        // Says plainly that nothing was added, because "restored" for a file
+                        // whose every row was already here is the opposite of what happened.
+                        is RestoreResult.Done -> if (result.changed) {
+                            SettingsMessage.Res(
+                                R.string.settings_restore_done,
+                                listOf(result.restored, result.skipped)
+                            )
+                        } else {
+                            SettingsMessage.Res(
+                                R.string.settings_restore_nothing_new,
+                                listOf(result.skipped)
+                            )
+                        }
+                    }
+                },
+                onFailure = { error ->
+                    when (error) {
+                        is UnsupportedFormatException ->
+                            SettingsMessage.Res(R.string.settings_restore_too_new)
+                        is UnreadableBackupException ->
+                            SettingsMessage.Res(R.string.settings_restore_unreadable)
+                        else -> SettingsMessage.Res(R.string.settings_restore_failed)
+                    }
+                }
+            )
+        }
     }
 
     /**

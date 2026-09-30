@@ -34,7 +34,7 @@ class BackupExporter @Inject constructor(
         uid = uid,
         // Scoped to the one account. The other tables have no uid column and are device
         // -wide, so they are read whole rather than filtered by a column that is not there.
-        transactions = transactionDao.getAllForUser(uid).first(),
+        transactions = transactionDao.getAllForUser(uid).first().map { TransactionRow.from(it) },
         banks = bankDao.getAllOnce(),
         bonds = bondDao.getBondsOnce(),
         bondTrades = bondDao.getTrades()

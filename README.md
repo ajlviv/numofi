@@ -106,9 +106,25 @@ change means bumping `version` and clearing the app's data (or reinstalling).
 
 ## Backup
 The user picks a folder in Drive once, and the app keeps a single
-`finance-tracker-backup.json` in it, overwritten in place. Drive's own revision history is
+`finance-tracker-backup.json.gz` in it, overwritten in place. Drive's own revision history is
 what provides older copies; the app keeps no history of its own, because preserving one would
 mean reading the file back before every write.
+
+The `.gz` is gzip, not zip: one file, one stream, and no dependency. The JSON underneath is
+unchanged — a snapshot is still produced and consumed as text everywhere above the storage
+layer, and only the store compresses. A few years of a few banks is a couple of megabytes of
+JSON, and since an upload is requested on *every* change the user makes, that is tens of
+megabytes of mobile data a day spent recording that a purchase was added. The JSON repeats
+itself heavily (every row repeats the same key names, and each bank-assigned `externalId` is a
+SHA-256), which is the shape gzip is good at: the same file compresses about 6x. Reading
+sniffs the first two bytes rather than trusting the extension, so **older uncompressed backups
+still restore** — the previous `finance-tracker-backup.json` is left alone in the folder rather
+than overwritten or deleted, and a restore reads either. The one real cost is that the file
+can no longer be opened in a text editor.
+
+Decompressing a file the user picked out of a shared Drive is bounded: expansion past 64 MB is
+refused as not-a-backup, since a compressed file can produce output orders of magnitude larger
+than its input and the file is not this app's to trust.
 
 Access is the Storage Access Framework, not the Drive API: there is no OAuth consent screen
 and no app registration. The grant is persisted, so it survives a restart but not a
@@ -117,9 +133,29 @@ different folder. The file already in Drive is never deleted by either.
 
 The upload is a logical export rather than a copy of the SQLite file, so it survives a schema
 change: transactions for the signed-in account, plus every bank, bond and trade, which are
-device-wide rather than per-account. A restore is not implemented yet, but the format is
-versioned (`BackupSnapshot.FORMAT`) and the JSON is readable — see
-`docs/plans/2026-09-30-google-drive-backup-design.md` for what a restore would have to remap.
+device-wide rather than per-account.
+
+Restore is a **merge, never a replace**. It adds whatever the chosen file holds that is not
+already here, and deletes nothing, so the same file can be restored twice and a restore never
+throws away rows written since the file was taken. What counts as already here is the bank's
+own `externalId` where the row has one, and the row's content where it does not — a
+hand-entered row carries no id, and matching it by content is what stops every repeat of a
+restore from doubling the rows the user typed in. A file whose rows were all present reports
+that nothing was added rather than a count that reads as a success.
+
+Rows are inserted without their file ids and matched to whatever ids this device gave them, so
+a bond trade's link to its cash transaction survives the renumbering. Banks already present
+keep the name they have here, because every stored row's `searchText` bakes in the bank name
+as it was when that row was written and the two must not disagree.
+
+A file taken for a different signed-in account is refused whole. Banks, bonds and trades have
+no account column, so such a file carries a second account's bond positions with no way to
+tell them apart from this one's, and the only safe reading is to take none of it.
+
+The file is versioned (`BackupSnapshot.FORMAT`, currently 2) and a v1 file still restores. v2
+dropped the per-transaction `userId` in favour of one `uid` at the root; the column is still
+in the database. A file from a newer app is refused rather than partly read. See
+`docs/plans/2026-09-30-google-drive-backup-design.md`.
 
 Uploads are asked for explicitly by the five places that write to the database, and
 coalesced by a conflated channel, so a burst of changes produces one extra upload rather

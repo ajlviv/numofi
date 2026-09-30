@@ -292,5 +292,16 @@
   <string name="settings_backup_backup_now">Back up now</string>
   <string name="settings_backup_change_folder">Change folder</string>
   <string name="settings_backup_disable">Turn off backup</string>
+  <string name="settings_restore">Restore from a backup file</string>
+  <string name="settings_restore_blurb">Adds anything from the file that is not already here. Nothing is deleted or replaced, so a file can be restored more than once.</string>
+  <string name="settings_restore_pick">Choose a backup file</string>
+  <string name="settings_restore_in_progress">Restoring…</string>
+  <string name="settings_restore_done">Restored %1$d new entries. %2$d were already here.</string>
+  <string name="settings_restore_nothing_new">Nothing new in that file — all %1$d entries were already here.</string>
+  <string name="settings_restore_wrong_account">That file belongs to a different account, so nothing was restored. Sign in as that account and try again.</string>
+  <string name="settings_restore_unreadable">That file could not be read as a backup. Nothing was restored.</string>
+  <string name="settings_restore_too_new">That file was written by a newer version of the app. Nothing was restored.</string>
+  <string name="settings_restore_sign_in_first">Sign in before restoring a backup.</string>
+  <string name="settings_restore_failed">Restore failed. Nothing was restored.</string>
 
 </resources>

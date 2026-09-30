@@ -102,7 +102,21 @@ class BackupUploader @Inject constructor(
          * either would mean reading the old file before replacing it, which is a full download
          * on every upload. Drive keeps its own revision history of a document it syncs, so
          * there is already a recovery point behind a bad import.
+         *
+         * Gzipped, and named for it. The name is the only thing a user can tell from the file
+         * list in Drive, and a `.json` holding a gzip stream is a lie the moment somebody
+         * tries to open it. This is a *different name* from the plain file earlier versions
+         * wrote, so the old one is left sitting in the folder rather than overwritten or
+         * deleted: it is the user's file, and a restore reads either encoding, so nothing is
+         * lost by both being there. See [BackupEncoding].
          */
-        const val FILE_NAME = "finance-tracker-backup.json"
+        const val FILE_NAME = "finance-tracker-backup.json.gz"
+
+        /**
+         * The name this app used before it compressed anything.
+         *
+         * Never written or deleted. Kept only so the two can be told apart in a bug report.
+         */
+        const val LEGACY_FILE_NAME = "finance-tracker-backup.json"
     }
 }

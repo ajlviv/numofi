@@ -56,6 +56,7 @@ class BackupUploaderTest {
         // Grant handling belongs to the system, not to anything the uploader does.
         override fun persist(tree: Uri) = error("unused")
         override fun release(tree: Uri) = error("unused")
+        override fun read(document: Uri): String = error("unused")
     }
 
     private lateinit var db: AppDatabase
@@ -168,7 +169,25 @@ class BackupUploaderTest {
         uploader.requestUpload(BackupReason.IMPORT)
         awaitWrites(1)
 
-        assertEquals(listOf(tree to "finance-tracker-backup.json"), store.writes)
+        // Named for what is in it. A `.json` holding a gzip stream misleads the one thing a
+        // file name is for, which is telling the user what they are looking at in Drive.
+        assertEquals(listOf(tree to "finance-tracker-backup.json.gz"), store.writes)
+    }
+
+    @Test
+    fun `what the uploader hands over is still readable json`() = runBlocking {
+        enable()
+        storeTransaction("Кава")
+
+        uploader.requestUpload(BackupReason.IMPORT)
+        awaitWrites(1)
+
+        // Compression is the store's business, so everything above this line — and every test
+        // in the suite — still sees the export as text. If this ever needs a decompressor to
+        // read, the seam between "what a backup is" and "how it is stored" has leaked.
+        val contents = store.lastContents!!
+        assertTrue(contents.trimStart().startsWith("{"))
+        assertEquals(listOf("Кава"), BackupSnapshotCodec().decode(contents).transactions.map { it.title })
     }
 
     @Test

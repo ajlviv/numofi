@@ -5,6 +5,8 @@ import androidx.test.core.app.ApplicationProvider
 import com.financetracker.data.AppDatabase
 import com.financetracker.data.backup.BackupExporter
 import com.financetracker.data.backup.BackupSnapshot
+import com.financetracker.data.backup.BackupSnapshotCodec
+import com.financetracker.data.backup.TransactionRow
 import com.financetracker.model.BankCode
 import com.financetracker.model.BankEntity
 import com.financetracker.model.BondEntity
@@ -150,9 +152,23 @@ class BackupExporterTest {
     }
 
     @Test
+    fun `no transaction in the file repeats whose account it is`() = runTest {
+        store(mine, "Кава")
+        store(theirs, "Someone else's coffee")
+
+        val json = BackupSnapshotCodec().encode(exporter.snapshot(mine, now = 0L))
+
+        // The root uid already says whose rows these are, and the exporter filtered by it, so
+        // a userId on each row is the same fact written 147 times — with room for it to
+        // disagree with itself. A v1 file still has it and is still readable; see the codec.
+        assertTrue(!json.contains("\"userId\""))
+        assertEquals(1, Regex("\"uid\"").findAll(json).count())
+    }
+
+    @Test
     fun `an account with nothing in it still produces a snapshot`() = runTest {
         val snapshot = exporter.snapshot(mine, now = 0L)
 
-        assertEquals(emptyList<TransactionEntity>(), snapshot.transactions)
+        assertEquals(emptyList<TransactionRow>(), snapshot.transactions)
     }
 }

@@ -13,6 +13,11 @@ import javax.inject.Singleton
  *
  * An interface so that [BackupUploader] can be exercised without a `DocumentsProvider` to
  * point it at — there is none on the JVM — while everything above this line stays real.
+ *
+ * Both directions take and return the backup as text, which keeps the encoding an
+ * implementation detail of the one class that touches bytes: a fake store sees exactly what a
+ * real one is asked to write, so a test can assert on the export without a provider or a
+ * compressor. See [BackupEncoding].
  */
 interface BackupStore {
 
@@ -23,6 +28,23 @@ interface BackupStore {
      * @throws SecurityException if the grant to [tree] has been revoked.
      */
     fun write(tree: Uri, name: String, contents: String)
+
+    /**
+     * Reads a backup out of a single document the user picked, whether it is compressed or
+     * not. The file may be one this app wrote years ago and never compressed, so the
+     * encoding is sniffed rather than assumed.
+     *
+     * Takes a document rather than a tree and a name because this is the picker handing back
+     * the file itself, not the folder this app writes into. The two are deliberately not the
+     * same operation: the folder is where uploads land, and a restore from it would be limited
+     * to the file this app wrote rather than the one the user actually means to restore.
+     *
+     * @throws IOException if the document cannot be opened or read.
+     * @throws UnreadableBackupException if it is compressed but does not decode, or expands
+     *   past [BackupEncoding.MAX_DECOMPRESSED_BYTES].
+     * @throws SecurityException if the grant to [document] has been revoked.
+     */
+    fun read(document: Uri): String
 
     /**
      * Keeps read and write access to [tree] across restarts of the app.
@@ -63,11 +85,19 @@ class SafBackupStore @Inject constructor(
     override fun write(tree: Uri, name: String, contents: String) {
         val existing = findDocument(tree, name)
         val target = existing ?: createDocument(tree, name)
+        val bytes = BackupEncoding.compress(contents)
         // "rwt" truncates. Opening an existing document for writing without it would leave the
-        // tail of a longer previous snapshot in place and leave the file as invalid JSON.
+        // tail of a longer previous snapshot in place and leave the file as invalid gzip.
         resolver.openOutputStream(target, TRUNCATE)
-            ?.use { it.write(contents.toByteArray(Charsets.UTF_8)) }
+            ?.use { it.write(bytes) }
             ?: throw IOException("Could not open $name in the chosen folder for writing")
+    }
+
+    override fun read(document: Uri): String {
+        val bytes = resolver.openInputStream(document)
+            ?.use { it.readBytes() }
+            ?: throw IOException("Could not open the chosen backup for reading")
+        return BackupEncoding.decode(bytes)
     }
 
     override fun persist(tree: Uri) {
@@ -127,12 +157,18 @@ class SafBackupStore @Inject constructor(
             tree,
             DocumentsContract.getTreeDocumentId(tree)
         )
-        return DocumentsContract.createDocument(resolver, parent, JSON_MIME, name)
+        // Taken from the extension rather than fixed, because the app writes gzip and a
+        // document labelled application/json that does not decompress as JSON misleads
+        // whatever the user or Drive does with it next.
+        val mime = if (name.endsWith(GZIP_EXTENSION)) GZIP_MIME else JSON_MIME
+        return DocumentsContract.createDocument(resolver, parent, mime, name)
             ?: throw IOException("Could not create $name in the chosen folder")
     }
 
     private companion object {
         const val JSON_MIME = "application/json"
+        const val GZIP_MIME = "application/gzip"
+        const val GZIP_EXTENSION = ".gz"
         const val TRUNCATE = "rwt"
     }
 }
