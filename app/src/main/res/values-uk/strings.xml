@@ -303,4 +303,34 @@
   <string name="settings_restore_sign_in_first">Увійдіть, перш ніж відновлювати резервну копію.</string>
   <string name="settings_restore_failed">Не вдалося відновити. Нічого не відновлено.</string>
 
+  <!-- Recurring payments. A projection of what is committed, never a ledger entry. -->
+  <string name="main_scheduled">Плани</string>
+  <string name="recurring_title">Заплановані платежі</string>
+  <string name="recurring_empty_title">Ще нічого не заплановано</string>
+  <string name="recurring_empty_subtitle">Додайте платіж, який повторюється — оренда, підписка, внесок за кредитом.</string>
+  <string name="recurring_add_cd">Додати запланований платіж</string>
+  <string name="recurring_form_new">Новий запланований платіж</string>
+  <string name="recurring_form_edit">Редагувати запланований платіж</string>
+  <string name="recurring_frequency">Повторюється</string>
+  <string name="recurring_freq_weekly">Щотижня</string>
+  <string name="recurring_freq_monthly">Щомісяця</string>
+  <string name="recurring_freq_yearly">Щороку</string>
+  <string name="recurring_interval">Кожні</string>
+  <string name="recurring_freq_every">%1$s · кожні %2$d</string>
+  <string name="recurring_start">Початок</string>
+  <string name="recurring_end">Кінець</string>
+  <string name="recurring_end_none">Без дати кінця</string>
+  <string name="recurring_archive">Архівувати</string>
+  <string name="recurring_unarchive">Повернути з архіву</string>
+  <string name="recurring_archived">В архіві</string>
+  <string name="recurring_next_due">Далі: %1$s</string>
+  <string name="recurring_upcoming_title">Заплановано на найближчі 30 днів</string>
+  <string name="recurring_upcoming_expense">Витрати</string>
+  <string name="recurring_upcoming_income">Надходження</string>
+  <string name="recurring_upcoming_none">У цьому вікні нічого не заплановано.</string>
+  <string name="recurring_upcoming_honest">Спрогнозовано з ваших розкладів — це не те, що вже сплачено.</string>
+  <string name="recurring_save_failed">Не вдалося зберегти розклад.</string>
+  <string name="recurring_delete_title">Видалити розклад?</string>
+  <string name="recurring_delete_body">«%1$s» буде остаточно видалено.</string>
+
 </resources>

@@ -12,6 +12,8 @@ import com.financetracker.model.BankEntity
 import com.financetracker.model.BondEntity
 import com.financetracker.model.BondTradeEntity
 import com.financetracker.model.BondTradeSide
+import com.financetracker.model.RepeatFrequency
+import com.financetracker.model.RecurringPaymentEntity
 import com.financetracker.model.SearchText
 import com.financetracker.model.TransactionEntity
 import com.financetracker.model.TransactionType
@@ -45,7 +47,7 @@ class BackupExporterTest {
             ApplicationProvider.getApplicationContext(),
             AppDatabase::class.java
         ).allowMainThreadQueries().build()
-        exporter = BackupExporter(db.transactionDao(), db.bankDao(), db.bondDao())
+        exporter = BackupExporter(db.transactionDao(), db.bankDao(), db.bondDao(), db.recurringPaymentDao())
     }
 
     @After
@@ -171,4 +173,26 @@ class BackupExporterTest {
 
         assertEquals(emptyList<TransactionRow>(), snapshot.transactions)
     }
+
+    @Test
+    fun `recurring schedules are exported for this account only`() = runTest {
+        db.recurringPaymentDao().insert(schedule(mine, "Оренда"))
+        db.recurringPaymentDao().insert(schedule(theirs, "Not mine"))
+
+        val snapshot = exporter.snapshot(mine, now = 0L)
+
+        // A schedule is per-account like a transaction, unlike the three device-wide lists.
+        assertEquals(listOf("Оренда"), snapshot.recurringPayments.orEmpty().map { it.title })
+    }
+
+    private fun schedule(uid: String, title: String) = RecurringPaymentEntity(
+        userId = uid,
+        title = title,
+        amount = 12_000.0,
+        type = TransactionType.EXPENSE,
+        category = "other",
+        currencyCode = "UAH",
+        frequency = RepeatFrequency.MONTHLY,
+        startDate = 1_000L
+    )
 }

@@ -10,6 +10,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.AccountBalance
 import androidx.compose.material.icons.filled.Dashboard
+import androidx.compose.material.icons.filled.EventRepeat
 import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -31,12 +32,14 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.financetracker.R
 import com.financetracker.model.Transaction
 import com.financetracker.ui.bond.BondListScreen
 import com.financetracker.ui.dashboard.DashboardScreen
+import com.financetracker.ui.recurring.RecurringScreen
 import com.financetracker.ui.settings.SettingsScreen
 import com.financetracker.ui.transaction.AddEntryMode
 import com.financetracker.ui.transaction.AddTransactionScreen
@@ -51,6 +54,7 @@ enum class MainBottomNavDestination(
     DASHBOARD("dashboard", R.string.dashboard, Icons.Default.Dashboard),
     TRANSACTIONS("transactions", R.string.transactions, Icons.AutoMirrored.Filled.List),
     BONDS("bonds", R.string.main_bonds, Icons.Default.AccountBalance),
+    SCHEDULED("scheduled", R.string.main_scheduled, Icons.Default.EventRepeat),
     SETTINGS("settings", R.string.settings, Icons.Default.Settings)
 }
 
@@ -139,7 +143,17 @@ fun MainScreen(
                         selected = selectedTab == index,
                         onClick = { selectedTab = index },
                         icon = { Icon(destination.icon, contentDescription = stringResource(destination.labelRes)) },
-                        label = { Text(stringResource(destination.labelRes)) }
+                        // Five destinations leave each label roughly 72dp on a 360dp screen,
+                        // which is not enough for "Transactions". Wrapping to a second line
+                        // pushed the icon row up and made every tab a different height, so the
+                        // label is pinned to one line and gives up its tail instead.
+                        label = {
+                            Text(
+                                text = stringResource(destination.labelRes),
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
                     )
                 }
             }
@@ -164,6 +178,9 @@ fun MainScreen(
 
                 MainBottomNavDestination.BONDS ->
                     BondListScreen(positions = positions, onAddTrade = { addEntryMode = AddEntryMode.BOND })
+
+                MainBottomNavDestination.SCHEDULED ->
+                    RecurringScreen()
 
                 MainBottomNavDestination.SETTINGS ->
                     SettingsScreen(onBack = {}, showBackButton = false)

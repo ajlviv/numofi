@@ -2,6 +2,7 @@ package com.financetracker.backup
 
 import com.financetracker.data.backup.BackupSnapshot
 import com.financetracker.data.backup.BackupSnapshotCodec
+import com.financetracker.data.backup.RecurringPaymentRow
 import com.financetracker.data.backup.TransactionRow
 import com.financetracker.data.backup.UnreadableBackupException
 import com.financetracker.data.backup.UnsupportedFormatException
@@ -9,9 +10,11 @@ import com.financetracker.model.BankEntity
 import com.financetracker.model.BondEntity
 import com.financetracker.model.BondTradeEntity
 import com.financetracker.model.BondTradeSide
+import com.financetracker.model.RepeatFrequency
 import com.financetracker.model.TransactionType
 import com.financetracker.model.TransferDirection
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -86,6 +89,18 @@ class BackupSnapshotCodecTest {
                 tradeDate = 1_700_000_500_000L,
                 bankCode = "mo",
                 transactionId = 8
+            )
+        ),
+        recurringPayments = listOf(
+            RecurringPaymentRow(
+                id = 3,
+                title = "Оренда",
+                amount = 12_000.0,
+                type = TransactionType.EXPENSE,
+                category = "other",
+                currencyCode = "UAH",
+                frequency = RepeatFrequency.MONTHLY,
+                startDate = 1_800_000_000_000L
             )
         )
     )
@@ -200,5 +215,38 @@ class BackupSnapshotCodecTest {
         // The dangerous reading is the one that succeeds: restoring nothing and reporting
         // "0 restored" would look like a working restore of a file that holds everything.
         assertThrows(UnreadableBackupException::class.java) { codec.decode("") }
+    }
+
+    @Test
+    fun `a recurring schedule survives the round trip`() {
+        val parsed = codec.decode(codec.encode(snapshot()))
+
+        val schedule = parsed.recurringPayments!!.single()
+        assertEquals("Оренда", schedule.title)
+        assertEquals(RepeatFrequency.MONTHLY, schedule.frequency)
+        assertEquals(12_000.0, schedule.amount, 1e-9)
+    }
+
+    @Test
+    fun `a file written before schedules existed still reads`() {
+        // Format 2 predates the schedules key. The reader has to treat the absent field as
+        // none rather than fail, or a user's year-old backup would stop restoring.
+        val v2 = """
+            {
+              "format": 2,
+              "appVersion": "1.0",
+              "createdAt": 0,
+              "uid": "uid-1",
+              "transactions": [],
+              "banks": [],
+              "bonds": [],
+              "bondTrades": []
+            }
+        """.trimIndent()
+
+        val parsed = codec.decode(v2)
+
+        assertEquals(2, parsed.format)
+        assertNull(parsed.recurringPayments)
     }
 }

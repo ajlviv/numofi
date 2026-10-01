@@ -3,6 +3,7 @@ package com.financetracker.data.backup
 import com.financetracker.BuildConfig
 import com.financetracker.data.BankDao
 import com.financetracker.data.BondDao
+import com.financetracker.data.RecurringPaymentDao
 import com.financetracker.data.TransactionDao
 import kotlinx.coroutines.flow.first
 import javax.inject.Inject
@@ -18,7 +19,8 @@ import javax.inject.Singleton
 class BackupExporter @Inject constructor(
     private val transactionDao: TransactionDao,
     private val bankDao: BankDao,
-    private val bondDao: BondDao
+    private val bondDao: BondDao,
+    private val recurringPaymentDao: RecurringPaymentDao
 ) {
 
     /**
@@ -37,6 +39,9 @@ class BackupExporter @Inject constructor(
         transactions = transactionDao.getAllForUser(uid).first().map { TransactionRow.from(it) },
         banks = bankDao.getAllOnce(),
         bonds = bondDao.getBondsOnce(),
-        bondTrades = bondDao.getTrades()
+        bondTrades = bondDao.getTrades(),
+        // Per account, unlike the three device-wide lists above: a schedule is one person's
+        // commitments, so it is filtered by the same uid as the transactions.
+        recurringPayments = recurringPaymentDao.getAllForUserOnce(uid).map(RecurringPaymentRow::from)
     )
 }

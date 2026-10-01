@@ -326,4 +326,34 @@
   <string name="settings_restore_sign_in_first">Sign in before restoring a backup.</string>
   <string name="settings_restore_failed">Restore failed. Nothing was restored.</string>
 
+  <!-- Recurring payments. A projection of what is committed, never a ledger entry. -->
+  <string name="main_scheduled">Scheduled</string>
+  <string name="recurring_title">Scheduled payments</string>
+  <string name="recurring_empty_title">Nothing scheduled yet</string>
+  <string name="recurring_empty_subtitle">Add a payment that repeats — rent, a subscription, a loan instalment.</string>
+  <string name="recurring_add_cd">Add a scheduled payment</string>
+  <string name="recurring_form_new">New scheduled payment</string>
+  <string name="recurring_form_edit">Edit scheduled payment</string>
+  <string name="recurring_frequency">Repeats</string>
+  <string name="recurring_freq_weekly">Weekly</string>
+  <string name="recurring_freq_monthly">Monthly</string>
+  <string name="recurring_freq_yearly">Yearly</string>
+  <string name="recurring_interval">Every</string>
+  <string name="recurring_freq_every">%1$s · every %2$d</string>
+  <string name="recurring_start">Starts</string>
+  <string name="recurring_end">Ends</string>
+  <string name="recurring_end_none">No end date</string>
+  <string name="recurring_archive">Archive</string>
+  <string name="recurring_unarchive">Unarchive</string>
+  <string name="recurring_archived">Archived</string>
+  <string name="recurring_next_due">Next: %1$s</string>
+  <string name="recurring_upcoming_title">Scheduled in the next 30 days</string>
+  <string name="recurring_upcoming_expense">Going out</string>
+  <string name="recurring_upcoming_income">Coming in</string>
+  <string name="recurring_upcoming_none">Nothing scheduled in this window.</string>
+  <string name="recurring_upcoming_honest">Projected from the schedules you recorded — not what has been paid.</string>
+  <string name="recurring_save_failed">Could not save the schedule.</string>
+  <string name="recurring_delete_title">Delete schedule?</string>
+  <string name="recurring_delete_body">\"%1$s\" will be permanently deleted.</string>
+
 </resources>
