@@ -213,6 +213,9 @@
   <string name="dash_net_worth_unrated_no_code">Not included: rows with no currency</string>
   <string name="dash_net_worth_excluded">Excluded by your rules: %1$d transaction(s)</string>
   <string name="dash_tap_to_add">Tap + to add your first</string>
+  <string name="settings_tab_general">General</string>
+  <string name="settings_tab_data">Data</string>
+  <string name="settings_tab_account">Account</string>
   <string name="settings_preferences">Preferences</string>
   <string name="settings_theme_mode">Theme mode</string>
   <string name="settings_base_currency">Total in one currency</string>

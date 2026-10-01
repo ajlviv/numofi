@@ -191,6 +191,9 @@
   <string name="dash_net_worth_unrated_no_code">Не враховано: рядки без валюти</string>
   <string name="dash_net_worth_excluded">Не враховано за вашими правилами: %1$d транзакцій</string>
   <string name="dash_tap_to_add">Торкніться +, щоб додати першу транзакцію</string>
+  <string name="settings_tab_general">Загальні</string>
+  <string name="settings_tab_data">Дані</string>
+  <string name="settings_tab_account">Акаунт</string>
   <string name="settings_preferences">Параметри</string>
   <string name="settings_theme_mode">Режим теми</string>
   <string name="settings_base_currency">Підсумок в одній валюті</string>

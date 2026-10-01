@@ -1,11 +1,14 @@
 package com.financetracker.ui.settings
 
+import androidx.annotation.StringRes
+import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import android.net.Uri
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Spacer
@@ -37,9 +40,11 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SecondaryTabRow
 import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Switch
+import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -48,6 +53,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -81,6 +87,24 @@ import com.financetracker.data.settings.ThemeMode
 import com.financetracker.security.LocalExternalActivityLaunch
 import com.financetracker.security.LockCapability
 
+/**
+ * The three groups the page is split into, and the label each is titled by.
+ *
+ * Grouped by what a setting is *for*, not by how much of the page it takes: General is how the
+ * app looks and what it is allowed to count, Data is how rows get in and how they are kept, and
+ * Account is the signed-in identity. Ten sections in one scroll column buried the heaviest of
+ * them — statement import sat sixth, under four cards — and a tab is what lets a group be found
+ * without reading past the ones above it.
+ *
+ * An enum rather than an index so `rememberSaveable` has a name to write down and the `when`
+ * that picks the content cannot pair a label with the wrong sections.
+ */
+private enum class SettingsTab(@StringRes val labelRes: Int) {
+    GENERAL(R.string.settings_tab_general),
+    DATA(R.string.settings_tab_data),
+    ACCOUNT(R.string.settings_tab_account)
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen(
@@ -89,8 +113,234 @@ fun SettingsScreen(
     showBackButton: Boolean = true,
     viewModel: SettingsViewModel = hiltViewModel()
 ) {
+    // The language picked below is applied by AppLocale in attachBaseContext, which has
+    // already run by the time this screen exists: the only way to apply a new pick is to
+    // rebuild the activity. The ViewModel emits after the tag is stored, so the recreation
+    // reads the new value instead of racing the write.
+    val context = LocalContext.current
+    LaunchedEffect(Unit) {
+        viewModel.languageChanged.collect { context.findActivity().recreate() }
+    }
+
+    // Asked on composition rather than held: a fingerprint the user adds or removes in the
+    // device's own settings is picked up by returning to this screen, and a value read at
+    // launch would still be offering a switch for a credential that is no longer there. Kept
+    // here rather than moved into the General tab that shows it, so the answer is already in
+    // hand by the time that tab is opened rather than arriving a frame after the switch.
+    LaunchedEffect(Unit) { viewModel.refreshLockCapability(context) }
+
+    var selectedTab by rememberSaveable { mutableStateOf(SettingsTab.GENERAL) }
+
+    // Held out here rather than created inside each tab, because only the tab on screen is
+    // composed: a state created in there is dropped the moment the user switches away, and
+    // coming back would land at the top of a list they had already scrolled. Each one is
+    // saveable in its own right, so a rotation also returns to the same place in the same tab.
+    val generalScroll = rememberScrollState()
+    val dataScroll = rememberScrollState()
+    val accountScroll = rememberScrollState()
+
+    Scaffold(
+        topBar = {
+            // Bar and strip stacked by hand rather than using the bar's own bottom slot, which
+            // this version of Material3 does not have. Wrapped in a Column inside `topBar` for
+            // the same reason the slot exists: `Scaffold` measures what `topBar` returns as one
+            // bar, so the padding handed down covers the strip too, and the strip stays put
+            // while the tab's sections scroll underneath.
+            Column {
+                TopAppBar(
+                    title = { Text(stringResource(R.string.settings)) },
+                    navigationIcon = {
+                        if (showBackButton) {
+                            IconButton(onClick = onBack) {
+                                Icon(
+                                    Icons.AutoMirrored.Filled.ArrowBack,
+                                    contentDescription = stringResource(R.string.common_back)
+                                )
+                            }
+                        }
+                    }
+                )
+                SecondaryTabRow(
+                    selectedTabIndex = SettingsTab.entries.indexOf(selectedTab)
+                ) {
+                    SettingsTab.entries.forEach { tab ->
+                        Tab(
+                            selected = tab == selectedTab,
+                            onClick = { selectedTab = tab },
+                            text = { Text(stringResource(tab.labelRes)) }
+                        )
+                    }
+                }
+            }
+        }
+    ) { padding ->
+        // Only the selected tab is composed, which is the whole reason the state below is
+        // collected per tab instead of in one block here: a hidden tab holds no subscriptions,
+        // and the import section's ViewModel is left untouched until Data is actually opened.
+        val tabModifier = modifier.padding(padding)
+        when (selectedTab) {
+            SettingsTab.GENERAL -> GeneralTab(
+                modifier = tabModifier,
+                scrollState = generalScroll,
+                viewModel = viewModel
+            )
+            SettingsTab.DATA -> DataTab(
+                modifier = tabModifier,
+                scrollState = dataScroll,
+                viewModel = viewModel
+            )
+            SettingsTab.ACCOUNT -> AccountTab(
+                modifier = tabModifier,
+                scrollState = accountScroll,
+                viewModel = viewModel
+            )
+        }
+    }
+}
+
+/**
+ * The scrolling column behind each tab.
+ *
+ * One wrapper so all three get the same 16dp inset and the same gap between groups. The gap is
+ * what separates them now that the dividers are gone, and everything inside one group is spaced
+ * by the card that holds it.
+ */
+@Composable
+private fun SettingsTabContent(
+    scrollState: ScrollState,
+    modifier: Modifier = Modifier,
+    content: @Composable ColumnScope.() -> Unit
+) {
+    Column(
+        modifier = modifier
+            .padding(16.dp)
+            .fillMaxSize()
+            .verticalScroll(scrollState),
+        verticalArrangement = Arrangement.spacedBy(24.dp),
+        content = content
+    )
+}
+
+/**
+ * How the app presents itself, and what it counts.
+ *
+ * Sections are in the order they always were, and the four of them stay separate cards rather
+ * than being merged: each has its own blurb, and a single card holding a rate date and a list of
+ * substrings would read as one setting with two halves rather than two settings.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun GeneralTab(
+    scrollState: ScrollState,
+    modifier: Modifier = Modifier,
+    viewModel: SettingsViewModel
+) {
     val themeMode by viewModel.themeMode.collectAsStateWithLifecycle()
     val language by viewModel.language.collectAsStateWithLifecycle()
+    val baseCurrency by viewModel.baseCurrency.collectAsStateWithLifecycle()
+    val exclusionRules by viewModel.exclusionRules.collectAsStateWithLifecycle()
+    val exclusionInput by viewModel.exclusionInput.collectAsStateWithLifecycle()
+    val exclusionMessage by viewModel.exclusionMessage.collectAsStateWithLifecycle()
+    val exchangeRates by viewModel.exchangeRates.collectAsStateWithLifecycle()
+    val isRefreshingRates by viewModel.isRefreshingRates.collectAsStateWithLifecycle()
+    val ratesMessage by viewModel.ratesMessage.collectAsStateWithLifecycle()
+    val appLockEnabled by viewModel.appLockEnabled.collectAsStateWithLifecycle()
+    val lockCapability by viewModel.lockCapability.collectAsStateWithLifecycle()
+
+    SettingsTabContent(scrollState = scrollState, modifier = modifier) {
+        SettingsSection(title = stringResource(R.string.settings_preferences)) {
+            RowLabel(stringResource(R.string.settings_theme_mode))
+            SingleChoiceSegmentedButtonRow {
+                ThemeMode.entries.forEach { mode ->
+                    SegmentedButton(
+                        selected = themeMode == mode,
+                        onClick = { viewModel.setThemeMode(mode) },
+                        shape = MaterialTheme.shapes.small,
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Text(
+                            text = when (mode) {
+                                ThemeMode.SYSTEM -> stringResource(R.string.settings_theme_system)
+                                ThemeMode.LIGHT -> stringResource(R.string.settings_theme_light)
+                                ThemeMode.DARK -> stringResource(R.string.settings_theme_dark)
+                            },
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                    }
+                }
+            }
+
+            HorizontalDivider()
+
+            RowLabel(stringResource(R.string.settings_language))
+            LanguagePicker(
+                selected = language,
+                onSelect = viewModel::setLanguage
+            )
+        }
+
+        SettingsSection(title = stringResource(R.string.settings_base_currency)) {
+            Text(
+                text = stringResource(R.string.settings_base_currency_blurb),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+
+            BaseCurrencySection(
+                baseCurrency = baseCurrency,
+                rates = exchangeRates,
+                isRefreshing = isRefreshingRates,
+                message = ratesMessage,
+                onSelect = viewModel::setBaseCurrency,
+                onRefresh = viewModel::refreshRates
+            )
+        }
+
+        SettingsSection(title = stringResource(R.string.settings_exclusion_rules)) {
+            Text(
+                text = stringResource(R.string.settings_exclusion_rules_blurb),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            ExclusionRulesSection(
+                rules = exclusionRules,
+                input = exclusionInput,
+                message = exclusionMessage,
+                onInputChange = viewModel::onExclusionInputChange,
+                onAdd = viewModel::addExclusionRule,
+                onRemove = viewModel::removeExclusionRule
+            )
+        }
+
+        SettingsSection(title = stringResource(R.string.settings_app_lock)) {
+            Text(
+                text = stringResource(R.string.settings_app_lock_blurb),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            AppLockSection(
+                enabled = appLockEnabled,
+                capability = lockCapability,
+                onChange = viewModel::setAppLockEnabled
+            )
+        }
+    }
+}
+
+/**
+ * How transactions get in, and how they are kept.
+ *
+ * The five sections here are the ones that touch rows rather than the way rows are shown, which
+ * is why they sit together: a bank connection and a statement import are two doors to the same
+ * data, a transaction bank is the label that data ends up carrying, and backup and restore are
+ * the two halves of keeping a copy of it.
+ */
+@Composable
+private fun DataTab(
+    scrollState: ScrollState,
+    modifier: Modifier = Modifier,
+    viewModel: SettingsViewModel
+) {
     val selectedBankId by viewModel.selectedBankId.collectAsStateWithLifecycle()
     val tokenInput by viewModel.tokenInput.collectAsStateWithLifecycle()
     val statusMessage by viewModel.statusMessage.collectAsStateWithLifecycle()
@@ -106,299 +356,188 @@ fun SettingsScreen(
     val backupMessage by viewModel.backupMessage.collectAsStateWithLifecycle()
     val restoreMessage by viewModel.restoreMessage.collectAsStateWithLifecycle()
     val isRestoring by viewModel.isRestoring.collectAsStateWithLifecycle()
-    val baseCurrency by viewModel.baseCurrency.collectAsStateWithLifecycle()
-    val exclusionRules by viewModel.exclusionRules.collectAsStateWithLifecycle()
-    val exclusionInput by viewModel.exclusionInput.collectAsStateWithLifecycle()
-    val exclusionMessage by viewModel.exclusionMessage.collectAsStateWithLifecycle()
-    val exchangeRates by viewModel.exchangeRates.collectAsStateWithLifecycle()
-    val isRefreshingRates by viewModel.isRefreshingRates.collectAsStateWithLifecycle()
-    val ratesMessage by viewModel.ratesMessage.collectAsStateWithLifecycle()
-    val appLockEnabled by viewModel.appLockEnabled.collectAsStateWithLifecycle()
-    val lockCapability by viewModel.lockCapability.collectAsStateWithLifecycle()
 
-    // The language picked below is applied by AppLocale in attachBaseContext, which has
-    // already run by the time this screen exists: the only way to apply a new pick is to
-    // rebuild the activity. The ViewModel emits after the tag is stored, so the recreation
-    // reads the new value instead of racing the write.
-    val context = LocalContext.current
-    LaunchedEffect(Unit) {
-        viewModel.languageChanged.collect { context.findActivity().recreate() }
-    }
-
-    // Asked on composition rather than held: a fingerprint the user adds or removes in the
-    // device's own settings is picked up by returning to this screen, and a value read at
-    // launch would still be offering a switch for a credential that is no longer there.
-    LaunchedEffect(Unit) { viewModel.refreshLockCapability(context) }
-
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text(stringResource(R.string.settings)) },
-                navigationIcon = {
-                    if (showBackButton) {
-                        IconButton(onClick = onBack) {
-                            Icon(
-                                Icons.AutoMirrored.Filled.ArrowBack,
-                                contentDescription = stringResource(R.string.common_back)
-                            )
-                        }
-                    }
-                }
+    SettingsTabContent(scrollState = scrollState, modifier = modifier) {
+        SettingsSection(title = stringResource(R.string.settings_bank_connection)) {
+            BankPicker(
+                banks = viewModel.availableBanks,
+                selectedBankId = selectedBankId,
+                onSelect = viewModel::selectBank
             )
-        }
-    ) { padding ->
-        Column(
-            modifier = modifier
-                .padding(padding)
-                .padding(16.dp)
-                .verticalScroll(rememberScrollState()),
-            // The gap between groups is what separates them now that the dividers are gone,
-            // and everything inside one group is spaced by the card that holds it.
-            verticalArrangement = Arrangement.spacedBy(24.dp)
-        ) {
-            SettingsSection(title = stringResource(R.string.settings_preferences)) {
-                RowLabel(stringResource(R.string.settings_theme_mode))
-                SingleChoiceSegmentedButtonRow {
-                    ThemeMode.entries.forEach { mode ->
-                        SegmentedButton(
-                            selected = themeMode == mode,
-                            onClick = { viewModel.setThemeMode(mode) },
-                            shape = MaterialTheme.shapes.small,
-                            modifier = Modifier.weight(1f)
-                        ) {
-                            Text(
-                                text = when (mode) {
-                                    ThemeMode.SYSTEM -> stringResource(R.string.settings_theme_system)
-                                    ThemeMode.LIGHT -> stringResource(R.string.settings_theme_light)
-                                    ThemeMode.DARK -> stringResource(R.string.settings_theme_dark)
-                                },
-                                style = MaterialTheme.typography.bodySmall
-                            )
-                        }
-                    }
-                }
 
-                HorizontalDivider()
-
-                RowLabel(stringResource(R.string.settings_language))
-                LanguagePicker(
-                    selected = language,
-                    onSelect = viewModel::setLanguage
-                )
-            }
-
-            SettingsSection(title = stringResource(R.string.settings_base_currency)) {
-                Text(
-                    text = stringResource(R.string.settings_base_currency_blurb),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-
-                BaseCurrencySection(
-                    baseCurrency = baseCurrency,
-                    rates = exchangeRates,
-                    isRefreshing = isRefreshingRates,
-                    message = ratesMessage,
-                    onSelect = viewModel::setBaseCurrency,
-                    onRefresh = viewModel::refreshRates
-                )
-            }
-
-            SettingsSection(title = stringResource(R.string.settings_exclusion_rules)) {
-                Text(
-                    text = stringResource(R.string.settings_exclusion_rules_blurb),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                ExclusionRulesSection(
-                    rules = exclusionRules,
-                    input = exclusionInput,
-                    message = exclusionMessage,
-                    onInputChange = viewModel::onExclusionInputChange,
-                    onAdd = viewModel::addExclusionRule,
-                    onRemove = viewModel::removeExclusionRule
-                )
-            }
-
-            SettingsSection(title = stringResource(R.string.settings_bank_connection)) {
-                BankPicker(
-                    banks = viewModel.availableBanks,
-                    selectedBankId = selectedBankId,
-                    onSelect = viewModel::selectBank
-                )
-
-                if (selectedBankId != null) {
-                    if (isTokenConfigured) {
-                        Text(
-                            text = lastSyncedAt?.let {
-                                stringResource(R.string.settings_token_saved_synced, relativeTime(it))
-                            } ?: stringResource(R.string.settings_token_not_synced),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-
-                        SyncRangePicker(
-                            days = syncDays,
-                            enabled = !isSyncing,
-                            onSelect = viewModel::setSyncDays
-                        )
-
-                        syncProgress?.let { progress ->
-                            Text(
-                                text = progressText(progress),
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                    } else {
-                        OutlinedTextField(
-                            value = tokenInput,
-                            onValueChange = viewModel::onTokenChange,
-                            label = { Text(stringResource(R.string.settings_access_token)) },
-                            modifier = Modifier.fillMaxWidth(),
-                            singleLine = true,
-                            visualTransformation = PasswordVisualTransformation()
-                        )
-                    }
-
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        if (isTokenConfigured) {
-                            OutlinedButton(
-                                onClick = viewModel::verifyConnection,
-                                enabled = !isSyncing
-                            ) {
-                                Text(stringResource(R.string.settings_test))
-                            }
-                            Button(
-                                onClick = viewModel::syncNow,
-                                enabled = !isSyncing
-                            ) {
-                                if (isSyncing) {
-                                    CircularProgressIndicator(
-                                        modifier = Modifier.size(16.dp),
-                                        strokeWidth = 2.dp
-                                    )
-                                } else {
-                                    Text(stringResource(R.string.settings_sync_now))
-                                }
-                            }
-                            OutlinedButton(onClick = viewModel::clearToken) {
-                                Text(stringResource(R.string.settings_remove_token))
-                            }
-                        } else {
-                            Button(
-                                onClick = viewModel::saveToken,
-                                enabled = tokenInput.isNotBlank()
-                            ) {
-                                Text(stringResource(R.string.settings_save_token))
-                            }
-                        }
-                    }
-                } else {
+            if (selectedBankId != null) {
+                if (isTokenConfigured) {
                     Text(
-                        text = stringResource(R.string.settings_select_bank_hint),
+                        text = lastSyncedAt?.let {
+                            stringResource(R.string.settings_token_saved_synced, relativeTime(it))
+                        } ?: stringResource(R.string.settings_token_not_synced),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
-                }
 
-                statusMessage?.let { message ->
-                    Text(
-                        text = message.resolve(),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.primary
+                    SyncRangePicker(
+                        days = syncDays,
+                        enabled = !isSyncing,
+                        onSelect = viewModel::setSyncDays
+                    )
+
+                    syncProgress?.let { progress ->
+                        Text(
+                            text = progressText(progress),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                } else {
+                    OutlinedTextField(
+                        value = tokenInput,
+                        onValueChange = viewModel::onTokenChange,
+                        label = { Text(stringResource(R.string.settings_access_token)) },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true,
+                        visualTransformation = PasswordVisualTransformation()
                     )
                 }
-            }
 
-            SettingsSection(title = stringResource(R.string.import_section_title)) {
-                Text(
-                    text = stringResource(R.string.import_section_blurb),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                StatementImportSection()
-            }
-
-            SettingsSection(title = stringResource(R.string.settings_transaction_banks)) {
-                Text(
-                    text = stringResource(R.string.settings_transaction_banks_blurb),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                TransactionBanksSection(
-                    banks = banks,
-                    nameInput = bankNameInput,
-                    message = bankMessage,
-                    onNameChange = viewModel::onBankNameChange,
-                    onAdd = viewModel::addBank,
-                    onRename = viewModel::renameBank,
-                    onMoveUp = viewModel::moveBankUp,
-                    onMoveDown = viewModel::moveBankDown,
-                    onArchiveChange = viewModel::setBankArchived
-                )
-            }
-
-            SettingsSection(title = stringResource(R.string.settings_app_lock)) {
-                Text(
-                    text = stringResource(R.string.settings_app_lock_blurb),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                AppLockSection(
-                    enabled = appLockEnabled,
-                    capability = lockCapability,
-                    onChange = viewModel::setAppLockEnabled
-                )
-            }
-
-            SettingsSection(title = stringResource(R.string.settings_account)) {
-                OutlinedButton(
-                    onClick = viewModel::signOut,
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Text(
-                        text = stringResource(R.string.sign_out),
-                        color = MaterialTheme.colorScheme.error
-                    )
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    if (isTokenConfigured) {
+                        OutlinedButton(
+                            onClick = viewModel::verifyConnection,
+                            enabled = !isSyncing
+                        ) {
+                            Text(stringResource(R.string.settings_test))
+                        }
+                        Button(
+                            onClick = viewModel::syncNow,
+                            enabled = !isSyncing
+                        ) {
+                            if (isSyncing) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(16.dp),
+                                    strokeWidth = 2.dp
+                                )
+                            } else {
+                                Text(stringResource(R.string.settings_sync_now))
+                            }
+                        }
+                        OutlinedButton(onClick = viewModel::clearToken) {
+                            Text(stringResource(R.string.settings_remove_token))
+                        }
+                    } else {
+                        Button(
+                            onClick = viewModel::saveToken,
+                            enabled = tokenInput.isNotBlank()
+                        ) {
+                            Text(stringResource(R.string.settings_save_token))
+                        }
+                    }
                 }
-                // The version belongs with sign-out rather than floating above it: it is the
-                // last thing on the page either way, and inside the card it cannot be read as
-                // belonging to the bank list.
+            } else {
                 Text(
-                    text = stringResource(R.string.settings_version),
+                    text = stringResource(R.string.settings_select_bank_hint),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
 
-            SettingsSection(title = stringResource(R.string.settings_backup)) {
+            statusMessage?.let { message ->
                 Text(
-                    text = stringResource(R.string.settings_backup_blurb),
+                    text = message.resolve(),
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                BackupSection(
-                    status = backupStatus,
-                    message = backupMessage,
-                    onPick = viewModel::onBackupFolderPicked,
-                    onBackupNow = viewModel::backupNow,
-                    onDisable = viewModel::disableBackup
+                    color = MaterialTheme.colorScheme.primary
                 )
             }
+        }
 
-            SettingsSection(title = stringResource(R.string.settings_restore)) {
+        SettingsSection(title = stringResource(R.string.import_section_title)) {
+            Text(
+                text = stringResource(R.string.import_section_blurb),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            StatementImportSection()
+        }
+
+        SettingsSection(title = stringResource(R.string.settings_transaction_banks)) {
+            Text(
+                text = stringResource(R.string.settings_transaction_banks_blurb),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            TransactionBanksSection(
+                banks = banks,
+                nameInput = bankNameInput,
+                message = bankMessage,
+                onNameChange = viewModel::onBankNameChange,
+                onAdd = viewModel::addBank,
+                onRename = viewModel::renameBank,
+                onMoveUp = viewModel::moveBankUp,
+                onMoveDown = viewModel::moveBankDown,
+                onArchiveChange = viewModel::setBankArchived
+            )
+        }
+
+        SettingsSection(title = stringResource(R.string.settings_backup)) {
+            Text(
+                text = stringResource(R.string.settings_backup_blurb),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            BackupSection(
+                status = backupStatus,
+                message = backupMessage,
+                onPick = viewModel::onBackupFolderPicked,
+                onBackupNow = viewModel::backupNow,
+                onDisable = viewModel::disableBackup
+            )
+        }
+
+        SettingsSection(title = stringResource(R.string.settings_restore)) {
+            Text(
+                text = stringResource(R.string.settings_restore_blurb),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            RestoreSection(
+                isRestoring = isRestoring,
+                message = restoreMessage,
+                onPick = viewModel::onRestoreFilePicked
+            )
+        }
+    }
+}
+
+/**
+ * Who is signed in, and nothing else.
+ *
+ * The one section with no state behind it, which is why the tab holds a single card: sign-out is
+ * a consequence of an identity rather than a preference, and putting it beside appearance and
+ * totals would invite the reading that it is one of those.
+ */
+@Composable
+private fun AccountTab(
+    scrollState: ScrollState,
+    modifier: Modifier = Modifier,
+    viewModel: SettingsViewModel
+) {
+    SettingsTabContent(scrollState = scrollState, modifier = modifier) {
+        SettingsSection(title = stringResource(R.string.settings_account)) {
+            OutlinedButton(
+                onClick = viewModel::signOut,
+                modifier = Modifier.fillMaxWidth()
+            ) {
                 Text(
-                    text = stringResource(R.string.settings_restore_blurb),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                RestoreSection(
-                    isRestoring = isRestoring,
-                    message = restoreMessage,
-                    onPick = viewModel::onRestoreFilePicked
+                    text = stringResource(R.string.sign_out),
+                    color = MaterialTheme.colorScheme.error
                 )
             }
+            // The version belongs inside the card with sign-out rather than floating above it,
+            // so it cannot be read as the caption to a list of rows.
+            Text(
+                text = stringResource(R.string.settings_version),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
         }
     }
 }
