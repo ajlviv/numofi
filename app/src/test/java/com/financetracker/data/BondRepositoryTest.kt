@@ -7,6 +7,7 @@ import com.financetracker.model.BankRef
 import com.financetracker.model.Bond
 import com.financetracker.model.BondTradeSide
 import com.financetracker.model.TransactionType
+import com.financetracker.model.totalsByCurrency
 import com.financetracker.model.TransferDirection
 import com.financetracker.repository.BondRepository
 import com.financetracker.repository.RecordTradeResult
@@ -109,6 +110,30 @@ class BondRepositoryTest {
     )
 
     private suspend fun cashRows() = db.transactionDao().getAllForUser("uid-1").first()
+
+    /**
+     * A redemption at par, which is what a matured ОВДП pays.
+     *
+     * The date is later than a sale's so a list ordered oldest first still reads
+     * buy-then-redeem, which is the order the fold depends on.
+     */
+    private suspend fun redeem(
+        quantity: Int,
+        price: Double = 1000.0,
+        userId: String = "uid-1"
+    ) = repo.recordTrade(
+        userId = userId,
+        bond = bond,
+        side = BondTradeSide.REDEMPTION,
+        quantity = quantity,
+        price = price,
+        accruedInterest = 0.0,
+        commission = 0.0,
+        tradeDate = 1_700_200_000_000,
+        bank = bank,
+        settlementCurrency = "UAH",
+        settlementAmount = null
+    )
 
     // MARK: - Backing up
 
@@ -426,6 +451,80 @@ class BondRepositoryTest {
 
         assertEquals(RecordTradeResult.Oversell(1), second)
         assertEquals(1, repo.heldQuantity(bond.isin))
+    }
+
+    // MARK: - Redemption
+
+    @Test
+    fun `a redemption closes the holding and brings the nominal back as a transfer`() = runTest {
+        buy(quantity = 2)
+
+        assertTrue(redeem(quantity = 2) is RecordTradeResult.Recorded)
+
+        assertEquals(0, repo.heldQuantity(bond.isin))
+        // The mirror of the purchase. A transfer, not income: the nominal coming back is the
+        // user's own money, and counting it as earnings would report a matured bond as a gain.
+        val inflow = cashRows().single { it.transferDirection == TransferDirection.IN }
+        assertEquals(2000.0, inflow.amount, 0.0001)
+    }
+
+    @Test
+    fun `a redemption's cash row is neither income nor an expense`() = runTest {
+        buy(quantity = 2)
+
+        redeem(quantity = 2)
+
+        val totals = totalsByCurrency(cashRows().map { it.toDomain() }).single()
+
+        assertEquals(0.0, totals.income, 0.0)
+        assertEquals(0.0, totals.expense, 0.0)
+        assertEquals(2000.0, totals.transferIn, 0.0)
+    }
+
+    @Test
+    fun `a redemption is stored as a redemption and not as a sale`() = runTest {
+        buy(quantity = 1)
+
+        redeem(quantity = 1)
+
+        // The note in the list is built from this, so a sale's word would describe an event
+        // that did not happen — nobody bought these bonds back.
+        assertEquals(
+            listOf(BondTradeSide.BUY, BondTradeSide.REDEMPTION),
+            db.bondDao().getTrades().map { it.side }
+        )
+    }
+
+    @Test
+    fun `a redemption asks for a backup once the rows are committed`() = runTest {
+        buy(quantity = 1)
+        backups.reasons.clear()
+
+        redeem(quantity = 1)
+
+        assertEquals(listOf(BackupReason.BOND_TRADE), backups.reasons)
+    }
+
+    @Test
+    fun `redeeming more than is held is refused, and writes nothing`() = runTest {
+        buy(quantity = 2)
+
+        val result = redeem(quantity = 5)
+
+        assertEquals(RecordTradeResult.Oversell(2), result)
+        assertEquals(1, db.bondDao().getTrades().size)
+        assertEquals(1, cashRows().size)
+    }
+
+    @Test
+    fun `a redemption of an instrument never bought is refused and creates nothing`() = runTest {
+        // Nothing was ever held, so there is nothing to redeem — and the instrument must not
+        // be created in order to be emptied.
+        val result = redeem(quantity = 1)
+
+        assertEquals(RecordTradeResult.Oversell(0), result)
+        assertTrue(db.bondDao().getBondsOnce().isEmpty())
+        assertEquals(0, cashRows().size)
     }
 
     // MARK: - Validation

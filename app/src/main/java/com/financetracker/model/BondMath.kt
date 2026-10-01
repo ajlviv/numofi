@@ -1,5 +1,10 @@
 package com.financetracker.model
 
+import java.time.Instant
+import java.time.LocalDate
+import java.time.ZoneId
+import java.time.temporal.ChronoUnit
+
 /**
  * Every figure the bond screens show.
  *
@@ -13,6 +18,15 @@ object BondMath {
 
     /** The most a bond can plausibly cost, as a multiple of its nominal. */
     const val MAX_PRICE_OF_NOMINAL = 2.0
+
+    /**
+     * The year a projected coupon is pro-rated over: actual/365, the everyday convention.
+     *
+     * Named rather than inlined because it is a convention and not a fact about the calendar.
+     * A bank quoting the same offer on a 360-day year comes out a few hryvnias apart, and that
+     * is only findable if the divisor is visible.
+     */
+    private const val DAYS_IN_YEAR = 365.0
 
     /** The currencies a bond may be denominated in. [Currency.kt] owns this list. */
     const val DEFAULT_NOMINAL_CURRENCY = "UAH"
@@ -117,6 +131,88 @@ object BondMath {
     }
 
     /**
+     * What a holding is expected to pay by its maturity: the nominal back, plus every coupon
+     * falling due while it is held.
+     *
+     * That is the shape of an ОВДП payout — a broker's schedule is a run of coupon rows and a
+     * final row of nominal plus coupon — and it is deliberately *not* "the money you paid plus
+     * interest on it". A bond accrues its coupon on the [nominal] and repays the [nominal], so
+     * whatever a buyer paid above the face value is money spent and never money stored.
+     * Projecting `invested + invested × rate` hands that premium back and then pays the coupon
+     * rate on top of it, which is a figure no issuer pays and no broker's schedule shows. On a
+     * bond bought near par the two agree, which is why it went unnoticed for as long as it did.
+     *
+     * The number of payments comes from the schedule run backwards off [maturityMillis] in
+     * [couponPeriodMonths] steps, counting the dates strictly after [heldSinceMillis]. Maturity
+     * is one of them, because brokers pay the last coupon in the same row as the nominal.
+     * Strictly after, not on or after: a bond bought on a coupon date trades ex-coupon and does
+     * not collect that date's coupon.
+     *
+     * The maturity date anchors the schedule because it is the one coupon date that is
+     * certain — the others are not recorded. A bond bought between two of them is therefore
+     * counted by the schedule it sits in rather than by the days it was held, which is what a
+     * broker's schedule does too. With no [couponPeriodMonths] there is no schedule to run, so
+     * the coupon falls back to being pro-rated over actual/365 — an estimate, and reported with
+     * a null [BondPayout.payments] so the caller can say so.
+     *
+     * Null when there is nothing to project rather than a zero standing in for an unknown: no
+     * recorded coupon, no maturity, a maturity already passed — a payout that already happened
+     * is a recorded redemption, and projecting it again would be a second answer to a question
+     * the ledger has settled — or nothing left held, which the card already says in other words.
+     */
+    fun expectedAtMaturity(
+        invested: Double,
+        quantity: Int,
+        nominal: Double,
+        couponPercent: Double?,
+        couponPeriodMonths: Int?,
+        heldSinceMillis: Long,
+        maturityMillis: Long?,
+        zone: ZoneId
+    ): BondPayout? {
+        if (couponPercent == null || maturityMillis == null || quantity <= 0) return null
+        val heldFrom = localDate(heldSinceMillis, zone)
+        val maturity = localDate(maturityMillis, zone)
+        if (!maturity.isAfter(heldFrom)) return null
+
+        val faceValue = quantity * nominal
+        val payments = couponPayments(heldFrom, maturity, couponPeriodMonths)
+        val perPeriod = periodCouponIncome(quantity, nominal, couponPercent, couponPeriodMonths)
+        val coupon = if (payments != null && perPeriod != null) {
+            perPeriod * payments
+        } else {
+            faceValue * couponPercent / 100.0 * ChronoUnit.DAYS.between(heldFrom, maturity) / DAYS_IN_YEAR
+        }
+        return BondPayout(
+            invested = invested,
+            nominal = faceValue,
+            coupon = coupon,
+            payments = payments
+        )
+    }
+
+    /**
+     * How many coupon payments fall between [heldFrom] and [maturity], counting maturity, or
+     * null when no period is recorded and no schedule can be run.
+     *
+     * Every step strictly decreases the date, so the walk terminates however far back it goes.
+     */
+    private fun couponPayments(heldFrom: LocalDate, maturity: LocalDate, couponPeriodMonths: Int?): Int? {
+        if (couponPeriodMonths == null || couponPeriodMonths <= 0) return null
+        var payments = 0
+        var date = maturity
+        while (date.isAfter(heldFrom)) {
+            payments++
+            date = date.minusMonths(couponPeriodMonths.toLong())
+        }
+        return payments
+    }
+
+    /** The calendar date an instant falls on, as this zone reads it. */
+    private fun localDate(millis: Long, zone: ZoneId): LocalDate =
+        Instant.ofEpochMilli(millis).atZone(zone).toLocalDate()
+
+    /**
      * Folds trades into a holding, or null when there is nothing to hold.
      *
      * A running fold rather than a weighted average over the whole set, so that selling part
@@ -145,11 +241,14 @@ object BondMath {
                     quantity += trade.quantity
                     cost += total
                 }
-                BondTradeSide.SELL -> {
-                    val sold = minOf(trade.quantity, quantity)
-                    val proportion = if (quantity == 0) 0.0 else sold.toDouble() / quantity
+                // A redemption takes bonds off the holding exactly as a sale does, and the
+                // cost that bought them goes with them. Proportional rather than all of it,
+                // because ОВДП can be redeemed in part.
+                BondTradeSide.SELL, BondTradeSide.REDEMPTION -> {
+                    val gone = minOf(trade.quantity, quantity)
+                    val proportion = if (quantity == 0) 0.0 else gone.toDouble() / quantity
                     cost -= cost * proportion
-                    quantity -= sold
+                    quantity -= gone
                 }
             }
             lastPrice = trade.price
@@ -166,7 +265,10 @@ object BondMath {
             cost = cost,
             averageCost = average,
             lastPrice = lastPrice,
-            annualCouponIncome = annualCouponIncome(quantity, bond.nominal, bond.couponPercent)
+            annualCouponIncome = annualCouponIncome(quantity, bond.nominal, bond.couponPercent),
+            // The first trade, not the most recent one: a projected payout is earned over the
+            // whole time the bonds were held, so it starts where the holding did.
+            heldSince = trades.minOf { it.tradeDate }
         )
     }
 

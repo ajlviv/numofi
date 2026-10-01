@@ -117,7 +117,36 @@ internal fun BondEntryForm(
     val accruedValue = accrued.replace(',', '.').toDoubleOrNull() ?: 0.0
     val commissionValue = commission.replace(',', '.').toDoubleOrNull() ?: 0.0
     val couponValue = coupon.replace(',', '.').toDoubleOrNull()
-    val priceProblem = BondMath.validatePrice(priceValue, nominalValue.takeIf { it > 0.0 })
+    val isRedemption = side == BondTradeSide.REDEMPTION
+
+    // A redemption is entered as the whole credit the bank put on the card, because that is the
+    // figure a statement prints and dividing it by the quantity is work the app can do instead.
+    // Money per bond is what gets stored, what the note reads back and what the position is
+    // folded from, so the division happens once, here, and nothing downstream knows a total was
+    // ever involved.
+    val perBondPrice = if (isRedemption && quantityValue > 0) priceValue / quantityValue else priceValue
+    // Neither is paid on a redemption — the issuer returns the nominal and nothing else — so
+    // they are fixed at zero rather than read from fields a redemption does not show. The coupon
+    // that may arrive in the same credit is a separate income row, not part of this one.
+    val effectiveAccrued = if (isRedemption) 0.0 else accruedValue
+    val effectiveCommission = if (isRedemption) 0.0 else commissionValue
+
+    // A per-bond price cannot be worked out before the quantity is known, so the price check
+    // waits for it instead of comparing a whole credit against one bond's nominal. The quantity
+    // field is already saying what is missing.
+    val priceProblem = if (isRedemption && quantityValue <= 0) {
+        null
+    } else {
+        BondMath.validatePrice(perBondPrice, nominalValue.takeIf { it > 0.0 })
+    }
+
+    // A hint, never a value the form fills in — blank until the quantity is known, because
+    // "0.00 ₴" would read as a figure rather than as a missing one.
+    val pricePlaceholder = when {
+        !isRedemption -> MoneyFormat.format(995.0, bondCurrency)
+        quantityValue > 0 -> MoneyFormat.format(nominalValue * quantityValue, bondCurrency)
+        else -> ""
+    }
 
     // The live total, so the figure the user is about to commit is on screen while they
     // type it rather than only after. This is the number they will check against the broker.
@@ -125,7 +154,7 @@ internal fun BondEntryForm(
     // percentage is involved. Refused for a price the form itself rejects: totalling an
     // input it calls impossible would be the very mistake the error is warning about.
     val marketTotal = if (priceProblem == null && quantityValue > 0 && priceValue > 0.0) {
-        quantityValue * priceValue + quantityValue * accruedValue + commissionValue
+        quantityValue * perBondPrice + quantityValue * effectiveAccrued + effectiveCommission
     } else {
         null
     }
@@ -142,7 +171,7 @@ internal fun BondEntryForm(
                     shape = MaterialTheme.shapes.small,
                     modifier = Modifier.weight(1f)
                 ) {
-                    Text(if (entry == BondTradeSide.BUY) stringResource(R.string.add_buy) else stringResource(R.string.add_sell), style = MaterialTheme.typography.bodyMedium)
+                    Text(sideWord(entry), style = MaterialTheme.typography.bodyMedium)
                 }
             }
         }
@@ -166,66 +195,73 @@ internal fun BondEntryForm(
             )
         }
 
-        OutlinedTextField(
-            value = name,
-            onValueChange = { name = it },
-            label = { RequiredLabel(stringResource(R.string.add_name)) },
-            placeholder = { Text(stringResource(R.string.add_name_placeholder)) },
-            modifier = Modifier.fillMaxWidth(),
-            singleLine = true
-        )
-
-        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+        // Terms are what a purchase adds to an instrument the app has not seen. A redemption pays
+        // back something already held, whose terms are already stored — and the repository re-reads
+        // an existing bond rather than updating it, so editing them here would silently do
+        // nothing. They stay when the lookup found nothing, because then there is no instrument at
+        // all and the name and nominal are the only things that can be filled in.
+        if (!isRedemption || knownBond == null) {
             OutlinedTextField(
-                value = nominal,
-                onValueChange = { nominal = it },
-                // Prefilled with 1000, the everyday nominal, and kept editable because a
-                // bond's face value determines the coupon and the price ceiling.
-                label = { RequiredLabel(stringResource(R.string.add_nominal)) },
-                placeholder = { Text(stringResource(R.string.add_nominal_placeholder)) },
-                modifier = Modifier.weight(1f),
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                value = name,
+                onValueChange = { name = it },
+                label = { RequiredLabel(stringResource(R.string.add_name)) },
+                placeholder = { Text(stringResource(R.string.add_name_placeholder)) },
+                modifier = Modifier.fillMaxWidth(),
                 singleLine = true
             )
-            SingleChoiceDropdown(
-                label = stringResource(R.string.add_bond_currency),
-                options = RECORDABLE_CURRENCIES.map { it to it },
-                selected = bondCurrency,
-                onSelect = {
-                    // Settlement follows the bond unless the user had picked something of
-                    // their own: a USD bond opens settled in USD, and a bond currency change
-                    // does not silently re-file a settlement the user deliberately set.
-                    if (currency == bondCurrency) currency = it
-                    bondCurrency = it
-                },
-                modifier = Modifier.weight(1f)
-            )
+
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                OutlinedTextField(
+                    value = nominal,
+                    onValueChange = { nominal = it },
+                    // Prefilled with 1000, the everyday nominal, and kept editable because a
+                    // bond's face value determines the coupon and the price ceiling.
+                    label = { RequiredLabel(stringResource(R.string.add_nominal)) },
+                    placeholder = { Text(stringResource(R.string.add_nominal_placeholder)) },
+                    modifier = Modifier.weight(1f),
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                    singleLine = true
+                )
+                SingleChoiceDropdown(
+                    label = stringResource(R.string.add_bond_currency),
+                    options = RECORDABLE_CURRENCIES.map { it to it },
+                    selected = bondCurrency,
+                    onSelect = {
+                        // Settlement follows the bond unless the user had picked something of
+                        // their own: a USD bond opens settled in USD, and a bond currency change
+                        // does not silently re-file a settlement the user deliberately set.
+                        if (currency == bondCurrency) currency = it
+                        bondCurrency = it
+                    },
+                    modifier = Modifier.weight(1f)
+                )
+            }
+
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                OutlinedTextField(
+                    value = coupon,
+                    onValueChange = { coupon = it },
+                    label = { Text(stringResource(R.string.add_coupon_percent)) },
+                    placeholder = { Text(stringResource(R.string.add_coupon_placeholder)) },
+                    modifier = Modifier.weight(1f),
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                    singleLine = true
+                )
+                OutlinedTextField(
+                    value = couponPeriod,
+                    onValueChange = { couponPeriod = it.filter(Char::isDigit) },
+                    // Months rather than a frequency, because that is what a coupon calendar is
+                    // written in and it is the only figure the period-income calculation needs.
+                    label = { Text(stringResource(R.string.add_coupon_period)) },
+                    placeholder = { Text(stringResource(R.string.add_period_placeholder)) },
+                    modifier = Modifier.weight(1f),
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    singleLine = true
+                )
+            }
+
+            MaturityField(maturity = maturity, onChange = { maturity = it })
         }
-
-        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            OutlinedTextField(
-                value = coupon,
-                onValueChange = { coupon = it },
-                label = { Text(stringResource(R.string.add_coupon_percent)) },
-                placeholder = { Text(stringResource(R.string.add_coupon_placeholder)) },
-                modifier = Modifier.weight(1f),
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                singleLine = true
-            )
-            OutlinedTextField(
-                value = couponPeriod,
-                onValueChange = { couponPeriod = it.filter(Char::isDigit) },
-                // Months rather than a frequency, because that is what a coupon calendar is
-                // written in and it is the only figure the period-income calculation needs.
-                label = { Text(stringResource(R.string.add_coupon_period)) },
-                placeholder = { Text(stringResource(R.string.add_period_placeholder)) },
-                modifier = Modifier.weight(1f),
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                singleLine = true
-            )
-        }
-
-        MaturityField(maturity = maturity, onChange = { maturity = it })
 
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             OutlinedTextField(
@@ -242,8 +278,18 @@ internal fun BondEntryForm(
                 // Money per bond in the bond's currency: what the broker's confirmation
                 // prints. Not a percentage — the whole point of the v7 change is that the
                 // number typed is the number spent, so 1020 means 1020.00, not 1020%.
-                label = { RequiredLabel(stringResource(R.string.add_price_per_bond)) },
-                placeholder = { Text(MoneyFormat.format(995.0, bondCurrency)) },
+                //
+                // A redemption is the one exception, and holds the whole credit instead: that
+                // is the figure on the bank statement, and the per-bond price it divides into
+                // is shown back underneath rather than asked for.
+                label = {
+                    RequiredLabel(
+                        stringResource(
+                            if (isRedemption) R.string.add_redeemed_total else R.string.add_price_per_bond
+                        )
+                    )
+                },
+                placeholder = { Text(pricePlaceholder) },
                 modifier = Modifier.weight(1f),
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                 singleLine = true
@@ -262,6 +308,18 @@ internal fun BondEntryForm(
                     color = MaterialTheme.colorScheme.error,
                     style = MaterialTheme.typography.bodySmall
                 )
+            // The one figure a redemption's total hides, read back while it is typed. Money per
+            // bond is what gets stored and what the position is folded from, so a mistyped total
+            // is visible here instead of only in the holding afterwards.
+            isRedemption && quantityValue > 0 && priceValue > 0.0 ->
+                Text(
+                    text = stringResource(
+                        R.string.add_redeemed_per_bond,
+                        MoneyFormat.text(perBondPrice, bondCurrency).plain
+                    ),
+                    style = MaterialTheme.typography.bodySmall
+                )
+            isRedemption -> Unit
             nominalValue > 0.0 && priceValue > 0.0 ->
                 Text(
                     text = stringResource(
@@ -283,25 +341,43 @@ internal fun BondEntryForm(
                 Text(text = stringResource(R.string.add_percent_of_nominal_empty), style = MaterialTheme.typography.bodySmall)
         }
 
-        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            OutlinedTextField(
-                value = accrued,
-                onValueChange = { accrued = it },
-                // Per bond, not per trade: brokers quote it this way, and the field says so
-                // because the difference is a multiple of the lot size on the total.
-                label = { Text(stringResource(R.string.add_accrued_per_bond)) },
-                modifier = Modifier.weight(1f),
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                singleLine = true
+        // A matured ОВДП credits the nominal and the last coupon in one go — 20 000 + 1 585 on
+        // the broker's schedule. The whole credit lands here as a transfer, because the
+        // principal is the user's own money coming back, but the coupon inside it is earned
+        // income and will not appear in the totals unless it is recorded as such. Said here
+        // because a user who types the credit the bank printed has no other way to know that.
+        if (isRedemption) {
+            Text(
+                text = stringResource(R.string.add_redeemed_coupon_hint),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
             )
-            OutlinedTextField(
-                value = commission,
-                onValueChange = { commission = it },
-                label = { Text(stringResource(R.string.add_commission)) },
-                modifier = Modifier.weight(1f),
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                singleLine = true
-            )
+        }
+
+        // A redemption pays neither: the issuer returns the nominal and nothing else. Hidden
+        // rather than shown at zero, because a required-looking field reading 0 is a value the
+        // user reads as one they forgot to fill in.
+        if (!isRedemption) {
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                OutlinedTextField(
+                    value = accrued,
+                    onValueChange = { accrued = it },
+                    // Per bond, not per trade: brokers quote it this way, and the field says so
+                    // because the difference is a multiple of the lot size on the total.
+                    label = { Text(stringResource(R.string.add_accrued_per_bond)) },
+                    modifier = Modifier.weight(1f),
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                    singleLine = true
+                )
+                OutlinedTextField(
+                    value = commission,
+                    onValueChange = { commission = it },
+                    label = { Text(stringResource(R.string.add_commission)) },
+                    modifier = Modifier.weight(1f),
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                    singleLine = true
+                )
+            }
         }
 
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -373,9 +449,9 @@ internal fun BondEntryForm(
                     nominal = nominalValue,
                     coupon = couponValue,
                     quantity = quantityValue,
-                    price = priceValue,
-                    accrued = accruedValue,
-                    commission = commissionValue,
+                    price = perBondPrice,
+                    accrued = effectiveAccrued,
+                    commission = effectiveCommission,
                     settlementAmount = if (foreign) enteredAmount else null,
                     errorEnterName = errorEnterName,
                     errorAccrued = errorAccrued,
@@ -405,9 +481,12 @@ internal fun BondEntryForm(
                         ),
                         side = side,
                         quantity = quantityValue,
-                        price = priceValue,
-                        accrued = accruedValue,
-                        commission = commissionValue,
+                        // The effective values, not the raw fields: a redemption's total is
+                        // divided by its quantity once, and the two figures a redemption does
+                        // not pay stay zero whatever a hidden field happens to hold.
+                        price = perBondPrice,
+                        accrued = effectiveAccrued,
+                        commission = effectiveCommission,
                         date = date,
                         bank = bank,
                         settlementCurrency = currency,
@@ -423,8 +502,7 @@ internal fun BondEntryForm(
             Text(
                 when {
                     saving -> stringResource(R.string.add_saving)
-                    side == BondTradeSide.BUY -> stringResource(R.string.add_buy)
-                    else -> stringResource(R.string.add_sell)
+                    else -> sideWord(side)
                 }
             )
         }
@@ -527,3 +605,11 @@ private fun MaturityField(maturity: LocalDate?, onChange: (LocalDate?) -> Unit, 
 
 private fun Double.toPlainString(): String =
     if (this % 1.0 == 0.0) toInt().toString() else toString()
+
+/** What a side is called, on the switch at the top and on the button that saves it. */
+@Composable
+private fun sideWord(side: BondTradeSide): String = when (side) {
+    BondTradeSide.BUY -> stringResource(R.string.add_buy)
+    BondTradeSide.SELL -> stringResource(R.string.add_sell)
+    BondTradeSide.REDEMPTION -> stringResource(R.string.add_redeem)
+}

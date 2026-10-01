@@ -180,6 +180,39 @@ private fun PositionCard(position: BondPosition) {
                 )
             }
 
+            // The one forward-looking figure on this screen, and it says on its face what it is:
+            // the principal coming back plus the coupons due before it. Broken out that way
+            // because that is the shape of a broker's payment schedule — a run of coupon rows
+            // and a final row of principal plus coupon — so a card carrying it can be read
+            // against that schedule row for row. What was paid is not part of the sum: a bond
+            // repays its principal, so a premium paid over the face value is spent rather than
+            // returned. Nothing is shown when the terms to project it are missing.
+            position.payout(ZoneId.systemDefault())?.let { payout ->
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    text = if (payout.payments != null) {
+                        stringResource(
+                            R.string.bond_expected_at_maturity,
+                            MoneyFormat.format(payout.nominal, currency),
+                            MoneyFormat.format(payout.coupon, currency),
+                            payout.payments,
+                            MoneyFormat.format(payout.total, currency)
+                        )
+                    } else {
+                        // No coupon period recorded, so there is no schedule to count and the
+                        // coupon was pro-rated by day count. The figure carries no count to back it.
+                        stringResource(
+                            R.string.bond_expected_at_maturity_prorated,
+                            MoneyFormat.format(payout.nominal, currency),
+                            MoneyFormat.format(payout.coupon, currency),
+                            MoneyFormat.format(payout.total, currency)
+                        )
+                    },
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+
             if (position.quantity == 0) {
                 Spacer(modifier = Modifier.height(8.dp))
                 Text(
