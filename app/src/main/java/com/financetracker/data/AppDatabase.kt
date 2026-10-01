@@ -8,6 +8,7 @@ import androidx.room.TypeConverters
 import com.financetracker.model.BankEntity
 import com.financetracker.model.BondEntity
 import com.financetracker.model.BondTradeEntity
+import com.financetracker.model.RecurringPaymentEntity
 import com.financetracker.model.SearchText
 import com.financetracker.model.TransactionEntity
 import com.financetracker.model.UserEntity
@@ -17,7 +18,7 @@ import com.financetracker.model.UserEntity
  *
  * It is built from the entities below and, once built, is only ever reopened: there is no
  * upgrade path. A file left behind by an older schema is not something this class can repair,
- * and `version` is deliberately still the number the last schema change gave it, so a v7 file
+ * and `version` is deliberately still the number the last schema change gave it, so a v8 file
  * already on a device opens exactly as it did before.
  *
  * A schema change means bumping `version`, which makes Room refuse an existing file with
@@ -35,9 +36,10 @@ import com.financetracker.model.UserEntity
         UserEntity::class,
         BankEntity::class,
         BondEntity::class,
-        BondTradeEntity::class
+        BondTradeEntity::class,
+        RecurringPaymentEntity::class
     ],
-    version = 7,
+    version = 8,
     exportSchema = false
 )
 @TypeConverters(Converters::class)
@@ -50,6 +52,8 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun bankDao(): BankDao
 
     abstract fun bondDao(): BondDao
+
+    abstract fun recurringPaymentDao(): RecurringPaymentDao
 
     companion object {
         const val DATABASE_NAME = "finance_tracker.db"

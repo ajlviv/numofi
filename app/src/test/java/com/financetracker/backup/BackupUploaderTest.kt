@@ -102,7 +102,7 @@ class BackupUploaderTest {
     }
 
     private fun newUploader() = BackupUploader(
-        exporter = BackupExporter(db.transactionDao(), db.bankDao(), db.bondDao()),
+        exporter = BackupExporter(db.transactionDao(), db.bankDao(), db.bondDao(), db.recurringPaymentDao()),
         codec = BackupSnapshotCodec(),
         store = store,
         settings = settings,

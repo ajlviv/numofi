@@ -4,6 +4,7 @@ import android.content.Context
 import com.financetracker.data.AppDatabase
 import com.financetracker.data.BankDao
 import com.financetracker.data.BondDao
+import com.financetracker.data.RecurringPaymentDao
 import com.financetracker.data.TransactionDao
 import com.financetracker.data.UserDao
 import dagger.Module
@@ -33,4 +34,8 @@ object AppDatabaseModule {
 
     @Provides
     fun provideBondDao(database: AppDatabase): BondDao = database.bondDao()
+
+    @Provides
+    fun provideRecurringPaymentDao(database: AppDatabase): RecurringPaymentDao =
+        database.recurringPaymentDao()
 }

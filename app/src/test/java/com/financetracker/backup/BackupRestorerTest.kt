@@ -7,12 +7,14 @@ import com.financetracker.data.backup.BackupEncoding
 import com.financetracker.data.backup.BackupRestorer
 import com.financetracker.data.backup.BackupSnapshotCodec
 import com.financetracker.data.backup.BackupSnapshot
+import com.financetracker.data.backup.RecurringPaymentRow
 import com.financetracker.data.backup.RestoreResult
 import com.financetracker.data.backup.TransactionRow
 import com.financetracker.model.BankEntity
 import com.financetracker.model.BondEntity
 import com.financetracker.model.BondTradeEntity
 import com.financetracker.model.BondTradeSide
+import com.financetracker.model.RepeatFrequency
 import com.financetracker.model.SearchText
 import com.financetracker.model.TransactionEntity
 import com.financetracker.model.TransactionType
@@ -66,7 +68,8 @@ class BackupRestorerTest {
         transactions: List<TransactionRow> = emptyList(),
         banks: List<BankEntity> = emptyList(),
         bonds: List<BondEntity> = emptyList(),
-        bondTrades: List<BondTradeEntity> = emptyList()
+        bondTrades: List<BondTradeEntity> = emptyList(),
+        recurringPayments: List<RecurringPaymentRow> = emptyList()
     ) = BackupSnapshot(
         format = BackupSnapshot.FORMAT,
         appVersion = "1.0",
@@ -75,7 +78,8 @@ class BackupRestorerTest {
         transactions = transactions,
         banks = banks,
         bonds = bonds,
-        bondTrades = bondTrades
+        bondTrades = bondTrades,
+        recurringPayments = recurringPayments
     )
 
     private fun row(
@@ -491,4 +495,106 @@ class BackupRestorerTest {
         assertEquals(1, result.done().restored)
         assertEquals(listOf("Кава"), stored().map { it.title })
     }
+
+    // --- Recurring payment schedules (format 3) ---------------------------------------------
+
+    private fun schedule(
+        id: Long = 0,
+        title: String = "Оренда",
+        amount: Double = 12_000.0,
+        frequency: RepeatFrequency = RepeatFrequency.MONTHLY
+    ) = RecurringPaymentRow(
+        id = id,
+        title = title,
+        amount = amount,
+        type = TransactionType.EXPENSE,
+        category = "other",
+        currencyCode = "UAH",
+        frequency = frequency,
+        startDate = 1_000L
+    )
+
+    private suspend fun scheduleEntity(id: Long = 0, title: String = "Оренда") =
+        schedule(title = title).toEntity(me, id)
+
+    @Test
+    fun `a schedule in the file that is not here is written for the account`() = runTest {
+        val result = restorer.restore(
+            snapshot(
+                recurringPayments = listOf(
+                    schedule(title = "Оренда"),
+                    schedule(title = "Netflix", amount = 500.0)
+                )
+            ),
+            me
+        )
+
+        assertEquals(2, result.done().recurring)
+        assertTrue(result.done().changed)
+        assertEquals(
+            listOf("Оренда", "Netflix"),
+            db.recurringPaymentDao().getAllForUserOnce(me).map { it.title }
+        )
+    }
+
+    @Test
+    fun `restoring the same file twice does not double the schedules`() = runTest {
+        val file = snapshot(recurringPayments = listOf(schedule(title = "Оренда")))
+
+        restorer.restore(file, me)
+        val second = restorer.restore(file, me)
+
+        assertEquals(0, second.done().recurring)
+        assertEquals(1, db.recurringPaymentDao().getAllForUserOnce(me).size)
+        // Nothing landed on the second pass, so nothing is uploaded.
+        assertTrue(!second.done().changed)
+    }
+
+    @Test
+    fun `a schedule already here keeps the id it has here`() = runTest {
+        val existingId = db.recurringPaymentDao().insert(scheduleEntity(title = "Оренда"))
+
+        val result = restorer.restore(
+            snapshot(recurringPayments = listOf(schedule(id = 999, title = "Оренда"))),
+            me
+        )
+
+        // The file's id is not reused: matching content is skipped, so no second row appears.
+        assertEquals(0, result.done().recurring)
+        assertEquals(
+            listOf(existingId),
+            db.recurringPaymentDao().getAllForUserOnce(me).map { it.id }
+        )
+    }
+
+    @Test
+    fun `a file with no schedules key still restores`() = runTest {
+        // The shape of a v1 or v2 file: the field is absent, so the reader sees null and the
+        // restore treats it as none rather than failing.
+        val result = restorer.restore(snapshot(transactions = listOf(row())), me)
+
+        assertEquals(1, result.done().restored)
+        assertEquals(0, result.done().recurring)
+    }
+
+    @Test
+    fun `a schedule archived on this device is not duplicated by a restore`() = runTest {
+        val id = db.recurringPaymentDao().insert(scheduleEntity(title = "Оренда"))
+        db.recurringPaymentDao().setArchived(id, true)
+
+        // The file was taken before the archive: the same commitment, not marked archived.
+        val result = restorer.restore(
+            snapshot(recurringPayments = listOf(schedule(title = "Оренда"))),
+            me
+        )
+
+        // Archiving is this device's ordering, exactly as a bank's flag is. Treating it as part
+        // of the identity would put an un-archived twin beside the archived row, and the forecast
+        // would count the same rent twice.
+        assertEquals(0, result.done().recurring)
+        val rows = db.recurringPaymentDao().getAllForUserOnce(me)
+        assertEquals(1, rows.size)
+        assertTrue(rows.single().archived)
+    }
+
 }

@@ -4,6 +4,7 @@ import com.financetracker.data.AppDatabase
 import com.financetracker.model.BankEntity
 import com.financetracker.model.BondEntity
 import com.financetracker.model.BondTradeEntity
+import com.financetracker.model.RecurringPaymentEntity
 import com.financetracker.model.TransactionEntity
 import kotlinx.coroutines.flow.first
 import java.math.BigDecimal
@@ -95,8 +96,10 @@ class BackupRestorer @Inject constructor(
         val banks = mergeBanks(snapshot.banks)
         val bonds = mergeBonds(snapshot.bonds)
         val trades = mergeTrades(snapshot.bondTrades, localByFileId, localId)
+        // orEmpty: a v1 or v2 file has no schedules key at all, and Gson leaves the field null.
+        val recurring = mergeRecurring(snapshot.recurringPayments.orEmpty(), uid)
 
-        if (restored > 0 || banks > 0 || bonds > 0 || trades > 0) {
+        if (restored > 0 || banks > 0 || bonds > 0 || trades > 0 || recurring > 0) {
             // Asked for only if something landed. A restore of a file whose rows are all
             // already here has changed nothing, and uploading would rewrite Drive with the
             // state it already holds.
@@ -108,7 +111,8 @@ class BackupRestorer @Inject constructor(
             skipped = snapshot.transactions.size - restored,
             banks = banks,
             bonds = bonds,
-            trades = trades
+            trades = trades,
+            recurring = recurring
         )
     }
 
@@ -192,6 +196,58 @@ class BackupRestorer @Inject constructor(
     }
 
     /**
+     * Writes the schedules that are not here yet.
+     *
+     * A schedule has no external id, so it is recognised by its content — the same fallback
+     * [identity] uses for a hand-entered transaction, and for the same reason: it is what makes
+     * a restore repeatable. The trade-off is the same one too. Two genuinely different schedules
+     * that share every field would read as one, which is a smaller failure than duplicating
+     * every schedule on a second restore.
+     *
+     * An existing row is never overwritten and its id is never reused: a row from the file is
+     * inserted with `id = 0`, so a file id cannot collide with a row this device already has.
+     */
+    private suspend fun mergeRecurring(incoming: List<RecurringPaymentRow>, uid: String): Int {
+        // Seeded from what is stored, so a row the file and this device both hold is skipped and
+        // a file with two identical rows writes one.
+        val seen = db.recurringPaymentDao().getAllForUserOnce(uid)
+            .map(::scheduleIdentity)
+            .toMutableSet()
+
+        var added = 0
+        for (row in incoming) {
+            if (!seen.add(scheduleIdentity(row.toEntity(uid)))) continue
+            db.recurringPaymentDao().insert(row.toEntity(uid, id = 0))
+            added++
+        }
+        return added
+    }
+
+    /**
+     * What makes a schedule "already here".
+     *
+     * Every stored field except [RecurringPaymentEntity.archived], so the match is about the
+     * commitment rather than the device's ordering. Archiving is this device's state, exactly
+     * as a bank's archived flag is, so a restore that treated it as part of the identity would
+     * write a second copy whenever the file was taken before the archive.
+     *
+     * The amount is quantised to kopecks exactly as [identity] quantises a transaction's, so a
+     * figure that travelled through the file as 12000.0 and came back as 12000.00 is recognised
+     * as the same schedule.
+     */
+    private fun scheduleIdentity(row: RecurringPaymentEntity): String {
+        val amount = BigDecimal(row.amount).setScale(KOpecks, RoundingMode.HALF_UP).toPlainString()
+        return buildString {
+            append(row.title.lowercase()).append('|').append(amount).append('|')
+            append(row.type.name).append('|').append(row.category).append('|')
+            append(row.currencyCode).append('|').append(row.bankCode).append('|')
+            append(row.note).append('|').append(row.frequency.name).append('|')
+            append(row.intervalCount).append('|').append(row.startDate).append('|')
+            append(row.endDate)
+        }
+    }
+
+    /**
      * What makes a transaction "already here".
      *
      * The bank's own id where there is one, because it is the same string on every device
@@ -237,9 +293,12 @@ sealed interface RestoreResult {
         val skipped: Int,
         val banks: Int,
         val bonds: Int,
-        val trades: Int
+        val trades: Int,
+        /** Recurring payment schedules written. */
+        val recurring: Int
     ) : RestoreResult {
         /** Nothing in the file was missing. */
-        val changed: Boolean get() = restored > 0 || banks > 0 || bonds > 0 || trades > 0
+        val changed: Boolean
+            get() = restored > 0 || banks > 0 || bonds > 0 || trades > 0 || recurring > 0
     }
 }

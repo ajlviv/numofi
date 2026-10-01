@@ -22,15 +22,16 @@ import com.financetracker.model.BondTradeEntity
  * What is *not* here is the `users` table. The profile row is re-fetched at sign-in, so
  * carrying it would put an account identity into a file the user may share for no gain.
  *
- * The account is stated once, at [uid]. Transactions are [TransactionRow] rather than the
- * entity so that they have nowhere to repeat it; the other three lists have no account to
- * begin with.
+ * The account is stated once, at [uid]. Transactions are [TransactionRow] and recurring
+ * schedules are [RecurringPaymentRow], so that neither has anywhere to repeat it; banks, bonds
+ * and trades have no account column to begin with.
  *
  * [bondTrades] and [banks] and [bonds] are device-global — the schema gives them no uid — so
  * they cannot be split per account and are carried whole. A snapshot therefore holds every
  * bond position on the device, including any belonging to a second Google account signed in on
  * the same install. A restore has to decide what to do about that, and refusing is the safe
- * answer: see [BackupRestorer].
+ * answer: see [BackupRestorer]. [recurringPayments], by contrast, is per-account like
+ * transactions and is carried for [uid] alone.
  */
 data class BackupSnapshot(
     /** See [FORMAT]. Only ever incremented, never reused for different content. */
@@ -48,7 +49,16 @@ data class BackupSnapshot(
      * Oldest first, because that is the order a position is folded in and a restore that
      * reversed it would produce a different cost basis for the same trades.
      */
-    val bondTrades: List<BondTradeEntity>
+    val bondTrades: List<BondTradeEntity>,
+
+    /**
+     * Recurring payment schedules, or null for a file written before format 3.
+     *
+     * Nullable rather than defaulted to empty because Gson does not honour Kotlin property
+     * defaults: a v1 or v2 file has no such key, so the field would be set to null whatever
+     * default were written here. Callers read it through `orEmpty()`; see [BackupRestorer].
+     */
+    val recurringPayments: List<RecurringPaymentRow>? = null
 ) {
     companion object {
         /**
@@ -61,12 +71,13 @@ data class BackupSnapshot(
          * 1 — the first layout: [TransactionEntity] verbatim, so every transaction repeated
          *     the account the root already carried.
          * 2 — transactions are [TransactionRow] and carry no account of their own.
+         * 3 — recurring payment schedules are carried as [RecurringPaymentRow].
          *
          * Only ever raised, and a file whose number is above this one is refused rather than
          * read as far as it happens to match: a newer build may have moved a field, and a
          * half-understood file is worse than a refused one.
          */
-        const val FORMAT = 2
+        const val FORMAT = 3
 
         /** The lowest format this build can read. */
         const val OLDEST_READABLE_FORMAT = 1

@@ -29,7 +29,10 @@ enum class BackupReason {
     BOND_TRADE,
 
     /** A bank was added, renamed, archived or moved. */
-    BANK
+    BANK,
+
+    /** A recurring payment schedule was added, changed, archived or removed. */
+    RECURRING
 }
 
 /**
