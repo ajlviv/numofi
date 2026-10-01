@@ -17,9 +17,13 @@ import com.financetracker.data.bank.BankSyncService
 import com.financetracker.data.bank.BankProvider
 import com.financetracker.data.bank.BankRateLimitException
 import com.financetracker.data.bank.BankProviderRegistry
+import com.financetracker.data.rates.ExchangeRateRepository
+import com.financetracker.data.settings.DEFAULT_BASE_CURRENCY
 import com.financetracker.data.settings.SettingsRepository
 import com.financetracker.data.settings.ThemeMode
 import com.financetracker.model.Bank
+import com.financetracker.model.DEFAULT_RECORDABLE_CURRENCY
+import com.financetracker.model.ExchangeRates
 import com.financetracker.repository.AddBankResult
 import com.financetracker.repository.AuthRepository
 import com.financetracker.repository.BankRepository
@@ -73,6 +77,7 @@ class SettingsViewModel @Inject constructor(
     private val backupStore: BackupStore,
     private val restorer: BackupRestorer,
     private val codec: BackupSnapshotCodec,
+    private val rates: ExchangeRateRepository,
     registry: BankProviderRegistry
 ) : ViewModel() {
 
@@ -300,6 +305,49 @@ class SettingsViewModel @Inject constructor(
 
     fun setThemeMode(mode: ThemeMode) {
         viewModelScope.launch { settingsRepository.setThemeMode(mode) }
+    }
+
+    // Base currency and rates
+
+    val baseCurrency: StateFlow<String> = rates.baseCurrency
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), DEFAULT_BASE_CURRENCY)
+
+    val exchangeRates: StateFlow<ExchangeRates> = rates.rates
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), ExchangeRates(emptyMap(), null, 0L))
+
+    private val _isRefreshingRates = MutableStateFlow(false)
+    val isRefreshingRates: StateFlow<Boolean> = _isRefreshingRates.asStateFlow()
+
+    /**
+     * Kept apart from [statusMessage] for the same reason as [bankMessage] and [backupMessage]:
+     * each is rendered under the section it belongs to, and a rate-fetch failure printed under
+     * the bank token field would read as though the token were at fault.
+     */
+    private val _ratesMessage = MutableStateFlow<SettingsMessage?>(null)
+    val ratesMessage: StateFlow<SettingsMessage?> = _ratesMessage.asStateFlow()
+
+    fun setBaseCurrency(code: String) {
+        viewModelScope.launch { settingsRepository.setBaseCurrency(code) }
+    }
+
+    /**
+     * Fetches from NBU and says which of the three outcomes it was.
+     *
+     * The failure text is fixed rather than the exception's, on the same reasoning as the
+     * sync failures above: the developer message would name an HTTP code to a user who only
+     * needs to know that yesterday's rates are still what is on screen.
+     */
+    fun refreshRates() {
+        viewModelScope.launch {
+            _isRefreshingRates.value = true
+            _ratesMessage.value = null
+            _ratesMessage.value = if (rates.refresh()) {
+                SettingsMessage.Res(R.string.settings_rates_refreshed)
+            } else {
+                SettingsMessage.Res(R.string.settings_rates_refresh_failed)
+            }
+            _isRefreshingRates.value = false
+        }
     }
 
     // The user's bank list, which has nothing to do with the sync providers above: those are

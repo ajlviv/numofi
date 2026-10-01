@@ -66,6 +66,8 @@ import com.financetracker.data.bank.BankProvider
 import com.financetracker.data.bank.BankSyncService
 import com.financetracker.data.settings.SettingsRepository
 import com.financetracker.model.Bank
+import com.financetracker.model.ExchangeRates
+import com.financetracker.model.RECORDABLE_CURRENCIES
 import android.app.Activity
 import android.content.Context
 import android.content.ContextWrapper
@@ -101,6 +103,10 @@ fun SettingsScreen(
     val backupMessage by viewModel.backupMessage.collectAsStateWithLifecycle()
     val restoreMessage by viewModel.restoreMessage.collectAsStateWithLifecycle()
     val isRestoring by viewModel.isRestoring.collectAsStateWithLifecycle()
+    val baseCurrency by viewModel.baseCurrency.collectAsStateWithLifecycle()
+    val exchangeRates by viewModel.exchangeRates.collectAsStateWithLifecycle()
+    val isRefreshingRates by viewModel.isRefreshingRates.collectAsStateWithLifecycle()
+    val ratesMessage by viewModel.ratesMessage.collectAsStateWithLifecycle()
 
     // The language picked below is applied by AppLocale in attachBaseContext, which has
     // already run by the time this screen exists: the only way to apply a new pick is to
@@ -165,6 +171,23 @@ fun SettingsScreen(
                 LanguagePicker(
                     selected = language,
                     onSelect = viewModel::setLanguage
+                )
+            }
+
+            SettingsSection(title = stringResource(R.string.settings_base_currency)) {
+                Text(
+                    text = stringResource(R.string.settings_base_currency_blurb),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+
+                BaseCurrencySection(
+                    baseCurrency = baseCurrency,
+                    rates = exchangeRates,
+                    isRefreshing = isRefreshingRates,
+                    message = ratesMessage,
+                    onSelect = viewModel::setBaseCurrency,
+                    onRefresh = viewModel::refreshRates
                 )
             }
 
@@ -354,6 +377,61 @@ private fun SettingsMessage.resolve(): String = when (this) {
         }
     }
     is SettingsMessage.Raw -> text
+}
+
+/**
+ * The switch, the currency to total in, and where the rate came from.
+ *
+ * The date is printed NBU's own `dd.MM.yyyy` rather than reformatted into the device's locale.
+ * It is what the rate actually is, it is unambiguous in both languages the app ships, and
+ * reformatting a date that arrived in a known fixed format would add a translation bug for no
+ * gain.
+ *
+ * The picker and the date only appear once the feature is on. Hiding them while it is off
+ * states that a currency means nothing until a total does, which is exactly the relationship
+ * between them.
+ */
+@Composable
+private fun BaseCurrencySection(
+    baseCurrency: String,
+    rates: ExchangeRates,
+    isRefreshing: Boolean,
+    message: SettingsMessage?,
+    onSelect: (String) -> Unit,
+    onRefresh: () -> Unit
+) {
+    SingleChoiceDropdown(
+        label = stringResource(R.string.settings_base_currency_pick),
+        options = RECORDABLE_CURRENCIES.map { it to it },
+        selected = baseCurrency,
+        onSelect = onSelect
+    )
+
+    Text(
+        text = rates.date?.let { stringResource(R.string.settings_rates_as_of, it) }
+            ?: stringResource(R.string.settings_rates_never),
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant
+    )
+
+    Button(onClick = onRefresh, enabled = !isRefreshing) {
+        if (isRefreshing) {
+            CircularProgressIndicator(
+                modifier = Modifier.size(16.dp),
+                strokeWidth = 2.dp
+            )
+        } else {
+            Text(stringResource(R.string.settings_rates_refresh))
+        }
+    }
+
+    message?.let { message ->
+        Text(
+            text = message.resolve(),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.primary
+        )
+    }
 }
 
 /**

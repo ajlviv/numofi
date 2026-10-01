@@ -14,6 +14,7 @@ import com.financetracker.model.TransactionEntity
 import com.financetracker.model.TransactionType
 import com.financetracker.repository.AuthRepository
 import com.financetracker.repository.BankRepository
+import com.financetracker.repository.BondRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.FlowPreview
@@ -21,6 +22,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import com.financetracker.data.rates.ExchangeRateRepository
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.distinctUntilChanged
@@ -189,6 +191,8 @@ private data class FilterQuery(
 class TransactionListViewModel @Inject constructor(
     private val authRepository: AuthRepository,
     private val transactionDao: TransactionDao,
+    private val rates: ExchangeRateRepository,
+    private val bondRepository: BondRepository,
     bankRepository: BankRepository
 ) : ViewModel() {
 
@@ -201,9 +205,24 @@ class TransactionListViewModel @Inject constructor(
     val bankNames: StateFlow<Map<String, String>> = bankRepository.names
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyMap())
 
-    /** The banks the filter offers: everything live, plus archived ones still in use. */
+/** The banks the filter offers: everything live, plus archived ones still in use. */
     val banks: StateFlow<List<Bank>> = bankRepository.filterBanks
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+    val bondNominalTotal: StateFlow<Double> = combine(
+        bondRepository.observePositions(),
+        rates.baseCurrency,
+        rates.rates
+    ) { positions, base, cache ->
+        positions
+            .filter { it.quantity > 0 }
+            .groupBy { it.bond.nominalCurrency }
+            .map { (currency, held) ->
+                val nominal = held.sumOf { it.quantity * it.bond.nominal }
+                cache.convert(nominal, currency, base) ?: 0.0
+            }
+            .sum()
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), 0.0)
 
     /** The resolved bank for a row, or null when the row has no bank. */
     fun bankOf(code: String?): BankRef? = BankNames.ref(code, bankNames.value)
@@ -271,10 +290,20 @@ class TransactionListViewModel @Inject constructor(
     /**
      * Totals for exactly the rows [transactions] is showing, so the summary is a view of the
      * list rather than a parallel query that could fall out of step with the filters.
+     *
+     * The figures are converted into [base] rather than printed per currency, because the dashboard
+     * does the same and two screens answering the same question in two different currencies is worse
+     * than either choice alone. What was dropped is named in [converted], on the same terms as
+     * everywhere else: a currency the cache cannot quote is left out and named.
      */
-    val summary: StateFlow<TransactionSummary> = transactions
-        .map { TransactionSummary.of(it) }
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), TransactionSummary.EMPTY)
+    val summary: StateFlow<TransactionSummary> = combine(
+        transactions,
+        rates.baseCurrency,
+        rates.rates,
+        bondNominalTotal
+    ) { rows, base, cache, bondNominal ->
+        TransactionSummary.of(rows, cache, base, bondNominal)
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), TransactionSummary.EMPTY)
 
     /**
      * The cards offered in the card dropdown, narrowed to the selected banks. A card belongs

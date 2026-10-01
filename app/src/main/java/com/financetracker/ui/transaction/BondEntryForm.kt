@@ -401,9 +401,11 @@ internal fun BondEntryForm(
         )
 
         if (foreign) {
-            // Asked for rather than derived. There is no rate feed in this app, so any
-            // converted number would be a guess, and a wrong cash figure is worse than one
-            // the user typed themselves.
+            // Asked for rather than derived, even though the app now holds NBU rates. Those
+            // quote today; this figure is what the account was actually debited on one past
+            // day, and it includes whatever spread and fees the bank took. Multiplying by
+            // today's rate would produce a tidy number that silently disagrees with the
+            // balance, which is worse than one the user typed themselves.
             OutlinedTextField(
                 value = settlementAmount,
                 onValueChange = { settlementAmount = it },

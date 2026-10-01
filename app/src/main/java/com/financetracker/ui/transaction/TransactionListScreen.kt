@@ -223,23 +223,39 @@ private fun SummaryPanel(summary: TransactionSummary) {
                 style = MaterialTheme.typography.titleSmall,
                 color = MaterialTheme.colorScheme.primary
             )
-            summary.totals.forEach { totals ->
-                if (summary.totals.size > 1) {
-                    Text(
-                        text = totals.currencyCode ?: stringResource(R.string.list_no_currency),
-                        style = MaterialTheme.typography.labelMedium,
-                        color = Color.Gray
-                    )
-                }
-                SummaryAmount(stringResource(R.string.income), totals.income, totals.currencyCode, Color(0xFF2E7D32))
-                SummaryAmount(stringResource(R.string.expenses), totals.expense, totals.currencyCode, Color(0xFFC62828))
+
+            val converted = summary.converted
+            val income = converted.income
+            val expense = converted.expense
+            val balance = converted.balance
+            if (income == null || expense == null || balance == null) {
+                Text(
+                    text = stringResource(R.string.dash_net_worth_no_rate, converted.base),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.error
+                )
+            } else {
+                SummaryAmount(stringResource(R.string.income), income, converted.base, Color(0xFF2E7D32))
+                SummaryAmount(stringResource(R.string.expenses), expense, converted.base, Color(0xFFC62828))
                 // A negative net is the number that matters, so it is the one that changes
                 // colour; the other two are coloured by what they always mean.
                 SummaryAmount(
                     label = stringResource(R.string.list_net),
-                    amount = totals.balance,
-                    currencyCode = totals.currencyCode,
-                    color = if (totals.balance < 0) Color(0xFFC62828) else Color(0xFF2E7D32)
+                    amount = balance,
+                    currencyCode = converted.base,
+                    color = if (balance < 0) Color(0xFFC62828) else Color(0xFF2E7D32)
+                )
+            }
+
+            // What the figures above leave out, named rather than dropped in silence. Same rule
+            // as the dashboard: a total that looks complete when it is not is the failure mode.
+            converted.unquoted.forEach { currency ->
+                Text(
+                    text = currency
+                        ?.let { stringResource(R.string.dash_net_worth_unrated, it) }
+                        ?: stringResource(R.string.dash_net_worth_unrated_no_code),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.error
                 )
             }
         }

@@ -74,6 +74,12 @@ fun MainScreen(
     val positions by viewModel.positions.collectAsStateWithLifecycle()
     val message by viewModel.message.collectAsStateWithLifecycle()
     val bankNames by viewModel.bankNames.collectAsStateWithLifecycle()
+    val baseCurrency by viewModel.baseCurrency.collectAsStateWithLifecycle()
+    val exchangeRates by viewModel.exchangeRates.collectAsStateWithLifecycle()
+
+    // On entering the dashboard rather than on a timer: the question is whether this screen has
+    // been seen since the last daily rate, not how long it has been open.
+    LaunchedEffect(Unit) { viewModel.refreshRatesIfStale() }
     val snackbarHostState = remember { SnackbarHostState() }
 
     // Resolved here, in composable scope: LaunchedEffect's body is a coroutine where
@@ -142,7 +148,13 @@ fun MainScreen(
         Box(modifier = Modifier.padding(padding).fillMaxSize()) {
             when (items[selectedTab]) {
                 MainBottomNavDestination.DASHBOARD ->
-                    DashboardScreen(transactions = transactions, positions = positions)
+                    DashboardScreen(
+                        transactions = transactions,
+                        positions = positions,
+                        baseCurrency = baseCurrency,
+                        rates = exchangeRates,
+                        onRefreshRates = viewModel::refreshRates
+                    )
 
                 MainBottomNavDestination.TRANSACTIONS ->
                     TransactionListScreen(

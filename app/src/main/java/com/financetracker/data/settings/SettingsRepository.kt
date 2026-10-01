@@ -3,11 +3,14 @@ package com.financetracker.data.settings
 import android.content.Context
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
+import androidx.datastore.preferences.core.doublePreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import dagger.hilt.android.qualifiers.ApplicationContext
+import com.financetracker.model.ExchangeRates
+import com.financetracker.model.RECORDABLE_CURRENCIES
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
@@ -18,6 +21,9 @@ import javax.inject.Singleton
 private val Context.dataStore: DataStore<Preferences> by preferencesDataStore(name = "settings")
 
 enum class ThemeMode { SYSTEM, LIGHT, DARK }
+
+/** UAH: the currency NBU quotes against, and the one bonds are denominated in. */
+const val DEFAULT_BASE_CURRENCY = "UAH"
 
 /**
  * Non-sensitive user preferences. Credentials live in [com.financetracker.data.bank.BankCredentialStore]
@@ -34,6 +40,11 @@ class SettingsRepository @Inject constructor(
         val SELECTED_BANK = stringPreferencesKey("selected_bank")
         val BACKUP_TREE_URI = stringPreferencesKey("backup_tree_uri")
         val BACKUP_UPLOADED_AT = longPreferencesKey("backup_uploaded_at")
+        val BASE_CURRENCY = stringPreferencesKey("base_currency")
+        val RATES_DATE = stringPreferencesKey("rates_date")
+        val RATES_FETCHED_AT = longPreferencesKey("rates_fetched_at")
+
+        fun rateKey(code: String) = doublePreferencesKey("rates_$code")
     }
 
     val themeMode: Flow<ThemeMode> = context.dataStore.data.map { prefs ->
@@ -124,6 +135,68 @@ class SettingsRepository @Inject constructor(
      */
     suspend fun setBackupUploadedAt(timestamp: Long) {
         context.dataStore.edit { it[Keys.BACKUP_UPLOADED_AT] = timestamp }
+    }
+
+    // Base currency and its rates
+
+    /**
+     * The currency every total is converted to.
+     *
+     * Not nullable and not switchable: [DEFAULT_BASE_CURRENCY] is what a device that has never
+     * been asked reports, so there is no state in which the dashboard has no total to show.
+     * UAH rather than "the first currency seen" because it is the currency NBU quotes against
+     * and the one bonds are denominated in — a base that moved as data arrived would make the
+     * headline change on its own.
+     *
+     * Read back through [RECORDABLE_CURRENCIES], because a value this build no longer offers
+     * has no rate to convert through and would divide by nothing.
+     */
+    val baseCurrency: Flow<String> = context.dataStore.data.map { prefs ->
+        prefs[Keys.BASE_CURRENCY]?.takeIf { it in RECORDABLE_CURRENCIES } ?: DEFAULT_BASE_CURRENCY
+    }
+
+    suspend fun setBaseCurrency(code: String) {
+        context.dataStore.edit { prefs ->
+            prefs[Keys.BASE_CURRENCY] = code
+        }
+    }
+
+    /**
+     * The last rates this device fetched, empty until one fetch has succeeded.
+     *
+     * In DataStore rather than a table on purpose. `AppDatabase` ships no migrations and no
+     * destructive fallback, so a new table means a version bump means Room refusing the user's
+     * file — and losing every transaction, bank, bond and trade they have. Two rates do not
+     * justify that, and a cache is the least valuable thing in the file anyway.
+     *
+     * Also absent from the backup snapshot, which walks Room entities. A restored device
+     * fetches its own rates rather than inheriting ones whose date is whenever the backup was
+     * taken, exactly as it re-reads its own theme.
+     */
+    val exchangeRates: Flow<ExchangeRates> = context.dataStore.data.map { prefs ->
+        ExchangeRates(
+            toUah = RECORDABLE_CURRENCIES
+                .mapNotNull { code -> prefs[Keys.rateKey(code)]?.let { code to it } }
+                .toMap(),
+            date = prefs[Keys.RATES_DATE]?.takeIf { it.isNotBlank() },
+            fetchedAt = prefs[Keys.RATES_FETCHED_AT] ?: 0L
+        )
+    }
+
+    /**
+     * Replaces the cache outright.
+     *
+     * Every stored rate is rewritten rather than merged into, so a currency NBU stops
+     * publishing stops being quoted. Merging would leave yesterday's EUR in place looking
+     * current, which is the failure this feature is most able to make without anyone noticing.
+     */
+    suspend fun saveExchangeRates(rates: ExchangeRates) {
+        context.dataStore.edit { prefs ->
+            RECORDABLE_CURRENCIES.forEach { prefs.remove(Keys.rateKey(it)) }
+            rates.toUah.forEach { (code, rate) -> prefs[Keys.rateKey(code)] = rate }
+            prefs[Keys.RATES_DATE] = rates.date ?: ""
+            prefs[Keys.RATES_FETCHED_AT] = rates.fetchedAt
+        }
     }
 
     companion object {

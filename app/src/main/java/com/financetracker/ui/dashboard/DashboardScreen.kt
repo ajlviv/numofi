@@ -23,7 +23,9 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -32,32 +34,31 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.financetracker.R
+import com.financetracker.data.settings.DEFAULT_BASE_CURRENCY
 import com.financetracker.model.BondPosition
 import com.financetracker.model.CurrencyTotals
+import com.financetracker.model.ExchangeRates
+import com.financetracker.model.NetWorth
 import com.financetracker.model.Transaction
+import com.financetracker.model.netWorth
 import com.financetracker.model.totalsByCurrency
 import com.financetracker.ui.MoneyAmount
 import com.financetracker.ui.TransactionAppearance
 import com.financetracker.util.CategoryLabel
 import com.financetracker.util.MoneyFormat
+import java.time.LocalDate
 
 
 @Composable
 fun DashboardScreen(
     transactions: List<Transaction>,
     positions: List<BondPosition> = emptyList(),
+    baseCurrency: String = DEFAULT_BASE_CURRENCY,
+    rates: ExchangeRates = ExchangeRates(emptyMap(), null, 0L),
+    onRefreshRates: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
-    // One card per currency. Summing across currencies and labelling the result with
-    // whichever currency was most common produced a figure that looked authoritative and
-    // was meaningless.
-    val totals = totalsByCurrency(transactions).ifEmpty {
-        listOf(CurrencyTotals(currencyCode = null, income = 0.0, expense = 0.0))
-    }
-    // A currency group is named only when there is more than one: a lone group is
-    // unambiguous, but a second one printed below with no name of its own would read as a
-    // duplicate of the first. Same rule as the transaction list's summary panel.
-    val nameTheCurrency = totals.size > 1
+    val totals = totalsByCurrency(transactions)
 
     Column(
         modifier = modifier
@@ -66,23 +67,23 @@ fun DashboardScreen(
             .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        totals.forEach { currency ->
-            CurrencySummaryCard(
-                currencyCode = currency.currencyCode,
-                balance = currency.balance,
-                income = currency.income,
-                expense = currency.expense,
-                showCurrencyLabel = nameTheCurrency
-            )
-        }
+        // One card. The dashboard used to split cash into a block per currency on the grounds
+        // that a sum across currencies was meaningless — which was true while there was no rate
+        // to convert through, and stopped being true the moment there was one. Splitting now
+        // would show the same money twice, once unconverted and once converted, and make the
+        // user reconcile them.
+        NetWorthCard(
+            result = netWorth(totals, positions, rates, baseCurrency),
+            baseCurrency = baseCurrency,
+            rates = rates,
+            onRefresh = onRefreshRates
+        )
 
-        // A separate card, not folded into the balance above. The balance is money in the
-        // account, and this is money in a security: adding them would be the same mistake as
-        // summing across currencies, and would make a sale look like spending money rather than
-        // turning part of it into a bond.
+        // A separate card per holding, not folded into the total above. The total is money at
+        // nominal, which is a claim about maturity; this is the position and the price the user
+        // typed in. One card per bond denomination still, because two denominations have no
+        // common price and `marketValue` cannot be added across them.
         if (positions.isNotEmpty()) {
-            // One card per bond denomination, for the same reason the balances split per
-            // currency: nothing here may be added to something it is not quoted against.
             positions.groupBy { it.bond.nominalCurrency }.forEach { (currency, inCurrency) ->
                 InvestmentCard(positions = inCurrency, currencyCode = currency)
             }
@@ -99,6 +100,137 @@ fun DashboardScreen(
                 }
             }
         }
+    }
+}
+
+/**
+ * The one total, and everything it depends on.
+ *
+ * Three lines under the figure are not decoration, and each is load-bearing:
+ *
+ * - **what is included** — cash at ledger balance and bonds at nominal. Without it the number
+ *   invites being read as a market valuation, which is the one thing it is not, and the bond
+ *   card a screen's worth of scrolling below it already says the opposite.
+ * - **where the rate came from** — and only when it is more than three days old. A fresh rate
+ *   needs no caption; a three-week-old one presented with the same confidence is the case this
+ *   line exists for.
+ * - **what was left out** — currencies the cache cannot quote. Naming them is the difference
+ *   between a total and a total that looks complete when it is not.
+ */
+@Composable
+private fun NetWorthCard(
+    result: NetWorth,
+    baseCurrency: String,
+    rates: ExchangeRates,
+    onRefresh: () -> Unit
+) {
+    val today = remember { LocalDate.now() }
+    val stale = remember(rates, today) { rates.isStale(today) }
+
+    Card(elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)) {
+        Column(modifier = Modifier.fillMaxWidth().padding(20.dp)) {
+            Text(
+                text = stringResource(R.string.dash_net_worth),
+                style = MaterialTheme.typography.bodyMedium,
+                color = Color.Gray
+            )
+            Spacer(modifier = Modifier.height(4.dp))
+
+            val total = result.total
+            if (total == null) {
+                Text(
+                    // No figure at all rather than a zero. Zero would read as "you own
+                    // nothing", which is the one interpretation that must never be reachable by
+                    // accident.
+                    text = stringResource(R.string.dash_net_worth_no_rate, baseCurrency),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.error
+                )
+            } else {
+                MoneyAmount(
+                    amount = total,
+                    currencyCode = baseCurrency,
+                    style = MaterialTheme.typography.headlineMedium,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(
+                text = stringResource(R.string.dash_net_worth_basis),
+                style = MaterialTheme.typography.labelSmall,
+                color = Color.Gray
+            )
+
+            // Flows, converted on the same terms as the total above and inside the same
+            // unquoted gate, so the two lines always add up to the figure they explain. Kept
+            // here rather than in blocks per currency: they are properties of the total, not of
+            // any one account.
+            val income = result.income
+            val expense = result.expense
+            if (income != null && expense != null) {
+                Spacer(modifier = Modifier.height(8.dp))
+                Row(modifier = Modifier.fillMaxWidth()) {
+                    FlowFigure(
+                        label = stringResource(R.string.dash_net_worth_income),
+                        amount = income,
+                        currencyCode = baseCurrency
+                    )
+                    FlowFigure(
+                        label = stringResource(R.string.dash_net_worth_expense),
+                        amount = expense,
+                        currencyCode = baseCurrency
+                    )
+                }
+            }
+
+            if (stale) {
+                Spacer(modifier = Modifier.height(8.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = rates.date
+                            ?.let { stringResource(R.string.dash_net_worth_stale, it) }
+                            ?: stringResource(R.string.settings_rates_never),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.weight(1f)
+                    )
+                    TextButton(onClick = onRefresh) {
+                        Text(
+                            text = stringResource(R.string.settings_rates_refresh),
+                            style = MaterialTheme.typography.labelSmall
+                        )
+                    }
+                }
+            }
+
+            result.unquoted.forEach { currency ->
+                Text(
+                    text = currency
+                        ?.let { stringResource(R.string.dash_net_worth_unrated, it) }
+                        ?: stringResource(R.string.dash_net_worth_unrated_no_code),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.error
+                )
+            }
+        }
+    }
+}
+
+/** One of the two converted flow figures, sharing a line with its counterpart. */
+@Composable
+private fun RowScope.FlowFigure(label: String, amount: Double, currencyCode: String) {
+    Column(modifier = Modifier.weight(1f)) {
+        Text(text = label, style = MaterialTheme.typography.labelSmall, color = Color.Gray)
+        MoneyAmount(
+            amount = amount,
+            currencyCode = currencyCode,
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.SemiBold
+        )
     }
 }
 
