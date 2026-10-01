@@ -339,4 +339,20 @@
   <string name="recurring_delete_title">Видалити розклад?</string>
   <string name="recurring_delete_body">«%1$s» буде остаточно видалено.</string>
 
+  <!-- App lock. A prompt the device owns, so the copy names what the device has rather than
+       what the app would like it to have. -->
+  <string name="settings_app_lock">Блокування застосунку</string>
+  <string name="settings_app_lock_blurb">Питати відбиток пальця, обличчя або код блокування екрана перед тим, як показати будь-що. Застосунок не бачить, що ви використали — перевіряє лише пристрій.</string>
+  <string name="settings_app_lock_switch">Вимагати розблокування при відкритті</string>
+  <string name="settings_app_lock_cd_switch">Вимагати розблокування при відкритті</string>
+  <string name="settings_app_lock_biometric">Розблокується відбитком пальця або обличчям</string>
+  <string name="settings_app_lock_device_credential">Розблокується PIN-кодом, візерунком або паролем</string>
+  <string name="settings_app_lock_both">Розблокується відбитком пальця або обличчям, або PIN-кодом, візерунком чи паролем</string>
+  <string name="settings_app_lock_none">На цьому пристрої ще нічого не налаштовано. Спершу додайте відбиток пальця, обличчя або код блокування екрана в налаштуваннях пристрою.</string>
+  <string name="settings_app_lock_prompt_title">Розблокуйте Finance Tracker</string>
+  <string name="settings_app_lock_prompt_subtitle">Підтвердьте, що це ви</string>
+  <string name="settings_app_lock_locked_title">Finance Tracker заблоковано</string>
+  <string name="settings_app_lock_locked_body">Ваші баланси приховані, доки ви не розблокуєте застосунок.</string>
+  <string name="settings_app_lock_unlock">Розблокувати</string>
+
 </resources>

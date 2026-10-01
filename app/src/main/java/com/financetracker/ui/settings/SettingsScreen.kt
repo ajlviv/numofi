@@ -78,6 +78,8 @@ import com.financetracker.ui.statement.StatementImportUiState
 import com.financetracker.ui.statement.StatementImportViewModel
 import com.financetracker.ui.statement.formatPreviewDate
 import com.financetracker.data.settings.ThemeMode
+import com.financetracker.security.LocalExternalActivityLaunch
+import com.financetracker.security.LockCapability
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -111,6 +113,8 @@ fun SettingsScreen(
     val exchangeRates by viewModel.exchangeRates.collectAsStateWithLifecycle()
     val isRefreshingRates by viewModel.isRefreshingRates.collectAsStateWithLifecycle()
     val ratesMessage by viewModel.ratesMessage.collectAsStateWithLifecycle()
+    val appLockEnabled by viewModel.appLockEnabled.collectAsStateWithLifecycle()
+    val lockCapability by viewModel.lockCapability.collectAsStateWithLifecycle()
 
     // The language picked below is applied by AppLocale in attachBaseContext, which has
     // already run by the time this screen exists: the only way to apply a new pick is to
@@ -120,6 +124,11 @@ fun SettingsScreen(
     LaunchedEffect(Unit) {
         viewModel.languageChanged.collect { context.findActivity().recreate() }
     }
+
+    // Asked on composition rather than held: a fingerprint the user adds or removes in the
+    // device's own settings is picked up by returning to this screen, and a value read at
+    // launch would still be offering a switch for a credential that is no longer there.
+    LaunchedEffect(Unit) { viewModel.refreshLockCapability(context) }
 
     Scaffold(
         topBar = {
@@ -327,6 +336,19 @@ fun SettingsScreen(
                     onMoveUp = viewModel::moveBankUp,
                     onMoveDown = viewModel::moveBankDown,
                     onArchiveChange = viewModel::setBankArchived
+                )
+            }
+
+            SettingsSection(title = stringResource(R.string.settings_app_lock)) {
+                Text(
+                    text = stringResource(R.string.settings_app_lock_blurb),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                AppLockSection(
+                    enabled = appLockEnabled,
+                    capability = lockCapability,
+                    onChange = viewModel::setAppLockEnabled
                 )
             }
 
@@ -566,6 +588,63 @@ fun SettingsSection(
     }
 }
 
+/**
+ * The switch that requires the device's own credential, and what this device would ask for.
+ *
+ * The capability line is the reason the switch can be greyed out, so it is stated before the
+ * switch rather than as the switch's disabled reason: a control that cannot be pressed with no
+ * explanation is the thing users report as a bug.
+ *
+ * What the section deliberately does not do is name a modality. `BiometricManager` reports what
+ * class of authenticator is enrolled, not which one, so "fingerprint or face" is the most either
+ * answer can honestly support — naming a fingerprint on a device whose only biometric is a face
+ * would be a promise the prompt does not keep.
+ *
+ * Nothing is shown while [capability] is null: the first composition has asked the device and has
+ * not been told yet, and a line that changes a moment after appearing is worse than no line.
+ */
+@Composable
+private fun AppLockSection(
+    enabled: Boolean,
+    capability: LockCapability?,
+    onChange: (Boolean) -> Unit
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = stringResource(R.string.settings_app_lock_switch),
+                style = MaterialTheme.typography.bodyMedium
+            )
+            capability?.let {
+                Text(
+                    text = stringResource(it.descriptionRes),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+        val switchDescription = stringResource(R.string.settings_app_lock_cd_switch)
+        Switch(
+            checked = enabled,
+            // Disabled on nothing enrolled rather than enabled and refused on tap: the flag
+            // describes what will be asked for at the next launch, so turning it on without
+            // anything to ask for would store a lock no credential on this device can open.
+            enabled = capability?.canLock == true,
+            onCheckedChange = onChange,
+            // The label beside the switch is a label, not a description of the consequence, so
+            // the switch carries what turning it on actually does. Hoisted because semantics is
+            // not a composable scope and cannot resolve a string resource itself.
+            modifier = Modifier.semantics {
+                contentDescription = switchDescription
+            },
+            thumbContent = null
+        )
+    }
+}
+
 /** The name of a single control inside a group, e.g. the theme-mode label. */
 @Composable
 fun RowLabel(text: String) {
@@ -607,6 +686,12 @@ private fun BackupSection(
     // picker opens.
     val context = LocalContext.current
     val driveRoot = remember(context) { driveRootUriIfInstalled(context) }
+    val externalLaunch = LocalExternalActivityLaunch.current
+
+    // Announced rather than inferred: the picker is its own activity, so it stops this one, and
+    // an app lock that re-locked on every stop would unmount the settings section while the
+    // picker was in front and drop the result on the floor.
+    val openPicker: (Uri?) -> Unit = { tree -> externalLaunch?.expect(); picker.launch(tree) }
 
     if (status is BackupStatus.Off) {
         // Said outright rather than left to the absence of a switch: the button alone would
@@ -620,8 +705,8 @@ private fun BackupSection(
             // Opened in Drive rather than wherever the device's own file manager defaults
             // to, which is normally internal storage. This biases where the picker starts
             // and does not restrict where the user may go from there.
-            onClick = { picker.launch(driveRoot) },
-            modifier = Modifier.fillMaxWidth()
+onClick = { openPicker(driveRoot) },
+                modifier = Modifier.fillMaxWidth()
         ) {
             Text(stringResource(R.string.settings_backup_pick_folder))
         }
@@ -659,7 +744,7 @@ private fun BackupSection(
         }
 
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            OutlinedButton(onClick = { picker.launch(driveRoot) }) {
+            OutlinedButton(onClick = { openPicker(driveRoot) }) {
                 Text(stringResource(R.string.settings_backup_change_folder))
             }
             Button(
@@ -718,8 +803,15 @@ private fun RestoreSection(
         document?.let(onPick)
     }
 
+    // Same reason as the backup picker above: this is its own activity, and an app lock that
+    // re-locked on the stop would leave the restore with nowhere to deliver what was chosen.
+    val externalLaunch = LocalExternalActivityLaunch.current
+
     Button(
-        onClick = { picker.launch(RESTORE_MIME_TYPES) },
+        onClick = {
+            externalLaunch?.expect()
+            picker.launch(RESTORE_MIME_TYPES)
+        },
         enabled = !isRestoring,
         modifier = Modifier.fillMaxWidth()
     ) {
@@ -1033,8 +1125,14 @@ private fun StatementImportSection() {
         ActivityResultContracts.OpenDocument()
     ) { uri -> viewModel.onFileSelected(uri) }
 
+    // Third picker, and the same announcement: a file chooser is its own activity, so without
+    // this the lock would unmount the settings screen while the user was picking a statement and
+    // the import would start against a section that no longer existed.
+    val externalLaunch = LocalExternalActivityLaunch.current
+
     OutlinedButton(
         onClick = {
+            externalLaunch?.expect()
             picker.launch(
                 arrayOf(
                     "text/csv",

@@ -2,6 +2,7 @@ package com.financetracker.ui.settings
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import android.content.Context
 import android.net.Uri
 import com.financetracker.data.backup.BackupReason
 import com.financetracker.data.backup.BackupSnapshotCodec
@@ -27,6 +28,8 @@ import com.financetracker.model.ExchangeRates
 import com.financetracker.repository.AddBankResult
 import com.financetracker.repository.AuthRepository
 import com.financetracker.repository.BankRepository
+import com.financetracker.security.LockCapability
+import com.financetracker.security.lockCapability
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -305,6 +308,46 @@ class SettingsViewModel @Inject constructor(
 
     fun setThemeMode(mode: ThemeMode) {
         viewModelScope.launch { settingsRepository.setThemeMode(mode) }
+    }
+
+    // App lock
+
+    val appLockEnabled: StateFlow<Boolean> = settingsRepository.appLockEnabled
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
+
+    /**
+     * What the device can authenticate with, asked when the section is composed rather than at
+     * launch.
+     *
+     * `null` until it has been asked, which the section shows as nothing to say yet. A value
+     * cached from startup could disagree with the device by the time the user scrolls to it — and
+     * would disagree in the direction that matters, offering a switch for a fingerprint that has
+     * since been deleted.
+     */
+    private val _lockCapability = MutableStateFlow<LockCapability?>(null)
+    val lockCapability: StateFlow<LockCapability?> = _lockCapability.asStateFlow()
+
+    fun refreshLockCapability(context: Context) {
+        viewModelScope.launch(Dispatchers.Default) {
+            _lockCapability.value = lockCapability(context)
+        }
+    }
+
+    /**
+     * Turns the lock on, or off.
+     *
+     * On is refused when the device has nothing enrolled, rather than written and then failing at
+     * the next launch. The stored flag describes what will actually be asked for, so writing a
+     * `true` that no credential on the device can satisfy would leave the app describing a lock
+     * that does not exist. Refused silently rather than reported: the section already disables the
+     * switch and names the reason, so there is no path from the UI that reaches this refusal, and
+     * the copy would have nowhere to go.
+     */
+    fun setAppLockEnabled(enabled: Boolean) {
+        viewModelScope.launch {
+            if (enabled && _lockCapability.value?.canLock != true) return@launch
+            settingsRepository.setAppLockEnabled(enabled)
+        }
     }
 
     // Base currency and rates

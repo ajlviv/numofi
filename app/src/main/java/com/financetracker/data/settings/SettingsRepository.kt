@@ -3,6 +3,7 @@ package com.financetracker.data.settings
 import android.content.Context
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
+import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.doublePreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.longPreferencesKey
@@ -45,6 +46,7 @@ class SettingsRepository @Inject constructor(
         val RATES_DATE = stringPreferencesKey("rates_date")
         val RATES_FETCHED_AT = longPreferencesKey("rates_fetched_at")
         val EXCLUSION_RULES = stringPreferencesKey("exclusion_rules")
+        val APP_LOCK_ENABLED = booleanPreferencesKey("app_lock_enabled")
 
         fun rateKey(code: String) = doublePreferencesKey("rates_$code")
     }
@@ -235,6 +237,38 @@ class SettingsRepository @Inject constructor(
             if (rules.isEmpty) prefs.remove(Keys.EXCLUSION_RULES)
             else prefs[Keys.EXCLUSION_RULES] = encodeExclusionRules(rules.patterns)
         }
+    }
+
+    // App lock
+
+    /**
+     * Whether the app must be unlocked before it shows anything, or false when the user has
+     * never asked for it.
+     *
+     * False is the ordinary state of a fresh install rather than a missing preference, and
+     * staying false by default is what lets this ship without touching anything else: an
+     * existing install behaves exactly as it did before the switch existed.
+     *
+     * **Per-device, not per-account.** What is being protected is this phone's database, which
+     * outlives any sign-in. Clearing the flag when the user signs out would leave the lock
+     * protecting nothing at the moment it is most wanted — a signed-out app still holding every
+     * transaction and bond position. It is also absent from the backup snapshot, for the reason
+     * [exchangeRates] gives: a restored device re-reads its own settings, and inheriting
+     * "locked" onto a device with no credential set up is a lockout with no way out of it.
+     */
+    val appLockEnabled: Flow<Boolean> = context.dataStore.data.map { prefs ->
+        prefs[Keys.APP_LOCK_ENABLED] ?: false
+    }
+
+    /**
+     * Turns the lock on or off.
+     *
+     * Only ever called with the switch enabled, and the settings screen refuses that when the
+     * device has nothing that could satisfy the prompt. Writing true unconditionally would
+     * leave the flag describing a lock no credential on the device can open.
+     */
+    suspend fun setAppLockEnabled(enabled: Boolean) {
+        context.dataStore.edit { prefs -> prefs[Keys.APP_LOCK_ENABLED] = enabled }
     }
 
     companion object {
