@@ -23,7 +23,7 @@ app/src/main/
 │   ├── LoginActivity.kt              # Google Sign-In entry point (LAUNCHER)
 │   ├── MainActivity.kt               # Authenticated main screen
 │   ├── ui/
-│   │   ├── AppViewModel.kt           # App-wide preferences (theme)
+│   │   ├── AppViewModel.kt           # App-wide preferences (theme, app lock)
 │   │   ├── main/MainScreen.kt        # Bottom bar, screen switching, snackbars
 │   │   ├── dashboard/DashboardScreen.kt
 │   │   ├── transaction/              # list, detail, add, bond entry form
@@ -42,6 +42,7 @@ app/src/main/
 │   │   └── settings/SettingsRepository.kt
 │   ├── model/                        # entities, domain types, ОВДП arithmetic
 │   ├── repository/                   # what the screens talk to
+│   ├── security/                     # BiometricGate, LockCapability
 │   ├── util/                         # amount and category formatting
 │   └── di/                           # Hilt modules
 ├── res/
@@ -100,6 +101,7 @@ change means bumping `version` and clearing the app's data (or reinstalling).
 - ✅ ОВДП bond trades, with positions folded from the trades at read time
 - ✅ Dashboard summary, kept separate from bond value
 - ✅ Settings: theme, banks, bank connection, sign out
+- ✅ Optional app lock behind the device's fingerprint, face or screen lock
 - ✅ Backup to a user-chosen Google Drive folder, after each import and each change
 - ✅ Hilt dependency injection
 - ✅ Jetpack Compose UI

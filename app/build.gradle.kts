@@ -113,6 +113,12 @@ dependencies {
     // Keystore-backed storage for the bank access token
     implementation("androidx.security:security-crypto:1.1.0-alpha06")
 
+    // App lock. 1.1.0 is pinned deliberately: it is the version whose
+    // setAllowedAuthenticators accepts DEVICE_CREDENTIAL, which is what keeps the library
+    // supporting device credential on API 28 and below where it is only available combined
+    // with a biometric class.
+    implementation("androidx.biometric:biometric:1.1.0")
+
     // PDF statement reading. The Android port of Apache PDFBox, which brings text
     // extraction (including Cyrillic) to the device without a server round trip.
     implementation("com.tom-roush:pdfbox-android:2.0.27.0")

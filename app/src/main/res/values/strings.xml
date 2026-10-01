@@ -362,4 +362,20 @@
   <string name="recurring_delete_title">Delete schedule?</string>
   <string name="recurring_delete_body">\"%1$s\" will be permanently deleted.</string>
 
+  <!-- App lock. A prompt the device owns, so the copy names what the device has rather than
+       what the app would like it to have. -->
+  <string name="settings_app_lock">App lock</string>
+  <string name="settings_app_lock_blurb">Ask for your fingerprint, face or screen lock before showing anything. The app cannot see what you used — only the device checks it.</string>
+  <string name="settings_app_lock_switch">Require unlock to open the app</string>
+  <string name="settings_app_lock_cd_switch">Require unlock to open the app</string>
+  <string name="settings_app_lock_biometric">Unlocks with a fingerprint or face</string>
+  <string name="settings_app_lock_device_credential">Unlocks with your PIN, pattern or password</string>
+  <string name="settings_app_lock_both">Unlocks with a fingerprint or face, or your PIN, pattern or password</string>
+  <string name="settings_app_lock_none">Nothing is set up on this device yet. Add a fingerprint, face, or a screen lock in the device settings first.</string>
+  <string name="settings_app_lock_prompt_title">Unlock Finance Tracker</string>
+  <string name="settings_app_lock_prompt_subtitle">Confirm it is you</string>
+  <string name="settings_app_lock_locked_title">Finance Tracker is locked</string>
+  <string name="settings_app_lock_locked_body">Your balances are hidden until you unlock.</string>
+  <string name="settings_app_lock_unlock">Unlock</string>
+
 </resources>
