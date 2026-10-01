@@ -350,6 +350,55 @@ class SettingsViewModel @Inject constructor(
         }
     }
 
+    // Exclusion rules
+
+    /** The rules as the user typed them, which is what this list has to show back. */
+    val exclusionRules: StateFlow<List<String>> = settingsRepository.exclusionRules
+        .map { it.patterns }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+    private val _exclusionInput = MutableStateFlow("")
+    val exclusionInput: StateFlow<String> = _exclusionInput.asStateFlow()
+
+    fun onExclusionInputChange(value: String) {
+        _exclusionInput.value = value
+    }
+
+    /**
+     * Adds what is typed, and says so if it is already there.
+     *
+     * The field is cleared either way, because leaving a rule in the box after it is stored
+     * invites the user to press the button again. A duplicate is reported rather than
+     * silently ignored: the button was pressed, something did not happen, and a rule that is
+     * already in the list *is* a different response from one that is not.
+     */
+    fun addExclusionRule() {
+        val pattern = _exclusionInput.value.trim()
+        if (pattern.isEmpty()) return
+        viewModelScope.launch {
+            if (pattern in exclusionRules.value) {
+                _exclusionMessage.value = SettingsMessage.Res(R.string.settings_exclusion_duplicate)
+            } else {
+                settingsRepository.saveExclusionRules(exclusionRules.value + pattern)
+            }
+            _exclusionInput.value = ""
+        }
+    }
+
+    fun removeExclusionRule(pattern: String) {
+        viewModelScope.launch {
+            settingsRepository.saveExclusionRules(exclusionRules.value - pattern)
+        }
+    }
+
+    /**
+     * Kept apart from [statusMessage] for the same reason as [bankMessage] and [ratesMessage]:
+     * each is rendered under its own section, and a complaint about a rule appearing under the
+     * bank token field would read as though the token were at fault.
+     */
+    private val _exclusionMessage = MutableStateFlow<SettingsMessage?>(null)
+    val exclusionMessage: StateFlow<SettingsMessage?> = _exclusionMessage.asStateFlow()
+
     // The user's bank list, which has nothing to do with the sync providers above: those are
     // the institutions this build can talk to, these are the names a statement can be filed
     // under. A custom bank has no connection and needs none.

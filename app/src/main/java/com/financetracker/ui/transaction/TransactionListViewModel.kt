@@ -5,6 +5,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.financetracker.R
 import com.financetracker.data.TransactionDao
+import com.financetracker.data.settings.SettingsRepository
 import com.financetracker.model.Bank
 import com.financetracker.model.BankNames
 import com.financetracker.model.BankRef
@@ -193,6 +194,7 @@ class TransactionListViewModel @Inject constructor(
     private val transactionDao: TransactionDao,
     private val rates: ExchangeRateRepository,
     private val bondRepository: BondRepository,
+    private val settingsRepository: SettingsRepository,
     bankRepository: BankRepository
 ) : ViewModel() {
 
@@ -291,6 +293,11 @@ class TransactionListViewModel @Inject constructor(
      * Totals for exactly the rows [transactions] is showing, so the summary is a view of the
      * list rather than a parallel query that could fall out of step with the filters.
      *
+     * The user's exclusion rules are applied here and *only* to this. [transactions] itself is
+     * not filtered: a rule says what a total counts, not what the user may look at, and a row
+     * that is in the list but not in the sum is the case this summary has to be able to
+     * explain rather than hide.
+     *
      * The figures are converted into [base] rather than printed per currency, because the dashboard
      * does the same and two screens answering the same question in two different currencies is worse
      * than either choice alone. What was dropped is named in [converted], on the same terms as
@@ -298,11 +305,18 @@ class TransactionListViewModel @Inject constructor(
      */
     val summary: StateFlow<TransactionSummary> = combine(
         transactions,
+        settingsRepository.exclusionRules,
         rates.baseCurrency,
         rates.rates,
         bondNominalTotal
-    ) { rows, base, cache, bondNominal ->
-        TransactionSummary.of(rows, cache, base, bondNominal)
+    ) { rows, rules, base, cache, bondNominal ->
+        TransactionSummary.of(
+            transactions = rows,
+            rules = rules,
+            rates = cache,
+            base = base,
+            bondNominal = bondNominal
+        )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), TransactionSummary.EMPTY)
 
     /**

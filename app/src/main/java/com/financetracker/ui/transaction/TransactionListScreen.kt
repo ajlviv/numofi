@@ -249,6 +249,18 @@ private fun SummaryPanel(summary: TransactionSummary) {
 
             // What the figures above leave out, named rather than dropped in silence. Same rule
             // as the dashboard: a total that looks complete when it is not is the failure mode.
+            //
+            // The exclusion line is the user's own doing, so it is not the error colour the
+            // unquotable lines use — nothing has gone wrong, they have made a choice, and
+            // printing it in red would read as a fault to go and fix.
+            if (summary.excluded > 0) {
+                Text(
+                    text = stringResource(R.string.dash_net_worth_excluded, summary.excluded),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+
             converted.unquoted.forEach { currency ->
                 Text(
                     text = currency

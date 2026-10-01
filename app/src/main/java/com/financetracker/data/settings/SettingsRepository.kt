@@ -10,6 +10,7 @@ import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import dagger.hilt.android.qualifiers.ApplicationContext
 import com.financetracker.model.ExchangeRates
+import com.financetracker.model.ExclusionRules
 import com.financetracker.model.RECORDABLE_CURRENCIES
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
@@ -43,6 +44,7 @@ class SettingsRepository @Inject constructor(
         val BASE_CURRENCY = stringPreferencesKey("base_currency")
         val RATES_DATE = stringPreferencesKey("rates_date")
         val RATES_FETCHED_AT = longPreferencesKey("rates_fetched_at")
+        val EXCLUSION_RULES = stringPreferencesKey("exclusion_rules")
 
         fun rateKey(code: String) = doublePreferencesKey("rates_$code")
     }
@@ -196,6 +198,42 @@ class SettingsRepository @Inject constructor(
             rates.toUah.forEach { (code, rate) -> prefs[Keys.rateKey(code)] = rate }
             prefs[Keys.RATES_DATE] = rates.date ?: ""
             prefs[Keys.RATES_FETCHED_AT] = rates.fetchedAt
+        }
+    }
+
+    // Exclusion rules
+
+    /**
+     * The user's own rules for what a total may not count. Empty until one is written, which is
+     * the ordinary state of a fresh install rather than a missing preference.
+     *
+     * In DataStore for the reason [exchangeRates] gives: a handful of rules is not worth a
+     * table, and `AppDatabase` ships no migrations, so a table means a version bump means Room
+     * refusing the user's file. Also absent from the backup snapshot, which walks Room entities —
+     * a rule is a preference about how the data is presented, and a restored device re-reads its
+     * own rather than inheriting one written against a screen that may since have changed.
+     */
+    val exclusionRules: Flow<ExclusionRules> = context.dataStore.data.map { prefs ->
+        readExclusionRules(prefs[Keys.EXCLUSION_RULES])
+    }
+
+    /**
+     * The whole set in one write, replacing rather than merging.
+     *
+     * The user manages this as a list — they delete one rule and keep the rest — so the set is
+     * the unit of storage and the unit of a save. Storing one key per rule would need its own
+     * sweeping on delete and would leave an orphan key behind every rule the user removed: a
+     * preference they can neither see nor clear.
+     *
+     * Blank rules are dropped on the way in rather than refused, because [ExclusionRules] is what
+     * decides what a rule means and this only has to store it. A save that threw here would put
+     * a second, disagreeing idea of a valid rule in the repository.
+     */
+    suspend fun saveExclusionRules(patterns: List<String>) {
+        val rules = ExclusionRules(patterns)
+        context.dataStore.edit { prefs ->
+            if (rules.isEmpty) prefs.remove(Keys.EXCLUSION_RULES)
+            else prefs[Keys.EXCLUSION_RULES] = encodeExclusionRules(rules.patterns)
         }
     }
 

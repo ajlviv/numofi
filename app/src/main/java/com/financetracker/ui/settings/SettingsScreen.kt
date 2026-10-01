@@ -18,6 +18,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Archive
 import androidx.compose.material.icons.filled.ArrowDownward
 import androidx.compose.material.icons.filled.ArrowUpward
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Unarchive
 import androidx.compose.material3.AlertDialog
@@ -104,6 +105,9 @@ fun SettingsScreen(
     val restoreMessage by viewModel.restoreMessage.collectAsStateWithLifecycle()
     val isRestoring by viewModel.isRestoring.collectAsStateWithLifecycle()
     val baseCurrency by viewModel.baseCurrency.collectAsStateWithLifecycle()
+    val exclusionRules by viewModel.exclusionRules.collectAsStateWithLifecycle()
+    val exclusionInput by viewModel.exclusionInput.collectAsStateWithLifecycle()
+    val exclusionMessage by viewModel.exclusionMessage.collectAsStateWithLifecycle()
     val exchangeRates by viewModel.exchangeRates.collectAsStateWithLifecycle()
     val isRefreshingRates by viewModel.isRefreshingRates.collectAsStateWithLifecycle()
     val ratesMessage by viewModel.ratesMessage.collectAsStateWithLifecycle()
@@ -188,6 +192,22 @@ fun SettingsScreen(
                     message = ratesMessage,
                     onSelect = viewModel::setBaseCurrency,
                     onRefresh = viewModel::refreshRates
+                )
+            }
+
+            SettingsSection(title = stringResource(R.string.settings_exclusion_rules)) {
+                Text(
+                    text = stringResource(R.string.settings_exclusion_rules_blurb),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                ExclusionRulesSection(
+                    rules = exclusionRules,
+                    input = exclusionInput,
+                    message = exclusionMessage,
+                    onInputChange = viewModel::onExclusionInputChange,
+                    onAdd = viewModel::addExclusionRule,
+                    onRemove = viewModel::removeExclusionRule
                 )
             }
 
@@ -431,6 +451,79 @@ private fun BaseCurrencySection(
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.primary
         )
+    }
+}
+
+/**
+ * The user's own rules for what a total may not count.
+ *
+ * A field and a list, with nothing cleverer, because the rule itself is a plain substring and
+ * the screen has to be able to show exactly what is stored — a user who cannot see the rule
+ * cannot tell why a total moved, which is the whole reason the omission is reported on the card.
+ *
+ * The one thing worth spelling out here is that a rule does not hide anything. It keeps rows
+ * out of the *totals*; the transactions themselves stay in the list where they can be read and
+ * deleted. A user who assumed otherwise would be afraid to add a rule, so the blurb says it.
+ */
+@Composable
+private fun ExclusionRulesSection(
+    rules: List<String>,
+    input: String,
+    message: SettingsMessage?,
+    onInputChange: (String) -> Unit,
+    onAdd: () -> Unit,
+    onRemove: (String) -> Unit
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        OutlinedTextField(
+            value = input,
+            onValueChange = onInputChange,
+            label = { Text(stringResource(R.string.settings_exclusion_rule_label)) },
+            modifier = Modifier.weight(1f),
+            singleLine = true
+        )
+        // Disabled on blank rather than refusing after the tap, so what is required is visible
+        // before the button is pressed. An empty rule would match every title and empty every
+        // total in the app, so it is never the thing a press stores.
+        Button(onClick = onAdd, enabled = input.isNotBlank()) {
+            Text(stringResource(R.string.settings_add))
+        }
+    }
+
+    message?.let {
+        Text(
+            text = it.resolve(),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.primary
+        )
+    }
+
+    rules.forEachIndexed { index, pattern ->
+        // Hairlines between rows, as in the bank list below: these separate items of the same
+        // kind, so they do not compete with the card boundary around the whole group.
+        if (index > 0) {
+            HorizontalDivider()
+        }
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = pattern,
+                style = MaterialTheme.typography.bodyMedium,
+                modifier = Modifier.weight(1f)
+            )
+            IconButton(onClick = { onRemove(pattern) }) {
+                Icon(
+                    Icons.Default.Close,
+                    contentDescription = stringResource(R.string.settings_cd_remove_exclusion, pattern)
+                )
+            }
+        }
     }
 }
 

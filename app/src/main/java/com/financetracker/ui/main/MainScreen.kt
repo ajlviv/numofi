@@ -75,6 +75,7 @@ fun MainScreen(
     }
 
     val transactions by viewModel.transactions.collectAsStateWithLifecycle()
+    val counted by viewModel.counted.collectAsStateWithLifecycle()
     val positions by viewModel.positions.collectAsStateWithLifecycle()
     val message by viewModel.message.collectAsStateWithLifecycle()
     val bankNames by viewModel.bankNames.collectAsStateWithLifecycle()
@@ -164,6 +165,7 @@ fun MainScreen(
                 MainBottomNavDestination.DASHBOARD ->
                     DashboardScreen(
                         transactions = transactions,
+                        counted = counted,
                         positions = positions,
                         baseCurrency = baseCurrency,
                         rates = exchangeRates,

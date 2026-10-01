@@ -5,7 +5,9 @@ import androidx.lifecycle.viewModelScope
 import com.financetracker.R
 import com.financetracker.data.rates.ExchangeRateRepository
 import com.financetracker.data.settings.DEFAULT_BASE_CURRENCY
+import com.financetracker.data.settings.SettingsRepository
 import com.financetracker.model.BondPosition
+import com.financetracker.model.CountedTransactions
 import com.financetracker.model.ExchangeRates
 import com.financetracker.model.Transaction
 import com.financetracker.repository.AuthRepository
@@ -18,6 +20,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.map
@@ -32,6 +35,7 @@ class MainViewModel @Inject constructor(
     private val transactionRepository: TransactionRepository,
     private val bondRepository: BondRepository,
     private val rates: ExchangeRateRepository,
+    private val settingsRepository: SettingsRepository,
     bankRepository: BankRepository
 ) : ViewModel() {
 
@@ -53,6 +57,24 @@ class MainViewModel @Inject constructor(
         .flatMapLatest { uid -> transactionRepository.getTransactionsForUser(uid) }
         .map { entities -> entities.map { it.toDomain() } }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+    /**
+     * The rows a total may be built from, and how many were held back.
+     *
+     * Kept beside [transactions] rather than applied to it. An excluded row is still a real
+     * transaction: the user imported it, it is in their bank, and they have to be able to see
+     * it, search it and delete it. Filtering this flow instead would drop those rows from the
+     * dashboard's recent list as well as from the headline, which is a different feature and a
+     * worse one — the ledger would quietly disagree with the bank.
+     *
+     * So the rule is applied here, once, at the point a total is produced, and the omission
+     * count travels with the rows so the card can name what it left out.
+     */
+    val counted: StateFlow<CountedTransactions> = combine(
+        transactions,
+        settingsRepository.exclusionRules
+    ) { rows, rules -> rules.select(rows) }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), CountedTransactions.ALL)
 
     /**
      * Holdings, folded from trades. Not scoped to a user, because the bonds an app knows
