@@ -4,6 +4,7 @@ import com.financetracker.data.settings.DEFAULT_BASE_CURRENCY
 import com.financetracker.model.ConvertedTotals
 import com.financetracker.model.CurrencyTotals
 import com.financetracker.model.ExchangeRates
+import com.financetracker.model.ExclusionRules
 import com.financetracker.model.Transaction
 import com.financetracker.model.convertTotals
 import com.financetracker.model.totalsByCurrency
@@ -17,13 +18,20 @@ import com.financetracker.model.totalsByCurrency
  *
  * The figures are converted into [base] rather than printed per currency, because the dashboard
  * does the same and two screens answering the same question in two different currencies is worse
- * than either choice alone. What was dropped is named in [converted], on the same terms as
- * everywhere else: a currency the cache cannot quote is left out and named.
+ * than either choice alone.
+ *
+ * Two different things can be missing from those figures and they are reported separately, on
+ * the same terms as everywhere else: a currency the cache cannot quote is left out and named in
+ * [converted], and rows the user's own exclusion rules held back are counted in [excluded].
+ * They are not merged because they are fixed in different places — one is a rate to fetch, the
+ * other is a rule in Settings — and a user who cannot tell which is which cannot act on either.
  */
 data class TransactionSummary(
     val count: Int,
     val totals: List<CurrencyTotals>,
-    val converted: ConvertedTotals
+    val converted: ConvertedTotals,
+    /** Rows the user's [com.financetracker.model.ExclusionRules] kept out of the figures. */
+    val excluded: Int = 0
 ) {
     val isEmpty: Boolean get() = count == 0
 
@@ -31,23 +39,45 @@ data class TransactionSummary(
         val EMPTY = TransactionSummary(
             count = 0,
             totals = emptyList(),
-            converted = ConvertedTotals(DEFAULT_BASE_CURRENCY, 0.0, 0.0, 0.0, emptyList())
+            converted = ConvertedTotals(DEFAULT_BASE_CURRENCY, 0.0, 0.0, 0.0, emptyList()),
+            excluded = 0
         )
 
+/**
+ * [transactions] is the whole list the screen is showing, and [rules] the user's own exclusion
+ * rules. Everything else is derived here rather than by the caller, because two of the three
+ * numbers have to agree with each other:
+ *
+ * - [count] is how many rows are on screen, not how many were summed. A panel that said "7
+ *   transactions" under a list of ten would be the first thing anyone noticed, and the exclusion
+ *   line below it would be explaining a discrepancy rather than a decision.
+ * - the figures are built from the rows [rules] kept, and
+ * - [excluded] is how many it dropped.
+ *
+ * Having one function derive all three is what stops a caller passing a pre-filtered list and
+ * getting a count that no longer means what the list says.
+ */
 fun of(
     transactions: List<Transaction>,
+    rules: ExclusionRules,
     rates: ExchangeRates,
     base: String,
     bondNominal: Double = 0.0
-): TransactionSummary =
+): TransactionSummary {
+    val selection = rules.select(transactions)
     if (transactions.isEmpty()) {
-        EMPTY.copy(converted = ConvertedTotals(base, 0.0, 0.0, 0.0, emptyList(), bondNominal))
-    } else {
-        val totals = totalsByCurrency(transactions)
-        TransactionSummary(
+        // Not EMPTY: the bond figure and the base are still real, and dropping them because
+        // there is nothing to total would blank a line the screen showed a moment ago.
+        return EMPTY.copy(
+            converted = ConvertedTotals(base, 0.0, 0.0, 0.0, emptyList(), bondNominal)
+        )
+    }
+        val totals = totalsByCurrency(selection.counted)
+        return TransactionSummary(
             count = transactions.size,
             totals = totals,
-            converted = convertTotals(totals, rates, base, bondNominal)
+            converted = convertTotals(totals, rates, base, bondNominal),
+            excluded = selection.excluded
         )
     }
     }

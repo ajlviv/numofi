@@ -189,11 +189,17 @@
   <string name="dash_net_worth_no_rate">Немає курсу для %1$s</string>
   <string name="dash_net_worth_unrated">Не враховано: немає курсу для %1$s</string>
   <string name="dash_net_worth_unrated_no_code">Не враховано: рядки без валюти</string>
+  <string name="dash_net_worth_excluded">Не враховано за вашими правилами: %1$d транзакцій</string>
   <string name="dash_tap_to_add">Торкніться +, щоб додати першу транзакцію</string>
   <string name="settings_preferences">Параметри</string>
   <string name="settings_theme_mode">Режим теми</string>
   <string name="settings_base_currency">Підсумок в одній валюті</string>
   <string name="settings_base_currency_blurb">Показувати на головному екрані одну цифру загальної вартості, перераховану за офіційним курсом НБУ. Картки по валютах лишаються нижче.</string>
+  <string name="settings_exclusion_rules">Не враховувати в підсумках</string>
+  <string name="settings_exclusion_rules_blurb">Будь-яка транзакція, в назві якої є хоч одне з цих слів, не потрапляє в підсумки. Самі транзакції лишаються в списку — їх враховують лише суми.</string>
+  <string name="settings_exclusion_rule_label">Шукати текст</string>
+  <string name="settings_exclusion_duplicate">Це правило вже є у списку</string>
+  <string name="settings_cd_remove_exclusion">Видалити правило «%1$s»</string>
   <string name="settings_base_currency_pick">Валюта підсумку</string>
   <string name="settings_rates_as_of">Курси НБУ станом на %1$s</string>
   <string name="settings_rates_never">Курси ще не завантажено</string>

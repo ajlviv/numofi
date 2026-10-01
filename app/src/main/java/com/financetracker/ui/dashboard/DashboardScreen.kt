@@ -36,6 +36,7 @@ import androidx.compose.ui.unit.dp
 import com.financetracker.R
 import com.financetracker.data.settings.DEFAULT_BASE_CURRENCY
 import com.financetracker.model.BondPosition
+import com.financetracker.model.CountedTransactions
 import com.financetracker.model.CurrencyTotals
 import com.financetracker.model.ExchangeRates
 import com.financetracker.model.NetWorth
@@ -52,13 +53,22 @@ import java.time.LocalDate
 @Composable
 fun DashboardScreen(
     transactions: List<Transaction>,
+    counted: CountedTransactions? = null,
     positions: List<BondPosition> = emptyList(),
     baseCurrency: String = DEFAULT_BASE_CURRENCY,
     rates: ExchangeRates = ExchangeRates(emptyMap(), null, 0L),
     onRefreshRates: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
-    val totals = totalsByCurrency(transactions)
+    // Two lists, on purpose. The total is built from `counted`, which has the user's exclusion
+    // rules applied, and the recent list below it from `transactions`, which does not. An
+    // excluded row is a real row the user imported and may still want to read, find or delete —
+    // a rule about what a *total* counts is not a rule about what the app shows.
+    //
+    // Defaulted to counting everything so a caller that has not wired the rules up yet gets the
+    // honest total rather than a silently empty one.
+    val rows = counted?.counted ?: transactions
+    val totals = totalsByCurrency(rows)
 
     Column(
         modifier = modifier
@@ -73,7 +83,13 @@ fun DashboardScreen(
         // would show the same money twice, once unconverted and once converted, and make the
         // user reconcile them.
         NetWorthCard(
-            result = netWorth(totals, positions, rates, baseCurrency),
+            result = netWorth(
+                totals = totals,
+                positions = positions,
+                rates = rates,
+                base = baseCurrency,
+                excluded = counted?.excluded ?: 0
+            ),
             baseCurrency = baseCurrency,
             rates = rates,
             onRefresh = onRefreshRates
@@ -205,6 +221,21 @@ private fun NetWorthCard(
                         )
                     }
                 }
+            }
+
+            // Both omissions are named, and neither is folded into the other. An unquotable
+            // currency is fixed by fetching a rate; an excluded row is fixed by editing a rule
+            // in Settings. A user who cannot tell which is which has no way to act on either,
+            // so they get a line each rather than one combined "what was left out".
+            //
+            // Printsd above the unquoted lines because it is the one the user caused, and the
+            // one they are most likely to be looking for the reason for.
+            if (result.excluded > 0) {
+                Text(
+                    text = stringResource(R.string.dash_net_worth_excluded, result.excluded),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
             }
 
             result.unquoted.forEach { currency ->

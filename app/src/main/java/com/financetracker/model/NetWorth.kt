@@ -1,15 +1,21 @@
 package com.financetracker.model
 
 /**
- * One total across currencies, and the currencies that could not be part of it.
+ * One total across currencies, and everything that could not be part of it.
  *
- * [unquoted] exists because the alternative is worse. A total that quietly omits what it could
- * not convert is displayed with exactly the same confidence as one that could, and the user has
- * no way to tell the difference — the number looks finished. Naming the omissions costs one
- * line of text and turns a lie into a caveat.
+ * Both omissions exist because the alternative is worse. A total that quietly omits what it
+ * could not include is displayed with exactly the same confidence as one that could, and the
+ * user has no way to tell the difference — the number looks finished. Naming the omissions
+ * costs one line of text and turns a lie into a caveat.
  *
- * A null entry is a group of rows with no currency code at all, which [totalsByCurrency]
- * files separately rather than joining a real currency.
+ * [unquoted] is the omission this app did not choose: a currency the rate cache cannot convert.
+ * [excluded] is one the user chose: rows their own [ExclusionRules] held back. They are separate
+ * fields, not one combined list, because they are fixed in different places — one is a rate to
+ * fetch, the other is a rule in Settings — and a user who cannot tell which is which has no way
+ * to act on either.
+ *
+ * A null entry in [unquoted] is a group of rows with no currency code at all, which
+ * [totalsByCurrency] files separately rather than joining a real currency.
  */
 data class NetWorth(
     /** Null only when the cache cannot quote the base itself; see [netWorth]. */
@@ -18,11 +24,23 @@ data class NetWorth(
     val income: Double?,
     val expense: Double?,
     val unquoted: List<String?>,
+    /**
+     * How many rows the user's rules kept out of the figures above. Zero whenever no rule
+     * matches, which is why it is a defaulted argument rather than something every caller has
+     * to supply: a total computed from a list that was never filtered has excluded nothing.
+     */
+    val excluded: Int = 0,
     val rates: ExchangeRates
 )
 
 /**
  * Cash at ledger balance plus bonds at nominal, converted into [base].
+ *
+ * [totals] is expected to have already had the user's [ExclusionRules] applied; [excluded] is the
+ * count of what that removed, carried here only to be reported. This function does not filter,
+ * and should not: a totals function applying a user preference is not what it is for, and the
+ * rows it would have dropped would be dropped for the dashboard and the list by two different
+ * calls that could then disagree.
  *
  * Bonds contribute [Bond.nominal] × quantity and **not** [BondPosition.marketValue]. Nominal is
  * what the state repays at maturity, so the figure is one that will actually be received;
@@ -38,7 +56,8 @@ fun netWorth(
     totals: List<CurrencyTotals>,
     positions: List<BondPosition>,
     rates: ExchangeRates,
-    base: String
+    base: String,
+    excluded: Int = 0
 ): NetWorth {
     val unquoted = linkedSetOf<String?>()
 
@@ -90,6 +109,7 @@ fun netWorth(
             income = null,
             expense = null,
             unquoted = unquoted.toList(),
+            excluded = excluded,
             rates = rates
         )
     }
@@ -99,6 +119,7 @@ fun netWorth(
         income = income,
         expense = expense,
         unquoted = unquoted.toList(),
+        excluded = excluded,
         rates = rates
     )
 }

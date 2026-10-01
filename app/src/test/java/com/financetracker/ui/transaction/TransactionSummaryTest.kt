@@ -1,6 +1,7 @@
 package com.financetracker.ui.transaction
 
 import com.financetracker.model.ExchangeRates
+import com.financetracker.model.ExclusionRules
 import com.financetracker.model.Transaction
 import com.financetracker.model.TransactionType
 import org.junit.Assert.assertEquals
@@ -30,13 +31,14 @@ class TransactionSummaryTest {
         currencyCode = currencyCode
     )
 
-    private fun of(vararg rows: Transaction) = TransactionSummary.of(rows.toList(), rates, "UAH")
+    private fun of(vararg rows: Transaction) =
+        TransactionSummary.of(rows.toList(), ExclusionRules(), rates, "UAH")
 
     @Test
     fun `an empty list totals to nothing rather than to zero`() {
         // Zero is a real balance, and claiming it for a list that simply has no rows would
         // claim the user had broken even.
-        val summary = TransactionSummary.of(emptyList(), rates, "UAH")
+        val summary = TransactionSummary.of(emptyList(), ExclusionRules(), rates, "UAH")
         assertTrue(summary.isEmpty)
         assertEquals(0, summary.count)
         assertEquals(emptyList<Any>(), summary.totals)
@@ -123,5 +125,60 @@ class TransactionSummaryTest {
         )
         assertEquals(100.0, summary.converted.income!!, 1e-6)
         assertEquals(listOf("GBP"), summary.converted.unquoted)
+    }
+
+    @Test
+    fun `a summary says how many rows the user's rules held back`() {
+        // Same argument as the dashboard's unquoted line: a rule the user set and forgot would
+        // otherwise move this figure with nothing on screen to explain it.
+        //
+        // Titles are set explicitly rather than through the shared helper, which names every
+        // row "row" — a rule of "row" would exclude all three and prove nothing about a rule
+        // that is meant to catch some rows and not others.
+        val rows = listOf(
+            Transaction(
+                title = "Salary", amount = 1000.0, type = TransactionType.INCOME,
+                category = "other", timestamp = 0L, currencyCode = "UAH"
+            ),
+            Transaction(
+                title = "Transfer to savings", amount = 500.0, type = TransactionType.EXPENSE,
+                category = "other", timestamp = 0L, currencyCode = "UAH"
+            ),
+            Transaction(
+                title = "Groceries", amount = 100.0, type = TransactionType.EXPENSE,
+                category = "other", timestamp = 0L, currencyCode = "UAH"
+            )
+        )
+        val summary = TransactionSummary.of(rows, ExclusionRules(listOf("transfer")), rates, "UAH")
+
+        assertEquals(1, summary.excluded)
+        // The excluded row is out of the figure, not merely noted beside it.
+        assertEquals(100.0, summary.converted.expense!!, 1e-6)
+    }
+
+    @Test
+    fun `the count stays the number of rows on screen, not the number summed`() {
+        // The case this protects: a panel reading "1 transaction" under a list of two, with the
+        // exclusion line below it explaining a count mismatch rather than a decision.
+        val rows = listOf(
+            Transaction(
+                title = "Groceries", amount = 100.0, type = TransactionType.EXPENSE,
+                category = "other", timestamp = 0L, currencyCode = "UAH"
+            ),
+            Transaction(
+                title = "Transfer to savings", amount = 500.0, type = TransactionType.EXPENSE,
+                category = "other", timestamp = 0L, currencyCode = "UAH"
+            )
+        )
+
+        val summary = TransactionSummary.of(rows, ExclusionRules(listOf("transfer")), rates, "UAH")
+
+        assertEquals(2, summary.count)
+        assertEquals(1, summary.excluded)
+    }
+
+    @Test
+    fun `a summary with no rules on reports nothing excluded`() {
+        assertEquals(0, of(transaction(100.0, TransactionType.EXPENSE)).excluded)
     }
 }
