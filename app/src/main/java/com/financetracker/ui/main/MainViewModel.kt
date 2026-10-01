@@ -3,7 +3,10 @@ package com.financetracker.ui.main
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.financetracker.R
+import com.financetracker.data.rates.ExchangeRateRepository
+import com.financetracker.data.settings.DEFAULT_BASE_CURRENCY
 import com.financetracker.model.BondPosition
+import com.financetracker.model.ExchangeRates
 import com.financetracker.model.Transaction
 import com.financetracker.repository.AuthRepository
 import com.financetracker.repository.BankRepository
@@ -28,6 +31,7 @@ class MainViewModel @Inject constructor(
     private val authRepository: AuthRepository,
     private val transactionRepository: TransactionRepository,
     private val bondRepository: BondRepository,
+    private val rates: ExchangeRateRepository,
     bankRepository: BankRepository
 ) : ViewModel() {
 
@@ -66,6 +70,29 @@ class MainViewModel @Inject constructor(
      */
     private val _message = MutableStateFlow<Int?>(null)
     val message: StateFlow<Int?> = _message.asStateFlow()
+
+    /** Always set; there is no state in which the dashboard has no total to show. */
+    val baseCurrency: StateFlow<String> = rates.baseCurrency
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), DEFAULT_BASE_CURRENCY)
+
+    val exchangeRates: StateFlow<ExchangeRates> = rates.rates
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), ExchangeRates(emptyMap(), null, 0L))
+
+    /**
+     * One fetch on the way in, at most a day apart.
+     *
+     * Deliberately not a timer and not WorkManager: NBU publishes one rate a day, so the only
+     * question is whether this screen has been opened since the last one. Failure is silent and
+     * leaves the cache alone — a dashboard that cannot reach the network still has to render
+     * the balances it already knows.
+     */
+    fun refreshRatesIfStale() {
+        viewModelScope.launch { rates.refreshIfStale() }
+    }
+
+    fun refreshRates() {
+        viewModelScope.launch { rates.refresh() }
+    }
 
     fun deleteTransaction(id: Long) {
         viewModelScope.launch {

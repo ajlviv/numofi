@@ -55,16 +55,6 @@ data class StatementItemResponse(
     @SerializedName("counterName") val counterName: String?
 )
 
-// GET /bank/currency
-data class CurrencyInfoResponse(
-    @SerializedName("currencyCodeA") val currencyCodeA: Int,
-    @SerializedName("currencyCodeB") val currencyCodeB: Int,
-    @SerializedName("date") val date: Long,
-    @SerializedName("rateSell") val rateSell: Double,
-    @SerializedName("rateBuy") val rateBuy: Double,
-    @SerializedName("rateCross") val rateCross: Double
-)
-
 // GET /bank/sync
 data class BankSyncResponse(
     @SerializedName("serverKeyId") val serverKeyId: String?,

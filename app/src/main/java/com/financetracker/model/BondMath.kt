@@ -68,9 +68,10 @@ object BondMath {
      *
      * [BondSettlement.amount] is what should be recorded on the cash row and
      * [BondSettlement.impliedRate] is the rate the user's own numbers imply, shown so a
-     * mistyped amount is visible. The rate is never stored: there is no rate feed here, and
-     * a stored rate would be a second source of truth about a conversion that happened
-     * somewhere else entirely.
+     * mistyped amount is visible. The rate is never stored: it is derived from the user's own
+     * two numbers and describes one moment on one trade, so a stored copy would be a second
+     * source of truth about a conversion that happened somewhere else entirely. The NBU cache
+     * does not stand in for it either — that quotes today, not the day the bond was traded.
      *
      * [bondCurrency] is the currency [marketValue] is in. Settlement in the bond's own
      * currency needs no rate even to mention; settlement in any other needs one, so the two

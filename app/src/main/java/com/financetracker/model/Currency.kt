@@ -3,13 +3,16 @@ package com.financetracker.model
 /**
  * The currencies this app can record a row in, in the order they are offered.
  *
- * A fixed list, and not every ISO code, because the app has no rate feed. It shows per-currency
- * totals and never converts, so a currency is a bucket a row is filed in rather than a number
- * to be translated — and an account in a currency nobody thought to list would be one the user
- * could not file a row in at all. UAH first because it is the app's primary currency, and the
- * one the bonds are denominated in.
+ * A short list and not every ISO code, because a currency here is also one a conversion may be
+ * asked for: NBU quotes about forty and this app holds only the ones whose rows it can file,
+ * and an account in a currency nobody thought to list would be one the user could not record
+ * anything in at all. Anything added here is expected to have a rate on NBU's side — if it does
+ * not, `NbuRatesParser` drops it silently and it appears only in the per-currency cards.
+ *
+ * UAH first because it is the app's primary currency, the one the bonds are denominated in, and
+ * the pivot every cached rate is quoted against.
  */
-val RECORDABLE_CURRENCIES: List<String> = listOf("UAH", "USD", "EUR")
+val RECORDABLE_CURRENCIES: List<String> = listOf("UAH", "USD", "EUR", "PLN")
 
 /**
  * The currency a hand-entered row starts in.

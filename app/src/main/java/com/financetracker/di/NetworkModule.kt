@@ -3,6 +3,7 @@ package com.financetracker.di
 import com.financetracker.data.bank.BankProviderRegistry
 import com.financetracker.data.bank.monobank.MonobankApi
 import com.financetracker.data.bank.monobank.MonobankBankProvider
+import com.financetracker.data.rates.NbuApi
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -40,6 +41,23 @@ object NetworkModule {
             .addConverterFactory(GsonConverterFactory.create())
             .build()
             .create(MonobankApi::class.java)
+
+    /**
+     * Shares the one OkHttpClient with the bank providers rather than declaring a second.
+     *
+     * Its timeouts and logging are already right for this, and a separate pool would double the
+     * open connections for a host that gets one request a day. Retrofit needs its own instance
+     * only because the base URL differs.
+     */
+    @Provides
+    @Singleton
+    fun provideNbuApi(client: OkHttpClient): NbuApi =
+        Retrofit.Builder()
+            .baseUrl(NbuApi.BASE_URL)
+            .client(client)
+            .addConverterFactory(GsonConverterFactory.create())
+            .build()
+            .create(NbuApi::class.java)
 
     @Provides
     @Singleton
