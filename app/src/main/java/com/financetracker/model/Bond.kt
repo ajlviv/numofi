@@ -4,6 +4,7 @@ import androidx.room.Entity
 import androidx.room.ForeignKey
 import androidx.room.Index
 import androidx.room.PrimaryKey
+import java.time.ZoneId
 
 /**
  * A bond the user holds or has traded.
@@ -135,10 +136,21 @@ data class BondTradeEntity(
     )
 }
 
-/** Which way a [BondTradeEntity] went. Only these two; there is no transfer between brokers. */
+/**
+ * Which way a [BondTradeEntity] went.
+ *
+ * [SELL] and [REDEMPTION] move the same money and change the holding the same way, and are kept
+ * apart because they are not the same event. A sale is the user finding a buyer;
+ * [REDEMPTION] is the issuer paying the bond back — at maturity, or under an early-redemption
+ * term — with no counterparty and no price the user negotiated. The ledger says which one
+ * happened, so a matured bond does not read back as a sale at par.
+ *
+ * There is no transfer between brokers.
+ */
 enum class BondTradeSide {
     BUY,
-    SELL
+    SELL,
+    REDEMPTION
 }
 
 /** A bond as the UI sees it, see [BondEntity]. */
@@ -176,6 +188,28 @@ data class BondTrade(
  */
 data class BondSettlement(val amount: Double, val impliedRate: Double?)
 
+/**
+ * What a holding is expected to pay by its maturity, see [BondMath.expectedAtMaturity].
+ *
+ * @param invested the money paid for the bonds still held, commission and accrual included.
+ *   Carried to be shown beside the total — what went in against what comes back — and never a
+ *   term in the payout. It is not what comes back: the nominal is.
+ * @param nominal the face value coming back, the held quantity at the bond's own nominal.
+ * @param coupon every coupon falling due before maturity, at the rate the user recorded.
+ * @param payments how many coupons that is, or null when no coupon period is recorded and the
+ *   coupon was pro-rated by day count instead — a figure with no count behind it is an estimate
+ *   and the screen says as much.
+ */
+data class BondPayout(
+    val invested: Double,
+    val nominal: Double,
+    val coupon: Double,
+    val payments: Int?
+) {
+    /** What the holding takes in by maturity: the face value plus the coupon on it. */
+    val total: Double get() = nominal + coupon
+}
+
 /** A holding folded from trades, see [BondMath.position]. */
 data class BondPosition(
     val bond: Bond,
@@ -191,11 +225,34 @@ data class BondPosition(
     /** The price of the most recent trade, which is the only price this app knows. */
     val lastPrice: Double?,
     /** Null when the bond has no recorded coupon, see [BondMath.annualCouponIncome]. */
-    val annualCouponIncome: Double?
+    val annualCouponIncome: Double?,
+    /**
+     * Epoch millis of the first trade — when the holding started.
+     *
+     * Carried because the payout is counted off the purchase date: it is what decides which of
+     * the coupon dates belong to this holding rather than to whoever held it before, so the
+     * projection needs the start and not just today.
+     */
+    val heldSince: Long
 ) {
     /** What the holding is worth at the last price entered, in the bond's currency. */
     val marketValue: Double
         get() = quantity * (lastPrice ?: 0.0)
+
+    /**
+     * What this is expected to pay by maturity, or null when the terms to project it are
+     * missing. See [BondMath.expectedAtMaturity], which owns the arithmetic.
+     */
+    fun payout(zone: ZoneId): BondPayout? = BondMath.expectedAtMaturity(
+        invested = cost,
+        quantity = quantity,
+        nominal = bond.nominal,
+        couponPercent = bond.couponPercent,
+        couponPeriodMonths = bond.couponPeriodMonths,
+        heldSinceMillis = heldSince,
+        maturityMillis = bond.maturityDate,
+        zone = zone
+    )
 
     /**
      * Profit or loss against what was paid, at the last price entered.

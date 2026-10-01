@@ -118,6 +118,10 @@
   <string name="add_approx_rate">приблизно %1$.2f %2$s за %3$s</string>
   <string name="add_buy">Купити</string>
   <string name="add_sell">Продати</string>
+  <string name="add_redeem">Погашення</string>
+  <string name="add_redeemed_total">Виплата на картку</string>
+  <string name="add_redeemed_per_bond">%1$s за облігацію</string>
+  <string name="add_redeemed_coupon_hint">Виплата містить купон — запишіть його окремим доходом</string>
   <string name="add_error_enter_name">Введіть назву</string>
   <string name="add_error_accrued_negative">Накопичений дохід не може бути відʼємним</string>
   <string name="add_error_commission_negative">Комісія не може бути відʼємною</string>
@@ -131,7 +135,9 @@
   <string name="bond_figure_held">У портфелі</string>
   <string name="bond_figure_cost_per">Ціна за облігацію</string>
   <string name="bond_figure_unrealised">Нереалізований результат</string>
-  <string name="bond_fully_sold">Повністю продано. Залишено тут, бо тут збережені угоди.</string>
+  <string name="bond_fully_sold">Більше не в портфелі. Залишено тут, бо тут збережені угоди.</string>
+  <string name="bond_expected_at_maturity">До погашення: номінал %1$s + купон %2$s × %3$d = %4$s</string>
+  <string name="bond_expected_at_maturity_prorated">До погашення: номінал %1$s + купон %2$s = %3$s</string>
   <string name="bond_coupon_full">Купон %1$.2f%% кожні %2$d міс. — %3$s на рік</string>
   <string name="bond_coupon_period">Купон %1$.2f%% кожні %2$d міс.</string>
   <string name="bond_coupon_only">Купон %1$.2f%%</string>

@@ -4,6 +4,8 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import java.time.LocalDate
+import java.time.ZoneId
 
 /**
  * The money.
@@ -24,12 +26,19 @@ class BondMathTest {
     /** 99.5% of the 1000 nominal, now entered directly as money. */
     private val parPrice = 995.0
 
+    private val kyiv = ZoneId.of("Europe/Kyiv")
+
+    /** Midday on a date in Kyiv. Midday, so no daylight-saving edge can move the date. */
+    private fun millis(year: Int, month: Int, day: Int): Long =
+        LocalDate.of(year, month, day).atTime(12, 0).atZone(kyiv).toInstant().toEpochMilli()
+
     private fun trade(
         side: BondTradeSide = BondTradeSide.BUY,
         quantity: Int = 1,
         price: Double = parPrice,
         accrued: Double = 0.0,
-        commission: Double = 0.0
+        commission: Double = 0.0,
+        date: Long = 0
     ) = BondTrade(
         id = 0,
         isin = "UA9000012345",
@@ -38,7 +47,7 @@ class BondMathTest {
         price = price,
         accruedInterest = accrued,
         commission = commission,
-        tradeDate = 0,
+        tradeDate = date,
         bankCode = null,
         transactionId = null
     )
@@ -212,6 +221,294 @@ class BondMathTest {
         assertEquals(0, position.quantity)
         // Left at the residual rather than zeroed, so a rounding remainder does not vanish.
         assertTrue(position.cost < 1.0)
+    }
+
+    // MARK: - Redemption
+
+    @Test
+    fun `a redemption takes the bonds off the holding and the cost with them`() {
+        // Ten bonds paid back at the nominal after a year. The position has to end empty and
+        // the cost has to leave with it: a position that kept its cost with no bonds behind it
+        // would report a loss of the whole holding.
+        val position = BondMath.position(
+            bond,
+            listOf(
+                trade(quantity = 10, commission = 0.0),
+                trade(side = BondTradeSide.REDEMPTION, quantity = 10, price = nominal)
+            )
+        )!!
+
+        assertEquals(0, position.quantity)
+        assertNull(position.averageCost)
+        assertTrue(position.cost < 1.0)
+        // Nothing is held, so there is nothing to value — not a holding marked at its
+        // redemption price for ever.
+        assertEquals(0.0, position.marketValue, 0.0)
+    }
+
+    @Test
+    fun `a redemption of part of a holding releases that share of the cost`() {
+        // ОВДП can be redeemed in part, and a partial redemption is why this is the
+        // proportional arithmetic rather than "the whole position goes".
+        val position = BondMath.position(
+            bond,
+            listOf(
+                trade(quantity = 10, commission = 0.0),
+                trade(side = BondTradeSide.REDEMPTION, quantity = 4, price = nominal)
+            )
+        )!!
+
+        assertEquals(6, position.quantity)
+        // Pro rata, exactly as the equivalent sale: 4 of 10 bonds, so 40% of 9950 leaves.
+        assertEquals(5970.0, position.cost, 0.0)
+    }
+
+    @Test
+    fun `a redemption of more than is held is clamped like a sale`() {
+        // Unreachable through the form, which blocks it, but reachable as stored data — a
+        // hand-edited date can put a redemption before the buy it redeems.
+        val position = BondMath.position(
+            bond,
+            listOf(
+                trade(side = BondTradeSide.REDEMPTION, quantity = 2, price = nominal),
+                trade(quantity = 3, price = 1000.0)
+            )
+        )!!
+
+        assertEquals(3, position.quantity)
+        assertTrue(position.cost >= 0.0)
+    }
+
+    // MARK: - Projected payout
+
+    @Test
+    fun `the payout is the nominal back plus the coupons due before it`() {
+        // The reported holding: 20 ОВДП bought on 22 September 2026 at 1 067.85 — 21 357.40 —
+        // on a 1 000 nominal, 16.15% a year, maturing 26 April 2028. The broker's schedule
+        // totals 26 340 as four coupon rows and a final row of nominal plus coupon.
+        val payout = BondMath.expectedAtMaturity(
+            invested = 21357.40,
+            quantity = 20,
+            nominal = 1000.0,
+            couponPercent = 16.15,
+            couponPeriodMonths = 6,
+            heldSinceMillis = millis(2026, 9, 22),
+            maturityMillis = millis(2028, 4, 26),
+            zone = kyiv
+        )!!
+
+        // The schedule run backwards off 26.04.2028 in six-month steps is 26.04.2028,
+        // 26.10.2027, 26.04.2027 and 26.10.2026 — four of them, all after the purchase.
+        assertEquals(4, payout.payments!!)
+        assertEquals(20000.0, payout.nominal, 0.0)
+        // 20 000 x 16.15% / 2 = 1 615 a half-year, four of them.
+        assertEquals(6460.0, payout.coupon, 0.0)
+        assertEquals(26460.0, payout.total, 0.0)
+        // What was paid rides along to be shown beside the total, never added into it.
+        assertEquals(21357.40, payout.invested, 0.0)
+    }
+
+    @Test
+    fun `a premium paid over the nominal is spent, not paid back`() {
+        // The bug this replaces. The old projection was invested + invested x rate, which
+        // returned the premium and then paid the coupon rate on top of it. A bond repays its
+        // nominal whatever the buyer paid for it, so the same twenty bonds bought at
+        // 1 067.85 and at 900.00 take in exactly the same by maturity.
+        val atAPremium = BondMath.expectedAtMaturity(
+            invested = 21357.40,
+            quantity = 20,
+            nominal = 1000.0,
+            couponPercent = 16.15,
+            couponPeriodMonths = 6,
+            heldSinceMillis = millis(2026, 9, 22),
+            maturityMillis = millis(2028, 4, 26),
+            zone = kyiv
+        )!!
+        val atADiscount = BondMath.expectedAtMaturity(
+            invested = 18000.0,
+            quantity = 20,
+            nominal = 1000.0,
+            couponPercent = 16.15,
+            couponPeriodMonths = 6,
+            heldSinceMillis = millis(2026, 9, 22),
+            maturityMillis = millis(2028, 4, 26),
+            zone = kyiv
+        )!!
+
+        assertEquals(atAPremium.total, atADiscount.total, 0.0)
+        assertEquals(26460.0, atAPremium.total, 0.0)
+    }
+
+    @Test
+    fun `the coupon accrues on the nominal rather than on what was paid`() {
+        // The distinction the offer turns on: 15% of the 1 000 nominal is 150 a year, while 15%
+        // of the 1 021.34 actually paid would be 153.20. Only the first is what a bond pays.
+        val payout = BondMath.expectedAtMaturity(
+            invested = 1021.34,
+            quantity = 1,
+            nominal = 1000.0,
+            couponPercent = 15.0,
+            couponPeriodMonths = 12,
+            heldSinceMillis = millis(2026, 5, 5),
+            maturityMillis = millis(2027, 5, 5),
+            zone = kyiv
+        )!!
+
+        assertEquals(1, payout.payments!!)
+        assertEquals(150.0, payout.coupon, 0.0)
+        assertEquals(1150.0, payout.total, 0.0)
+    }
+
+    @Test
+    fun `the maturity date carries a coupon as well as the nominal`() {
+        // A broker's schedule ends on the redemption date with the nominal and the last coupon
+        // in one row of 1 079.25, so a holding that started weeks earlier collects that too.
+        val payout = BondMath.expectedAtMaturity(
+            invested = 1000.0,
+            quantity = 1,
+            nominal = 1000.0,
+            couponPercent = 15.0,
+            couponPeriodMonths = 6,
+            heldSinceMillis = millis(2027, 4, 1),
+            maturityMillis = millis(2027, 4, 26),
+            zone = kyiv
+        )!!
+
+        assertEquals(1, payout.payments!!)
+        assertEquals(75.0, payout.coupon, 0.0)
+        assertEquals(1075.0, payout.total, 0.0)
+    }
+
+    @Test
+    fun `a holding counts the schedule it sits in rather than the days it was held`() {
+        // The coupon dates are not recorded, so the count comes from the schedule run back off
+        // maturity. Bought six days after the April date the position is one row short of one
+        // bought six days before it, which is what a broker's schedule would show too — and
+        // neither holding is anywhere near a full year shorter than the other.
+        val beforeTheDate = BondMath.expectedAtMaturity(
+            invested = 20000.0,
+            quantity = 20,
+            nominal = 1000.0,
+            couponPercent = 15.0,
+            couponPeriodMonths = 6,
+            heldSinceMillis = millis(2027, 4, 20),
+            maturityMillis = millis(2028, 4, 26),
+            zone = kyiv
+        )!!
+        val afterTheDate = BondMath.expectedAtMaturity(
+            invested = 20000.0,
+            quantity = 20,
+            nominal = 1000.0,
+            couponPercent = 15.0,
+            couponPeriodMonths = 6,
+            heldSinceMillis = millis(2027, 5, 1),
+            maturityMillis = millis(2028, 4, 26),
+            zone = kyiv
+        )!!
+
+        // 20 000 x 15% / 2 = 1 500 a half-year.
+        assertEquals(3, beforeTheDate.payments!!)
+        assertEquals(2, afterTheDate.payments!!)
+        assertEquals(20000.0 + 3 * 1500.0, beforeTheDate.total, 0.0)
+        assertEquals(20000.0 + 2 * 1500.0, afterTheDate.total, 0.0)
+    }
+
+    @Test
+    fun `no recorded period falls back to a day count, still on the nominal`() {
+        // With no coupon period there is no schedule to run backwards, so the coupon is
+        // pro-rated over the days held. The fallback changes what counts the payments, not
+        // what the coupon accrues on — the base is the nominal here exactly as above.
+        val payout = BondMath.expectedAtMaturity(
+            invested = 20426.8,
+            quantity = 20,
+            nominal = 1000.0,
+            couponPercent = 15.0,
+            couponPeriodMonths = null,
+            heldSinceMillis = millis(2026, 5, 5),
+            maturityMillis = millis(2027, 3, 24),
+            zone = kyiv
+        )!!
+
+        // Null rather than a count, so the screen can show a figure with nothing behind it.
+        assertNull(payout.payments)
+        assertEquals(20000.0, payout.nominal, 0.0)
+        // 20 000 x 15% x 323/365 = 2 654.79.
+        assertEquals(2654.79, payout.coupon, 0.01)
+        assertEquals(22654.79, payout.total, 0.01)
+    }
+
+    @Test
+    fun `a zero coupon pays the nominal and nothing else`() {
+        // A bond that repays only its face value is a real thing, and it must survive the
+        // null check on the rate rather than read as unknown.
+        val payout = BondMath.expectedAtMaturity(
+            invested = 9000.0,
+            quantity = 10,
+            nominal = 1000.0,
+            couponPercent = 0.0,
+            couponPeriodMonths = 6,
+            heldSinceMillis = millis(2026, 9, 22),
+            maturityMillis = millis(2028, 4, 26),
+            zone = kyiv
+        )!!
+
+        assertEquals(4, payout.payments!!)
+        assertEquals(0.0, payout.coupon, 0.0)
+        assertEquals(10000.0, payout.total, 0.0)
+    }
+
+    @Test
+    fun `a payout cannot be projected without a coupon or a maturity`() {
+        // Null rather than zero, because a blank is honest about not knowing while a zero
+        // reads as a bond that pays nothing — the same reason annualCouponIncome is nullable.
+        assertNull(
+            BondMath.expectedAtMaturity(
+                1000.0, 1, 1000.0, null, 6, millis(2026, 1, 1), millis(2027, 1, 1), kyiv
+            )
+        )
+        assertNull(
+            BondMath.expectedAtMaturity(
+                1000.0, 1, 1000.0, 15.0, 6, millis(2026, 1, 1), null, kyiv
+            )
+        )
+    }
+
+    @Test
+    fun `a maturity already behind the holding projects nothing`() {
+        // A payout that has already happened is a recorded redemption. Projecting it again
+        // would be a second, disagreeing answer to a question the ledger has settled — and a
+        // negative number of coupons, which is not a figure any issuer would pay.
+        assertNull(
+            BondMath.expectedAtMaturity(
+                1000.0, 1, 1000.0, 15.0, 6, millis(2027, 1, 1), millis(2026, 1, 1), kyiv
+            )
+        )
+    }
+
+    @Test
+    fun `a holding of nothing projects nothing`() {
+        // A closed position already carries a "fully sold" line, so a second line totalling
+        // zero is noise rather than information.
+        assertNull(
+            BondMath.expectedAtMaturity(
+                0.0, 0, 1000.0, 15.0, 6, millis(2026, 9, 22), millis(2028, 4, 26), kyiv
+            )
+        )
+    }
+
+    @Test
+    fun `a position remembers when the holding started`() {
+        val position = BondMath.position(
+            bond,
+            listOf(
+                trade(quantity = 1, date = millis(2026, 5, 5)),
+                trade(quantity = 1, price = 1010.0, date = millis(2026, 6, 5))
+            )
+        )!!
+
+        // The earliest trade, not the latest: the payout is earned over the whole time held, so
+        // measuring from the most recent purchase would understate it.
+        assertEquals(millis(2026, 5, 5), position.heldSince)
     }
 
     @Test

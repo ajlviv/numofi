@@ -139,6 +139,10 @@
   <string name="add_approx_rate">at about %1$.2f %2$s per %3$s</string>
   <string name="add_buy">Buy</string>
   <string name="add_sell">Sell</string>
+  <string name="add_redeem">Redeem</string>
+  <string name="add_redeemed_total">Received on card</string>
+  <string name="add_redeemed_per_bond">%1$s per bond</string>
+  <string name="add_redeemed_coupon_hint">This credit includes the coupon — record it separately as income</string>
   <string name="add_error_enter_name">Enter a name</string>
   <string name="add_error_accrued_negative">Accrued interest cannot be negative</string>
   <string name="add_error_commission_negative">Commission cannot be negative</string>
@@ -152,7 +156,9 @@
   <string name="bond_figure_held">Held</string>
   <string name="bond_figure_cost_per">Cost/bond</string>
   <string name="bond_figure_unrealised">Unrealised</string>
-  <string name="bond_fully_sold">Fully sold. Kept here because the trades are.</string>
+  <string name="bond_fully_sold">No longer held. Kept here because the trades are.</string>
+  <string name="bond_expected_at_maturity">At maturity: principal %1$s + coupon %2$s × %3$d = %4$s</string>
+  <string name="bond_expected_at_maturity_prorated">At maturity: principal %1$s + coupon %2$s = %3$s</string>
   <string name="bond_coupon_full">Coupon %1$.2f%% every %2$d months — %3$s a year</string>
   <string name="bond_coupon_period">Coupon %1$.2f%% every %2$d months</string>
   <string name="bond_coupon_only">Coupon %1$.2f%%</string>

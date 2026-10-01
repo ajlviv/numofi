@@ -128,10 +128,13 @@ class BondRepository @Inject constructor(
 
         val result = db.withTransaction {
             val existing = bondDao.getByIsin(isin)
-            // Checked against what is already held, before the insert, so a sale of an
+            // Checked against what is already held, before the insert, so a disposal of an
             // instrument the app has never seen is refused as the oversell it is rather than
-            // creating the instrument in order to sell it.
-            if (side == BondTradeSide.SELL) {
+            // creating the instrument in order to empty it. Written as "anything but a
+            // purchase" so a redemption is covered by the same guard as a sale: both take
+            // bonds out of the holding, and a redemption of a position that was already sold
+            // would otherwise be accepted.
+            if (side != BondTradeSide.BUY) {
                 val held = existing?.let { BondMath.position(it.toDomain(), bondDao.getTradesFor(isin).map { t -> t.toDomain() }) }
                     ?.quantity
                     ?: 0
@@ -196,7 +199,11 @@ class BondRepository @Inject constructor(
                     ),
                     transferDirection = when (side) {
                         BondTradeSide.BUY -> TransferDirection.OUT
-                        BondTradeSide.SELL -> TransferDirection.IN
+                        // Money coming back: a sale's proceeds, or the nominal a redemption
+                        // returns. Return of capital either way, so neither is income — the
+                        // coupon that may arrive with a redemption is a separate row, because
+                        // it is earned rather than given back.
+                        BondTradeSide.SELL, BondTradeSide.REDEMPTION -> TransferDirection.IN
                     }
                 )
             )
@@ -246,11 +253,20 @@ class BondRepository @Inject constructor(
      * user typed, and not as a percentage, which is what the whole storage change removed.
      */
     private fun tradeNote(side: BondTradeSide, quantity: Int, price: Double, currency: String): String =
-        "%s %d шт. @ %s".format(
-            if (side == BondTradeSide.BUY) "Купівля" else "Продаж",
-            quantity,
-            MoneyFormat.format(price, currency)
-        )
+        "%s %d шт. @ %s".format(tradeWord(side), quantity, MoneyFormat.format(price, currency))
+
+    /**
+     * What the side is called, where the row has no other word for it.
+     *
+     * «Погашення» rather than «Продаж» for a redemption, because nobody bought the bonds back:
+     * the issuer paid them. The price in a redemption's note is the per-bond figure the total
+     * the user typed works out to, which for a redemption at par is the nominal.
+     */
+    private fun tradeWord(side: BondTradeSide): String = when (side) {
+        BondTradeSide.BUY -> "Купівля"
+        BondTradeSide.SELL -> "Продаж"
+        BondTradeSide.REDEMPTION -> "Погашення"
+    }
 
     private fun Bond.toEntity(isin: String): BondEntity =
         BondEntity(

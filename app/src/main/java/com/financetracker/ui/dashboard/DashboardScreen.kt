@@ -6,20 +6,20 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowDownward
-import androidx.compose.material.icons.filled.ArrowUpward
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -48,13 +48,16 @@ fun DashboardScreen(
     positions: List<BondPosition> = emptyList(),
     modifier: Modifier = Modifier
 ) {
-    // One set of cards per currency. Summing across currencies and labelling the result
-    // with whichever currency was most common produced a figure that looked authoritative
-    // and was meaningless. With a single currency, which is the usual case, this renders
-    // exactly as it did before.
+    // One card per currency. Summing across currencies and labelling the result with
+    // whichever currency was most common produced a figure that looked authoritative and
+    // was meaningless.
     val totals = totalsByCurrency(transactions).ifEmpty {
         listOf(CurrencyTotals(currencyCode = null, income = 0.0, expense = 0.0))
     }
+    // A currency group is named only when there is more than one: a lone group is
+    // unambiguous, but a second one printed below with no name of its own would read as a
+    // duplicate of the first. Same rule as the transaction list's summary panel.
+    val nameTheCurrency = totals.size > 1
 
     Column(
         modifier = modifier
@@ -64,12 +67,12 @@ fun DashboardScreen(
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
         totals.forEach { currency ->
-            BalanceCard(balance = currency.balance, currencyCode = currency.currencyCode)
-
-            SummaryRow(
-                totalIncome = currency.income,
-                totalExpense = currency.expense,
-                currencyCode = currency.currencyCode
+            CurrencySummaryCard(
+                currencyCode = currency.currencyCode,
+                balance = currency.balance,
+                income = currency.income,
+                expense = currency.expense,
+                showCurrencyLabel = nameTheCurrency
             )
         }
 
@@ -99,44 +102,104 @@ fun DashboardScreen(
     }
 }
 
+/**
+ * One currency's cash, its income and its expenses, together.
+ *
+ * These were three separate cards of two different sizes — a filled balance card above a pair
+ * of smaller totals — which is why they never lined up: "equal height" was something the
+ * layout had to be asked to agree on and could not, because the balance card was taller by its
+ * own padding and type scale. One card per currency makes the three the same height by
+ * construction rather than by agreement, keeps the two flows on a single row of equal columns,
+ * and stops a history in several currencies from repeating a balance-then-totals block down
+ * the screen once per currency.
+ *
+ * The balance stays the largest figure, since it is the one number the screen exists to show.
+ * Income and expense keep their own colours so the pair reads without consulting the labels.
+ * The balance deliberately takes no colour: it already means something on its own, and a third
+ * colour in the row would make the three look like three kinds of the same figure.
+ */
 @Composable
-private fun BalanceCard(balance: Double, currencyCode: String?) {
-    Card(
-        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primary)
-    ) {
-        Column(
-            modifier = Modifier.padding(24.dp),
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
+private fun CurrencySummaryCard(
+    currencyCode: String?,
+    balance: Double,
+    income: Double,
+    expense: Double,
+    showCurrencyLabel: Boolean
+) {
+    Card(elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)) {
+        Column(modifier = Modifier.fillMaxWidth().padding(20.dp)) {
+            if (showCurrencyLabel) {
+                Text(
+                    text = currencyCode ?: stringResource(R.string.list_no_currency),
+                    style = MaterialTheme.typography.labelMedium,
+                    color = Color.Gray
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+            }
             Text(
                 // Not "Total Balance", which it is no longer the whole of. What this shows is
                 // cash; a bond holding is worth something and is reported separately, because
                 // the two cannot be added without inventing a rate.
                 text = stringResource(R.string.dash_cash),
                 style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.8f)
+                color = Color.Gray
             )
-            Spacer(modifier = Modifier.height(8.dp))
-            // The default mustard is dark, and this card draws on the filled primary colour,
-            // so the symbol is brightened here to stay readable on that background.
+            Spacer(modifier = Modifier.height(4.dp))
             MoneyAmount(
                 amount = balance,
                 currencyCode = currencyCode,
-                style = MaterialTheme.typography.headlineLarge,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.onPrimary,
-                symbolColor = Color(0xFFF5D98A)
+                style = MaterialTheme.typography.headlineMedium,
+                fontWeight = FontWeight.Bold
             )
+            Spacer(modifier = Modifier.height(16.dp))
+            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+            Spacer(modifier = Modifier.height(16.dp))
+            // Two equal columns, equal in height as well as width: an amount that wraps on one
+            // side must not leave the other floating at a different baseline.
+            Row(
+                modifier = Modifier.fillMaxWidth().height(IntrinsicSize.Min),
+                horizontalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                SummaryFigure(
+                    label = stringResource(R.string.income),
+                    amount = income,
+                    currencyCode = currencyCode,
+                    color = TransactionAppearance.Income
+                )
+                SummaryFigure(
+                    label = stringResource(R.string.expenses),
+                    amount = expense,
+                    currencyCode = currencyCode,
+                    color = TransactionAppearance.Expense
+                )
+            }
         }
     }
 }
 
+/**
+ * One side of a currency card's flow row.
+ *
+ * Takes its own weight rather than accepting a [Modifier], so the two figures cannot be given
+ * different widths by a caller and stop lining up with each other or with the balance above.
+ */
 @Composable
-private fun SummaryRow(totalIncome: Double, totalExpense: Double, currencyCode: String?) {
-    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-        SummaryCard(label = stringResource(R.string.income), amount = totalIncome, color = TransactionAppearance.Income, currencyCode = currencyCode)
-        SummaryCard(label = stringResource(R.string.expenses), amount = totalExpense, color = TransactionAppearance.Expense, currencyCode = currencyCode)
+private fun RowScope.SummaryFigure(
+    label: String,
+    amount: Double,
+    currencyCode: String?,
+    color: Color
+) {
+    Column(modifier = Modifier.weight(1f).fillMaxHeight()) {
+        Text(label, style = MaterialTheme.typography.labelMedium, color = Color.Gray)
+        Spacer(modifier = Modifier.height(2.dp))
+        MoneyAmount(
+            amount = amount,
+            currencyCode = currencyCode,
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.Bold,
+            color = color
+        )
     }
 }
 
@@ -216,28 +279,6 @@ private fun InvestmentFigure(label: String, value: String, color: Color?) {
 
 private fun withSign(value: Double, currency: String): String =
     (if (value > 0) "+" else "") + MoneyFormat.format(value, currency)
-
-@Composable
-private fun RowScope.SummaryCard(
-    label: String,
-    amount: Double,
-    color: Color,
-    currencyCode: String?
-) {
-    Card(modifier = Modifier.weight(1f), elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)) {
-        Column(modifier = Modifier.padding(16.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-            Text(label, style = MaterialTheme.typography.bodySmall, color = Color.Gray)
-            Spacer(modifier = Modifier.height(4.dp))
-            MoneyAmount(
-                amount = amount,
-                currencyCode = currencyCode,
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold,
-                color = color
-            )
-        }
-    }
-}
 
 @Composable
 private fun TransactionRow(transaction: Transaction) {
