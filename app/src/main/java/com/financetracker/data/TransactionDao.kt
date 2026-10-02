@@ -130,6 +130,16 @@ interface TransactionDao {
     suspend fun getExternalIdsForUser(userId: String): List<String>
 
     /**
+     * One row by its id.
+     *
+     * Read before a write so a write that would change nothing can be recognised as one. A
+     * `WHERE type = :type` guard on the `UPDATE` cannot do it: SQLite reports the rows an
+     * update *matched*, so re-applying a value the row already holds still counts as one.
+     */
+    @Query("SELECT * FROM transactions WHERE id = :id")
+    suspend fun getById(id: Long): TransactionEntity?
+
+    /**
      * Rows in a time range, for matching statement lines against transactions that
      * arrived through bank sync. Deduplicating on external id alone is not enough:
      * a statement row has no bank id, so the same payment synced as `monobank_123`

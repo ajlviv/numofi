@@ -34,24 +34,34 @@ object BondMath {
     /**
      * What one trade costs, wherever it went, in the bond's currency.
      *
-     * Quantity times the price per bond, plus the accrued interest for every bond, plus the
-     * commission once. The two additions are deliberately asymmetric:
+     * Quantity times the price per bond, plus the accrued interest for every bond, and the
+     * commission once — added on a purchase and *deducted* on a disposal. The three
+     * additions are deliberately asymmetric:
      *
      * - [BondTrade.accruedInterest] is a per-bond figure, so it scales with the quantity.
      *   This is how a broker quotes it and it is stored in that unit so a per-bond reading
      *   stays recoverable.
-     * - [BondTrade.commission] is the whole trade's commission as charged, so it is added
+     * - [BondTrade.commission] is the whole trade's commission as charged, so it is counted
      *   once. A broker quoting per bond and one quoting per trade are indistinguishable
      *   from a single number, and the field is defined as the total so that whatever the
      *   user types is what gets spent.
+     * - The commission's *sign* is the one thing that differs by side. A broker charges it
+     *   on both: buying, so it adds to what leaves the account; selling, so it comes off
+     *   what arrives. Adding it on a disposal credited the user their own fee and left
+     *   every sale's balance too high by twice the commission, permanently, because the
+     *   wrong figure is written to the cash row rather than recomputed on read.
      *
-     * A sale uses the same expression: the money is the same money, and keeping one function
-     * means a sale cannot drift from a purchase's arithmetic.
+     * One expression rather than two, because the shape is shared and only the fee's
+     * direction is not — the sort of difference that is exactly what drifts when it is
+     * written down twice.
      */
-    fun tradeTotal(trade: BondTrade): Double =
-        trade.quantity * trade.price +
-            trade.quantity * trade.accruedInterest +
-            trade.commission
+    fun tradeTotal(trade: BondTrade): Double {
+        val gross = trade.quantity * trade.price + trade.quantity * trade.accruedInterest
+        return when (trade.side) {
+            BondTradeSide.BUY -> gross + trade.commission
+            BondTradeSide.SELL, BondTradeSide.REDEMPTION -> gross - trade.commission
+        }
+    }
 
     /**
      * The percentage-of-nominal reading of a money price, for display and nothing else.

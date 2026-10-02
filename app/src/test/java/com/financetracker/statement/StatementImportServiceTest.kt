@@ -36,6 +36,8 @@ class StatementImportServiceTest {
 
         override suspend fun getExternalIdsForUser(userId: String) = stored.mapNotNull { it.externalId }
 
+        override suspend fun getById(id: Long) = stored.firstOrNull { it.id == id }
+
         override suspend fun getInRange(userId: String, from: Long, to: Long) =
             stored.filter { it.timestamp in from..to }
 

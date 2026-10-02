@@ -44,6 +44,13 @@
   <!-- Transaction detail card. The English values are what TransactionDetails pins byte for
          byte; the screen translates through these keys. -->
   <string name="detail_screen_title">Transaction Details</string>
+  <!-- The type picker. A transfer is offered as two choices rather than one because arriving
+       and leaving are different facts, and a row that said only "transfer" would not say
+       which way the money went. -->
+  <string name="detail_type_picker_title">Change type</string>
+  <string name="detail_type_transfer_in">Transfer received</string>
+  <string name="detail_type_transfer_out">Transfer sent</string>
+  <string name="detail_type_change_failed">Could not change the type</string>
   <string name="detail_section_transaction">Transaction</string>
   <string name="detail_section_payment">Payment</string>
   <string name="detail_section_provenance">Provenance</string>

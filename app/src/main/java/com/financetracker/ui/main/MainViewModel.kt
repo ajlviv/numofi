@@ -10,6 +10,7 @@ import com.financetracker.model.BondPosition
 import com.financetracker.model.CountedTransactions
 import com.financetracker.model.ExchangeRates
 import com.financetracker.model.Transaction
+import com.financetracker.model.TransactionKind
 import com.financetracker.repository.AuthRepository
 import com.financetracker.repository.BankRepository
 import com.financetracker.repository.BondRepository
@@ -120,6 +121,20 @@ class MainViewModel @Inject constructor(
         viewModelScope.launch {
             runCatching { transactionRepository.deleteTransaction(id) }
                 .onFailure { _message.value = R.string.main_delete_failed }
+        }
+    }
+
+    /**
+     * Retypes a row the user has corrected.
+     *
+     * The escape hatch for a type this app inferred rather than read. A bank does not say
+     * whether one movement was income, spending, or a move between the user's own accounts,
+     * so a pairing that guesses wrong is only acceptable because it can be undone here.
+     */
+    fun setTransactionType(id: Long, kind: TransactionKind) {
+        viewModelScope.launch {
+            runCatching { transactionRepository.setType(id, kind) }
+                .onFailure { _message.value = R.string.detail_type_change_failed }
         }
     }
 

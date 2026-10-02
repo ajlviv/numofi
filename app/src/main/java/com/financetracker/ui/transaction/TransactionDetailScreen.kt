@@ -21,6 +21,7 @@ import androidx.compose.ui.unit.dp
 import com.financetracker.R
 import com.financetracker.model.BankNames
 import com.financetracker.model.Transaction
+import com.financetracker.model.TransactionKind
 import com.financetracker.model.TransactionType
 import com.financetracker.ui.MoneyAmount
 import com.financetracker.ui.TransactionAppearance
@@ -33,11 +34,18 @@ fun TransactionDetailScreen(
     bankNames: Map<String, String>,
     onBack: () -> Unit,
     onDelete: () -> Unit,
+    // Required rather than defaulted to a no-op: the whole point of the badge being
+    // tappable is that something happens when it is, and a default would let a future call
+    // site render a control that silently does nothing.
+    onTypeChange: (TransactionKind) -> Unit,
     modifier: Modifier = Modifier
 ) {
     // Deletion is destructive and final, so it has to survive a mis-tap: the icon only raises
     // the confirmation, and nothing leaves the database until the user says so twice.
     var confirmDelete by remember { mutableStateOf(false) }
+    // The type is the one field on this screen the app inferred rather than read, so it is
+    // the one field the user is allowed to overrule.
+    var pickType by remember { mutableStateOf(false) }
     Scaffold(
         modifier = modifier,
         topBar = {
@@ -74,9 +82,11 @@ fun TransactionDetailScreen(
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(24.dp)
         ) {
-            // Type badge
+            // Type badge. Tappable, because a bank does not say whether a movement was income,
+            // spending, or a move between the user's own accounts — the app has to guess, and
+            // this is where the guess is corrected.
             AssistChip(
-                onClick = {},
+                onClick = { pickType = true },
                 label = {
                     Text(
                         text = stringResource(typeNameResource(transaction.type)),
@@ -110,6 +120,40 @@ fun TransactionDetailScreen(
                 SectionCard(section, CategoryLabel.resource(transaction.category))
             }
         }
+    }
+
+    if (pickType) {
+        AlertDialog(
+            onDismissRequest = { pickType = false },
+            title = { Text(stringResource(R.string.detail_type_picker_title)) },
+            // The four kinds offered are the four the model defines, so there is no
+            // combination here that means nothing — in particular no transfer without a
+            // direction, which would say nothing about which way the money went.
+            text = {
+                Column {
+                    TransactionKind.entries.forEach { kind ->
+                        TextButton(
+                            onClick = {
+                                pickType = false
+                                onTypeChange(kind)
+                            },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text(
+                                text = stringResource(kindNameResource(kind)),
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                        }
+                    }
+                }
+            },
+            confirmButton = {},
+            dismissButton = {
+                TextButton(onClick = { pickType = false }) {
+                    Text(stringResource(R.string.cancel))
+                }
+            }
+        )
     }
 
     if (confirmDelete) {
@@ -201,6 +245,20 @@ private fun typeNameResource(type: TransactionType): Int = when (type) {
     TransactionType.INCOME -> R.string.income
     TransactionType.EXPENSE -> R.string.common_expense
     TransactionType.TRANSFER -> R.string.common_transfer
+}
+
+/**
+ * A kind's name where it has to say which way the money went.
+ *
+ * The bare `common_transfer` is the badge's wording, where the direction is already implied
+ * by the amount's sign. In a list of four choices it would not be, so a transfer is named by
+ * its direction here.
+ */
+private fun kindNameResource(kind: TransactionKind): Int = when (kind) {
+    TransactionKind.INCOME -> R.string.income
+    TransactionKind.EXPENSE -> R.string.common_expense
+    TransactionKind.TRANSFER_IN -> R.string.detail_type_transfer_in
+    TransactionKind.TRANSFER_OUT -> R.string.detail_type_transfer_out
 }
 
 /**

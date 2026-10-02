@@ -35,6 +35,10 @@
   <string name="common_manual">Вручну</string>
   <string name="bank_archived">%1$s (в архіві)</string>
   <string name="detail_screen_title">Деталі транзакції</string>
+  <string name="detail_type_picker_title">Змінити тип</string>
+  <string name="detail_type_transfer_in">Переказ отримано</string>
+  <string name="detail_type_transfer_out">Переказ надіслано</string>
+  <string name="detail_type_change_failed">Не вдалося змінити тип</string>
   <string name="detail_section_transaction">Транзакція</string>
   <string name="detail_section_payment">Оплата</string>
   <string name="detail_section_provenance">Походження</string>

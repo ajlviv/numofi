@@ -36,7 +36,6 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.financetracker.R
-import com.financetracker.model.Transaction
 import com.financetracker.ui.bond.BondListScreen
 import com.financetracker.ui.dashboard.DashboardScreen
 import com.financetracker.ui.recurring.RecurringScreen
@@ -65,7 +64,12 @@ fun MainScreen(
 ) {
     var selectedTab by remember { mutableStateOf(0) }
     var addEntryMode by remember { mutableStateOf<AddEntryMode?>(null) }
-    var selectedTransaction by remember { mutableStateOf<Transaction?>(null) }
+    // The id, not the row. A row held as a value is a snapshot of the moment it was tapped,
+    // so anything written to it afterwards — a type the user corrects, a title edited
+    // elsewhere — leaves this screen showing what the row used to say. Resolving the id
+    // against the live flow means the detail always shows the current row, and it disappears
+    // by itself if the row is deleted from anywhere.
+    var selectedTransactionId by remember { mutableStateOf<Long?>(null) }
 
     // Held here rather than inside TransactionListScreen: opening an item replaces the
     // whole Scaffold, so a list state remembered in there is discarded and the list
@@ -109,15 +113,32 @@ fun MainScreen(
         return
     }
 
+    val selectedTransaction = selectedTransactionId?.let { id ->
+        transactions.firstOrNull { it.id == id }
+    }
+
+    // A row that no longer exists — deleted from the detail, or by wiping the account in
+    // settings — must not leave the screen open on nothing, and must not leave an id behind
+    // that could match a row arriving later. Cleared here rather than in the branch below,
+    // because assigning to state during composition is what makes a recomposition loop.
+    LaunchedEffect(selectedTransactionId, selectedTransaction) {
+        if (selectedTransactionId != null && selectedTransaction == null) {
+            selectedTransactionId = null
+        }
+    }
+
     selectedTransaction?.let { transaction ->
         TransactionDetailScreen(
             transaction = transaction,
             bankNames = bankNames,
             onDelete = {
                 viewModel.deleteTransaction(transaction.id)
-                selectedTransaction = null
+                selectedTransactionId = null
             },
-            onBack = { selectedTransaction = null },
+            onTypeChange = { kind ->
+                viewModel.setTransactionType(transaction.id, kind)
+            },
+            onBack = { selectedTransactionId = null },
             modifier = Modifier.fillMaxSize()
         )
         return
@@ -175,7 +196,7 @@ fun MainScreen(
                 MainBottomNavDestination.TRANSACTIONS ->
                     TransactionListScreen(
                         listState = listState,
-                        onTransactionClick = { selectedTransaction = it }
+                        onTransactionClick = { selectedTransactionId = it.id }
                     )
 
                 MainBottomNavDestination.BONDS ->
