@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Archive
@@ -67,6 +68,7 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.financetracker.R
+import com.financetracker.BuildConfig
 import com.financetracker.data.backup.BackupStatus
 import com.financetracker.data.backup.driveRootUriIfInstalled
 import com.financetracker.data.bank.BankProvider
@@ -140,6 +142,10 @@ fun SettingsScreen(
     val accountScroll = rememberScrollState()
 
     Scaffold(
+        // The tabs are drawn inside MainScreen's Scaffold, which has already reserved the
+        // system bars for them. Both the Scaffold and the TopAppBar below would otherwise add
+        // their own inset on top — see the same note on the bonds screen.
+        contentWindowInsets = WindowInsets(0, 0, 0, 0),
         topBar = {
             // Bar and strip stacked by hand rather than using the bar's own bottom slot, which
             // this version of Material3 does not have. Wrapped in a Column inside `topBar` for
@@ -149,6 +155,7 @@ fun SettingsScreen(
             Column {
                 TopAppBar(
                     title = { Text(stringResource(R.string.settings)) },
+                    windowInsets = WindowInsets(0, 0, 0, 0),
                     navigationIcon = {
                         if (showBackButton) {
                             IconButton(onClick = onBack) {
@@ -532,9 +539,11 @@ private fun AccountTab(
                 )
             }
             // The version belongs inside the card with sign-out rather than floating above it,
-            // so it cannot be read as the caption to a list of rows.
+            // so it cannot be read as the caption to a list of rows. Read from BuildConfig
+            // rather than spelled out: the string and Gradle's versionName were two sources
+            // and had already drifted ("v1.0.0" against "1.0").
             Text(
-                text = stringResource(R.string.settings_version),
+                text = stringResource(R.string.settings_version, BuildConfig.VERSION_NAME),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )

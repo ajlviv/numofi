@@ -1,5 +1,6 @@
 package com.financetracker.ui.transaction
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -13,7 +14,6 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -46,6 +46,13 @@ fun TransactionDetailScreen(
     // The type is the one field on this screen the app inferred rather than read, so it is
     // the one field the user is allowed to overrule.
     var pickType by remember { mutableStateOf(false) }
+
+    // The whole screen is a destination in the user's own terms, but the Scaffold behind it was
+    // swapped rather than pushed, so nothing else is going to dismiss it. Without this the
+    // gesture finishes the activity instead of going back to the list. Registered here, after
+    // MainScreen's own handler, so this one is the one the dispatcher reaches first.
+    BackHandler(onBack = onBack)
+
     Scaffold(
         modifier = modifier,
         topBar = {
@@ -64,7 +71,7 @@ fun TransactionDetailScreen(
                         Icon(
                             Icons.Default.Delete,
                             contentDescription = stringResource(R.string.common_delete),
-                            tint = Color.Red
+                            tint = MaterialTheme.colorScheme.error
                         )
                     }
                 }
@@ -175,7 +182,10 @@ fun TransactionDetailScreen(
                         onDelete()
                     }
                 ) {
-                    Text(stringResource(R.string.common_delete), color = Color.Red)
+                    Text(
+                        text = stringResource(R.string.common_delete),
+                        color = MaterialTheme.colorScheme.error
+                    )
                 }
             }
         )
@@ -224,7 +234,7 @@ private fun DetailRow(field: DetailField, categoryResource: Int) {
         Text(
             text = if (labelResource != 0) stringResource(labelResource) else field.label,
             style = MaterialTheme.typography.bodyMedium,
-            color = Color.Gray,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.weight(0.4f)
         )
         Text(

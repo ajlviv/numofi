@@ -44,6 +44,7 @@ import com.financetracker.model.TransactionType
 import com.financetracker.ui.component.RequiredLabel
 import com.financetracker.ui.component.SingleChoiceDropdown
 import com.financetracker.ui.transaction.DateField
+import com.financetracker.util.AmountInput
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
@@ -82,6 +83,11 @@ internal fun RecurringEntryForm(
     var start by remember { mutableStateOf(existing?.startDate?.let { day(it, zone) } ?: today) }
     var end by remember { mutableStateOf(existing?.endDate?.let { day(it, zone) }) }
     var showError by remember { mutableStateOf(false) }
+    // Read once so the field's error state and the button's refusal below cannot drift apart
+    // about what the text meant. The parse itself used to be a bare toDoubleOrNull(), which
+    // refused "1200,00" — the decimal point a Ukrainian keyboard puts on offer — with nothing
+    // on screen to say so.
+    val parsedAmount = AmountInput.parse(amount)
     // Carried, not re-derived: the form offers no control over this flag, so dropping it here
     // would silently un-archive a schedule on every save.
     var archived by remember { mutableStateOf(existing?.archived ?: false) }
@@ -134,7 +140,12 @@ internal fun RecurringEntryForm(
                 label = { RequiredLabel(stringResource(R.string.common_amount)) },
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                 modifier = Modifier.fillMaxWidth(),
-                isError = showError && amount.toDoubleOrNull() == null,
+                isError = showError && (parsedAmount == null || parsedAmount <= 0.0),
+                supportingText = if (showError && (parsedAmount == null || parsedAmount <= 0.0)) {
+                    { Text(stringResource(R.string.add_error_amount)) }
+                } else {
+                    null
+                },
                 singleLine = true
             )
 
@@ -232,7 +243,7 @@ internal fun RecurringEntryForm(
 
             Button(
                 onClick = {
-                    val parsed = amount.toDoubleOrNull()
+                    val parsed = AmountInput.parse(amount)
                     val every = interval.toIntOrNull() ?: 0
                     if (title.isBlank() || parsed == null || parsed <= 0.0 || every < 1) {
                         showError = true

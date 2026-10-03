@@ -1,5 +1,6 @@
 package com.financetracker.ui.main
 
+import androidx.activity.compose.BackHandler
 import androidx.annotation.StringRes
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -62,14 +63,34 @@ enum class MainBottomNavDestination(
 fun MainScreen(
     viewModel: MainViewModel = hiltViewModel()
 ) {
-    var selectedTab by remember { mutableStateOf(0) }
-    var addEntryMode by remember { mutableStateOf<AddEntryMode?>(null) }
+    // All three saveable, deliberately: rotation is a configuration change and not a reason to
+    // throw the user back to the dashboard with the tab they were on reset. The list state two
+    // lines below already was, which made the inconsistency easier to miss than it looks.
+    var selectedTab by rememberSaveable { mutableStateOf(0) }
+    var addEntryMode by rememberSaveable { mutableStateOf<AddEntryMode?>(null) }
     // The id, not the row. A row held as a value is a snapshot of the moment it was tapped,
     // so anything written to it afterwards — a type the user corrects, a title edited
     // elsewhere — leaves this screen showing what the row used to say. Resolving the id
     // against the live flow means the detail always shows the current row, and it disappears
     // by itself if the row is deleted from anywhere.
-    var selectedTransactionId by remember { mutableStateOf<Long?>(null) }
+    var selectedTransactionId by rememberSaveable { mutableStateOf<Long?>(null) }
+
+    // Back has to be answered by hand, because nothing here is a destination: the Scaffold is
+    // swapped rather than pushed, so the dispatcher would otherwise hand the gesture to the
+    // system and finish the activity from the middle of a transaction's details. The order is
+    // the order the user's own stack is in — close what is on top of the dashboard, then go to
+    // the dashboard, and only then leave. The add form and the detail screen each register
+    // their own handler later in composition, so the innermost one wins and the add form still
+    // tells its own ViewModel that it was dismissed.
+    BackHandler(
+        enabled = addEntryMode != null || selectedTransactionId != null || selectedTab != 0
+    ) {
+        when {
+            addEntryMode != null -> addEntryMode = null
+            selectedTransactionId != null -> selectedTransactionId = null
+            else -> selectedTab = 0
+        }
+    }
 
     // Held here rather than inside TransactionListScreen: opening an item replaces the
     // whole Scaffold, so a list state remembered in there is discarded and the list

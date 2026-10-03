@@ -18,9 +18,6 @@ class TransactionRepository @Inject constructor(
     fun getTransactionsForUser(userId: String): Flow<List<TransactionEntity>> =
         dao.getAllForUser(userId)
 
-    fun getTransactionsByTypeAndUser(userId: String, type: String): Flow<List<TransactionEntity>> =
-        dao.getByType(userId, type)
-
     suspend fun addTransaction(transaction: TransactionEntity): Long =
         dao.insert(transaction).also { backupRequests.requestUpload(BackupReason.TRANSACTION) }
 

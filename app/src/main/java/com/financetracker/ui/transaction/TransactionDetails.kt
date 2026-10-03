@@ -2,10 +2,10 @@ package com.financetracker.ui.transaction
 
 import com.financetracker.model.Transaction
 import com.financetracker.util.CategoryLabel
+import com.financetracker.util.DateFormats
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
-import java.util.Locale
 
 /**
  * A single stored value as the detail card shows it.
@@ -43,8 +43,7 @@ object TransactionDetails {
     /** Stands in for an absent value, so a gap is visible instead of inferred. */
     const val MISSING = "Not set"
 
-    private val DATE: DateTimeFormatter =
-        DateTimeFormatter.ofPattern("MMMM dd, yyyy 'at' HH:mm", Locale.getDefault())
+    private val DATE: DateTimeFormatter = DateFormats.dateTime()
 
     fun sections(
         transaction: Transaction,

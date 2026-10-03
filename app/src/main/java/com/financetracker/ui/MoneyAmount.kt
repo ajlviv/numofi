@@ -1,13 +1,14 @@
 package com.financetracker.ui
 
-import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.LocalTextStyle
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.buildAnnotatedString
@@ -66,7 +67,16 @@ fun MoneyAmount(
  * Not the pure yellow it looks like it should be: yellow on white sits near 1.7:1 contrast
  * and cannot be read, so the light-theme value is a dark mustard near 4.9:1 instead. The
  * brightness of the idea is kept, the legibility of it is what has to survive.
+ *
+ * Decided from the palette rather than from `isSystemInDarkTheme()`. The app's dark mode is a
+ * setting the user picks, so a phone left in system light mode with the app forced to Dark was
+ * getting the light-surface mustard on a dark card — the two answers disagree exactly when the
+ * setting is not the system's, and the setting is the one that describes what is on screen.
  */
 @Composable
 private fun defaultSymbolColor(): Color =
-    if (isSystemInDarkTheme()) Color(0xFFF2C744) else Color(0xFF8A6D00)
+    if (MaterialTheme.colorScheme.surface.luminance() < 0.5f) {
+        Color(0xFFF2C744)
+    } else {
+        Color(0xFF8A6D00)
+    }

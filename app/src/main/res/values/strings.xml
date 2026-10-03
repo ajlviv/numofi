@@ -112,7 +112,7 @@
   <string name="add_mode_transaction">Transaction</string>
   <string name="add_mode_bond">Bond</string>
   <string name="add_placeholder_title">e.g., Salary</string>
-  <string name="add_amount_placeholder" translatable="false">0.00</string>
+  <string name="add_amount_placeholder">0.00</string>
   <string name="add_currency">Currency</string>
   <string name="add_placeholder_category">e.g., Food, Transport</string>
   <string name="add_no_bank">No bank</string>
@@ -129,7 +129,7 @@
   <string name="add_nominal_placeholder" translatable="false">1000</string>
   <string name="add_bond_currency">Bond currency</string>
   <string name="add_coupon_percent">Coupon %</string>
-  <string name="add_coupon_placeholder" translatable="false">9.5</string>
+  <string name="add_coupon_placeholder">9.5</string>
   <string name="add_coupon_period">Every (months)</string>
   <string name="add_period_placeholder" translatable="false">3</string>
   <string name="add_maturity">Maturity</string>
@@ -151,6 +151,9 @@
   <string name="add_redeemed_per_bond">%1$s per bond</string>
   <string name="add_redeemed_coupon_hint">This credit includes the coupon — record it separately as income</string>
   <string name="add_error_enter_name">Enter a name</string>
+  <string name="add_error_title">Enter a title</string>
+  <string name="add_error_amount">Enter an amount greater than zero</string>
+  <string name="add_error_amount_hint">Use a dot or a comma as the decimal point</string>
   <string name="add_error_accrued_negative">Accrued interest cannot be negative</string>
   <string name="add_error_commission_negative">Commission cannot be negative</string>
   <string name="add_error_charged_negative">Amount charged cannot be negative</string>
@@ -184,7 +187,6 @@
   <string name="list_summary_empty">No transactions to total</string>
   <string name="list_summary_one">1 transaction</string>
   <string name="list_summary_many">%1$d transactions</string>
-  <string name="list_no_currency">No currency recorded</string>
   <string name="list_net">Net</string>
   <string name="list_date_from">From %1$s</string>
   <string name="list_date_until">Until %1$s</string>
@@ -203,7 +205,6 @@
   <string name="main_add_transaction">Add transaction</string>
   <string name="main_delete_failed">Could not delete the transaction</string>
   <string name="dash_recent">Recent</string>
-  <string name="dash_cash">Cash</string>
   <string name="dash_bonds">Bonds</string>
   <string name="dash_bonds_currency">Bonds · %1$s</string>
   <string name="dash_held_cost">%1$d held · cost %2$s</string>
@@ -221,6 +222,11 @@
   <string name="dash_net_worth_excluded">Excluded by your rules: %1$d transaction(s)</string>
   <string name="dash_net_worth_excluded_holdings">Excluded by your rules: %1$d holding(s)</string>
   <string name="dash_tap_to_add">Tap + to add your first</string>
+  <!-- Dashboard period selector for the income/spent flows. -->
+  <string name="dash_period_all_time">All time</string>
+  <string name="dash_period_mtd">This month</string>
+  <string name="dash_period_90d">Last 90 days</string>
+  <string name="dash_flow_window">In the selected window</string>
   <string name="settings_tab_general">General</string>
   <string name="settings_tab_data">Data</string>
   <string name="settings_tab_account">Account</string>
@@ -291,7 +297,7 @@
   <string name="settings_bank_archived_msg">Archived. Its transactions are kept, and it stays in the filter.</string>
   <string name="settings_bank_restored">Restored.</string>
   <string name="settings_account">Account</string>
-  <string name="settings_version" translatable="false">Finance Tracker v1.0.0</string>
+  <string name="settings_version" translatable="false">Finance Tracker v%1$s</string>
   <string name="import_section_title">Import a statement</string>
   <string name="import_section_blurb">Works with any bank: export a statement as XLSX, CSV or PDF and pick it here. Nothing is uploaded.</string>
   <string name="import_choose_file">Choose statement file</string>
@@ -334,7 +340,6 @@
   <string name="settings_restore">Restore from a backup file</string>
   <string name="settings_restore_blurb">Adds anything from the file that is not already here. Nothing is deleted or replaced, so a file can be restored more than once.</string>
   <string name="settings_restore_pick">Choose a backup file</string>
-  <string name="settings_restore_in_progress">Restoring…</string>
   <string name="settings_restore_done">Restored %1$d new entries. %2$d were already here.</string>
   <string name="settings_restore_nothing_new">Nothing new in that file — all %1$d entries were already here.</string>
   <string name="settings_restore_wrong_account">That file belongs to a different account, so nothing was restored. Sign in as that account and try again.</string>
@@ -388,5 +393,4 @@
   <string name="settings_app_lock_locked_title">Finance Tracker is locked</string>
   <string name="settings_app_lock_locked_body">Your balances are hidden until you unlock.</string>
   <string name="settings_app_lock_unlock">Unlock</string>
-
 </resources>

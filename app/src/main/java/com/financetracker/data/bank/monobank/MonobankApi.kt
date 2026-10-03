@@ -2,9 +2,7 @@ package com.financetracker.data.bank.monobank
 
 import retrofit2.http.GET
 import retrofit2.http.Header
-import retrofit2.http.POST
 import retrofit2.http.Path
-import retrofit2.http.Query
 
 /**
  * Monobank Open API.
@@ -33,12 +31,6 @@ interface MonobankApi {
     suspend fun getClientInfo(
         @Header("X-Token") token: String
     ): ClientInfoResponse
-
-    @POST("personal/webhook")
-    suspend fun setWebhook(
-        @Header("X-Token") token: String,
-        @Query("webHookUrl") webHookUrl: String
-    )
 
     /**
      * `account` accepts an account id, a bank id, or "0" for the default account.

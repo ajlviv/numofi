@@ -1,11 +1,11 @@
 package com.financetracker.ui.bond
 
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -34,11 +34,11 @@ import androidx.compose.ui.unit.dp
 import com.financetracker.R
 import com.financetracker.model.BondPosition
 import com.financetracker.ui.MoneyAmount
+import com.financetracker.util.DateFormats
 import com.financetracker.util.MoneyFormat
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
-import java.util.Locale
 
 /**
  * Holdings, one card per instrument.
@@ -56,9 +56,18 @@ fun BondListScreen(
 ) {
     Scaffold(
         modifier = modifier,
+        // MainScreen's Scaffold has already reserved the status bar and the navigation bar for
+        // this tab, so neither of the bars nested inside it may claim them again: a nested
+        // Scaffold and a nested TopAppBar each apply the system insets independently, which
+        // stacks an extra status-bar gap above the title and an extra navigation-bar gap under
+        // the last card. Stated here rather than left to the default so the ownership is
+        // visible — if this screen is ever shown without the outer Scaffold, the inset comes
+        // back by removing these two lines.
+        contentWindowInsets = WindowInsets(0, 0, 0, 0),
         topBar = {
             TopAppBar(
                 title = { Text(stringResource(R.string.bond_title)) },
+                windowInsets = WindowInsets(0, 0, 0, 0),
                 actions = {
                     IconButton(onClick = onAddTrade) {
                         Icon(Icons.Default.Add, contentDescription = stringResource(R.string.bond_add_trade_cd))
@@ -106,7 +115,7 @@ fun BondListScreen(
 private fun PositionCard(position: BondPosition) {
     // Remembered rather than a top-level val: the locale is read once per composition instead
     // of once per class load, so a user who changes it in system settings sees the change.
-    val dateFormat = remember { DateTimeFormatter.ofPattern("dd MMM yyyy", Locale.getDefault()) }
+    val dateFormat = remember { DateFormats.date() }
     val currency = position.bond.nominalCurrency
     val gain = position.unrealised >= 0
     val gainColor = if (gain) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error

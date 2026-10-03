@@ -95,10 +95,6 @@ class SettingsRepository @Inject constructor(
         context.dataStore.edit { it[longPreferencesKey(lastSyncedKey(bankId))] = timestamp }
     }
 
-    suspend fun clearLastSyncedAt(bankId: String) {
-        context.dataStore.edit { it.remove(longPreferencesKey(lastSyncedKey(bankId))) }
-    }
-
     private fun lastSyncedKey(bankId: String) = "last_sync_$bankId"
 
     // Backup

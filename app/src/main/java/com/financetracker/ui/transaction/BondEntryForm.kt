@@ -41,9 +41,10 @@ import com.financetracker.model.RECORDABLE_CURRENCIES
 import com.financetracker.ui.MoneyAmount
 import com.financetracker.ui.component.RequiredLabel
 import com.financetracker.ui.component.SingleChoiceDropdown
+import com.financetracker.util.AmountInput
+import com.financetracker.util.DateFormats
 import com.financetracker.util.MoneyFormat
 import java.time.LocalDate
-import java.util.Locale
 
 /** What the bond form collected, validated. */
 internal data class BondForm(
@@ -112,11 +113,11 @@ internal fun BondEntryForm(
     LaunchedEffect(isin) { onLookup(isin) }
 
     val quantityValue = quantity.toIntOrNull() ?: 0
-    val priceValue = price.replace(',', '.').toDoubleOrNull() ?: 0.0
-    val nominalValue = nominal.replace(',', '.').toDoubleOrNull() ?: 0.0
-    val accruedValue = accrued.replace(',', '.').toDoubleOrNull() ?: 0.0
-    val commissionValue = commission.replace(',', '.').toDoubleOrNull() ?: 0.0
-    val couponValue = coupon.replace(',', '.').toDoubleOrNull()
+    val priceValue = AmountInput.parse(price) ?: 0.0
+    val nominalValue = AmountInput.parse(nominal) ?: 0.0
+    val accruedValue = AmountInput.parse(accrued) ?: 0.0
+    val commissionValue = AmountInput.parse(commission) ?: 0.0
+    val couponValue = AmountInput.parse(coupon)
     val isRedemption = side == BondTradeSide.REDEMPTION
 
     // A redemption is entered as the whole credit the bank put on the card, because that is the
@@ -159,7 +160,7 @@ internal fun BondEntryForm(
         null
     }
     val foreign = !currency.equals(bondCurrency, ignoreCase = true)
-    val enteredAmount = settlementAmount.replace(',', '.').toDoubleOrNull()
+    val enteredAmount = AmountInput.parse(settlementAmount)
     val settlement = marketTotal?.let { BondMath.settlement(it, bondCurrency, currency, enteredAmount) }
 
     Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
@@ -559,7 +560,7 @@ private fun validate(
 @Composable
 private fun MaturityField(maturity: LocalDate?, onChange: (LocalDate?) -> Unit, modifier: Modifier = Modifier) {
     var showPicker by remember { mutableStateOf(false) }
-    val pattern = remember { java.time.format.DateTimeFormatter.ofPattern("dd MMM yyyy", Locale.getDefault()) }
+    val pattern = remember { DateFormats.date() }
     val maturityLabel = stringResource(R.string.add_maturity)
 
     Row(modifier = modifier, verticalAlignment = Alignment.CenterVertically) {
@@ -596,9 +597,13 @@ private fun MaturityField(maturity: LocalDate?, onChange: (LocalDate?) -> Unit, 
                         )
                     }
                     showPicker = false
-                }) { Text("OK") }
+                }) { Text(stringResource(R.string.add_ok)) }
             },
-            dismissButton = { TextButton(onClick = { showPicker = false }) { Text("Cancel") } }
+            dismissButton = {
+                TextButton(onClick = { showPicker = false }) {
+                    Text(stringResource(R.string.cancel))
+                }
+            }
         ) {
             androidx.compose.material3.DatePicker(state = state)
         }
