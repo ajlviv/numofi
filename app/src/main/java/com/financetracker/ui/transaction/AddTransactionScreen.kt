@@ -215,7 +215,7 @@ fun AddTransactionScreen(
 }
 
 /** What the plain form collected, validated. */
-private data class TransactionForm(
+internal data class TransactionForm(
     val title: String,
     val amount: Double,
     val type: TransactionType,
@@ -235,7 +235,7 @@ private data class TransactionForm(
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun TransactionForm(
+internal fun TransactionForm(
     banks: List<BankRef>,
     noBankLabel: String,
     saving: Boolean,
@@ -302,7 +302,12 @@ private fun TransactionForm(
                 placeholder = { Text(stringResource(R.string.add_amount_placeholder)) },
                 modifier = Modifier.weight(1f),
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                isError = showError && parsedAmount == null,
+                // Red for either refusal, not only for the one that failed to parse. An error
+                // message under a field with no red outline tells the reader the value is wrong
+                // while the field itself insists it is fine, and a zero is as wrong as a
+                // non-number — the message below already distinguishes them, so the outline
+                // should not.
+                isError = showError && (parsedAmount == null || parsedAmount <= 0.0),
                 singleLine = true
             )
             SingleChoiceDropdown(

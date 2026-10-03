@@ -1,6 +1,7 @@
 package com.financetracker.ui.dashboard
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -66,6 +67,12 @@ fun DashboardScreen(
     baseCurrency: String = DEFAULT_BASE_CURRENCY,
     rates: ExchangeRates = ExchangeRates(emptyMap(), null, 0L),
     onRefreshRates: () -> Unit = {},
+    /**
+     * Opens a row. Required rather than defaulted to a no-op, for the reason the type badge
+     * 's callback is: a row that looks tappable and is not is worse than no row, because
+     * the list has already promised it.
+     */
+    onTransactionClick: (Transaction) -> Unit,
     modifier: Modifier = Modifier
 ) {
     // Two lists, on purpose. The total is built from `counted`, which has the user's exclusion
@@ -144,7 +151,7 @@ fun DashboardScreen(
         } else {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 transactions.take(5).forEach { transaction ->
-                    TransactionRow(transaction)
+                    TransactionRow(transaction, onTransactionClick)
                 }
             }
         }
@@ -209,6 +216,16 @@ private fun NetWorthCard(
             Spacer(modifier = Modifier.height(8.dp))
             Text(
                 text = stringResource(R.string.dash_net_worth_basis),
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            // Said on the figure itself, not only under the flows. The chips below scope income
+            // and spent to a window and deliberately leave this number alone, so a reader who
+            // picks "This month" sees a month of flows under an all-time total. That is the
+            // right behaviour — a windowed total with no bonds in it would not be a net worth —
+            // but it is only right if the headline says which it is.
+            Text(
+                text = stringResource(R.string.dash_net_worth_all_time),
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -426,10 +443,10 @@ private fun withSign(value: Double, currency: String): String =
     (if (value > 0) "+" else "") + MoneyFormat.format(value, currency)
 
 @Composable
-private fun TransactionRow(transaction: Transaction) {
+private fun TransactionRow(transaction: Transaction, onClick: (Transaction) -> Unit) {
     val categoryRes = CategoryLabel.resource(transaction.category)
     Row(
-        modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
+        modifier = Modifier.fillMaxWidth().clickable { onClick(transaction) }.padding(vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Box(

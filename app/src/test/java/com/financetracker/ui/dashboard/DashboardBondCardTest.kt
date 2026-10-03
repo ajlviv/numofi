@@ -79,7 +79,8 @@ class DashboardBondCardTest {
                 positions = positions,
                 baseCurrency = "UAH",
                 rates = rates,
-                onRefreshRates = onRefresh
+                onRefreshRates = onRefresh,
+                onTransactionClick = {}
             )
         }
     }

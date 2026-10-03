@@ -215,6 +215,7 @@
   <string name="dash_net_worth_income">Income</string>
   <string name="dash_net_worth_expense">Spent</string>
   <string name="dash_net_worth_basis">Cash at ledger balance, bonds at nominal. Not a market valuation.</string>
+  <string name="dash_net_worth_all_time">All time, including before any period filter.</string>
   <string name="dash_net_worth_stale">NBU rates as of %1$s</string>
   <string name="dash_net_worth_no_rate">No rate available for %1$s</string>
   <string name="dash_net_worth_unrated">Not included: no rate for %1$s</string>

@@ -193,6 +193,7 @@
   <string name="dash_net_worth_income">Надходження</string>
   <string name="dash_net_worth_expense">Витрати</string>
   <string name="dash_net_worth_basis">Готівка за балансом, облігації за номіналом. Це не ринкова оцінка.</string>
+  <string name="dash_net_worth_all_time">За весь час, зокрема до будь-якого фільтра за період.</string>
   <string name="dash_net_worth_stale">Курси НБУ станом на %1$s</string>
   <string name="dash_net_worth_no_rate">Немає курсу для %1$s</string>
   <string name="dash_net_worth_unrated">Не враховано: немає курсу для %1$s</string>

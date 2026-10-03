@@ -213,7 +213,10 @@ fun MainScreen(
                         positions = positions,
                         baseCurrency = baseCurrency,
                         rates = exchangeRates,
-                        onRefreshRates = viewModel::refreshRates
+                        onRefreshRates = viewModel::refreshRates,
+                        // Same destination as the list below, so a row on the dashboard opens the
+                        // same detail screen the Transactions tab would open it in.
+                        onTransactionClick = { selectedTransactionId = it.id }
                     )
 
                 MainBottomNavDestination.TRANSACTIONS ->

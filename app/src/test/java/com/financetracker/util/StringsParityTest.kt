@@ -80,6 +80,55 @@ class StringsParityTest {
         )
     }
 
+@Test
+    fun `a translated string keeps the same format arguments as its english original`() {
+        // The drift the key-parity checks above cannot see. A key present in both tables with
+        // different arguments passes every other test in this file and fails at runtime, when
+        // `getString` is handed fewer arguments than the format string asks for — or, worse,
+        // silently drops one, so a sentence reads "Excluded by your rules: transaction(s)".
+        //
+        // The arguments are compared as a set of positions rather than as a string, because
+        // order is allowed to differ: a translator may put "%2$s before %1$s" if the Ukrainian
+        // sentence needs it to. What must not differ is which positions are used, and how many
+        // times each is repeated, since a repeated argument is how a string uses the same value
+        // twice.
+        val mismatched = ukrainian.keys
+            .filter { it in english }
+            .mapNotNull { key ->
+                val en = argumentsIn(valueOf("values/strings.xml", key))
+                val uk = argumentsIn(valueOf("values-uk/strings.xml", key))
+                if (en == uk) null else "$key (english=$en ukrainian=$uk)"
+            }
+
+        assertTrue("format arguments differ: $mismatched", mismatched.isEmpty())
+    }
+
+    @Test
+    fun `a translated string with no english arguments has none either`() {
+        // The same check, stated for the direction that is easiest to get wrong by accident: a
+        // Ukrainian string gaining a placeholder the English one does not have would render a
+        // literal "%1$s" for a reader who never sees the English text.
+        val introduced = ukrainian.keys
+            .filter { it in english }
+            .filter {
+                argumentsIn(valueOf("values-uk/strings.xml", it)).isNotEmpty() &&
+                    argumentsIn(valueOf("values/strings.xml", it)).isEmpty()
+            }
+
+        assertTrue("ukrainian strings introducing a format argument: $introduced", introduced.isEmpty())
+    }
+
+    /** Format argument indices used by a string body, each repeated as many times as it appears. */
+    private fun argumentsIn(body: String): List<Int> =
+        ARGUMENT.findAll(body).map { it.groupValues[1].toInt() }.sorted().toList()
+
+    private fun valueOf(path: String, key: String): String =
+        BODY.findAll(read(path))
+            .firstOrNull { it.groupValues[1] == key }
+            ?.groupValues
+            ?.get(2)
+            ?: ""
+
     private fun duplicatesOf(path: String): Set<String> = xmlKeysOf(path).let { keys ->
         keys.groupingBy { it }.eachCount().filterValues { it > 1 }.keys
     }
@@ -112,6 +161,19 @@ class StringsParityTest {
          * name is followed by `-` rather than by the space this pattern requires.
          */
         val TAG = Regex("""<string\s+name="([^"]+)"([^>]*)>""")
+
+        /**
+         * The whole element including its body, so a string's text can be read back rather than
+         * only its opening tag. Non-greedy, because the first closing tag ends the body.
+         */
+        val BODY = Regex("""<string\s+name="([^"]+)"[^>]*>([\s\S]*?)</string>""")
+
+        /**
+         * A positional format argument, `%1$s`. Positional only: an implicit `%s` takes its
+         * index from the call site's order rather than the string's, so it cannot be compared
+         * between two tables at all, and this app does not use it.
+         */
+        val ARGUMENT = Regex("""%(\d+)\$[sd]""")
         /**
          * Whether the tag carries the one exact spelling `translatable="false"`: everything
          * after the name, trimmed, is compared against it. The whole literal is the right
