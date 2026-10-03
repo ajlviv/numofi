@@ -110,7 +110,7 @@
   <string name="cat_uncategorised">Uncategorised</string>
   <string name="add_screen_title">Add</string>
   <string name="add_mode_transaction">Transaction</string>
-  <string name="add_mode_bond" translatable="false">ОВДП</string>
+  <string name="add_mode_bond">Bond</string>
   <string name="add_placeholder_title">e.g., Salary</string>
   <string name="add_amount_placeholder" translatable="false">0.00</string>
   <string name="add_currency">Currency</string>

@@ -94,6 +94,7 @@
   <string name="cat_uncategorised">Без категорії</string>
   <string name="add_screen_title">Додати</string>
   <string name="add_mode_transaction">Транзакція</string>
+  <string name="add_mode_bond">ОВДП</string>
   <string name="add_placeholder_title">напр., Зарплата</string>
   <string name="add_currency">Валюта</string>
   <string name="add_placeholder_category">напр., Їжа, Транспорт</string>

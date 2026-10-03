@@ -422,6 +422,14 @@ private fun InvestmentCard(positions: List<BondPosition>, currencyCode: String) 
                 style = MaterialTheme.typography.titleLarge,
                 fontWeight = FontWeight.Bold
             )
+            // Immediately under the figure, as the bond screen puts it. The card also carries
+            // `dash_honest_label` at the foot, but a caveat four rows below the number is read
+            // after the number, not before it, and this is the largest figure on the card.
+            Text(
+                text = stringResource(R.string.bond_at_last_price),
+                style = MaterialTheme.typography.labelSmall,
+                color = Color.Gray
+            )
             Text(
                 text = stringResource(R.string.dash_held_cost, heldCount, MoneyFormat.format(cost, currencyCode)),
                 style = MaterialTheme.typography.bodySmall,
