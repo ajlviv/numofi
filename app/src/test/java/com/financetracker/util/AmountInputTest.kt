@@ -14,30 +14,70 @@ class AmountInputTest {
     private fun parsed(text: String) = AmountInput.parse(text)
 
     @Test
-    fun `a single separator is a decimal point, whatever follows it`() {
-        // The one genuinely ambiguous input, pinned so a later change cannot quietly pick the
-        // other reading. "1,234" is 1.234 and not 1234: a single separator meant a decimal point
-        // before this function existed, and a price of 1.234 is a real thing to type.
-        assertEquals(1.234, parsed("1,234")!!, 1e-9)
-        assertEquals(1.234, parsed("1.234")!!, 1e-9)
+    fun `three digits after a single separator is grouping, not a decimal point`() {
+        // The case that was wrong. "12,345" is an ordinary amount — a salary, a transfer, a
+        // purchase — typed on a keyboard whose decimal mark is a comma, and one separator with
+        // three digits behind it used to be read as 12.345. That is a thousandfold error on the
+        // most ordinary input the field takes, and nothing on screen said so.
+        assertEquals(12345.0, parsed("12,345")!!, 1e-9)
+        assertEquals(1234.0, parsed("1,234")!!, 1e-9)
+        assertEquals(1234.0, parsed("1.234")!!, 1e-9)
+        assertEquals(1000.0, parsed("1,000")!!, 1e-9)
     }
 
     @Test
-    fun `a repeated separator of one kind is grouping, not a decimal point`() {
-        // Where the KDoc used to contradict itself: it stated the rule as "the rightmost is the
-        // decimal point" and then used this very string as an example of reading correctly.
-        // Grouping is the only reading that leaves 1 234 567 alone, so grouping is what it does.
+    fun `any other number of digits after a single separator is a decimal point`() {
+        // Two digits is a decimal in every convention that has one, and four is not a group
+        // anybody writes. So the rule is about the width of the group, not a blanket "three
+        // digits means thousands".
+        assertEquals(1.23, parsed("1,23")!!, 1e-9)
+        assertEquals(0.5, parsed("0,5")!!, 1e-9)
+        assertEquals(1234.56, parsed("1234,56")!!, 1e-9)
+        assertEquals(12.3456, parsed("12,3456")!!, 1e-9)
+    }
+
+    @Test
+    fun `a repeated separator of one kind is grouping`() {
         assertEquals(1234567.0, parsed("1,234,567")!!, 1e-9)
         assertEquals(1234567.0, parsed("1.234.567")!!, 1e-9)
+        assertEquals(12345678.0, parsed("12,345,678")!!, 1e-9)
     }
 
     @Test
-    fun `malformed repeated separators are read as grouping rather than refused`() {
-        // "12,50,50" is not valid grouping — no group is the wrong width — but it still parses,
-        // to a number far larger than anything typed. Recorded here because it is a real
-        // consequence of the grouping reading above, and the alternative (validating every
-        // group's width) is a larger decision than this function has made on its own.
-        assertEquals(125050.0, parsed("12,50,50")!!, 1e-9)
+    fun `grouping of the wrong width is refused rather than read as a number`() {
+        // "12,50,50" is not grouping: no group after the first is three digits wide. Reading it
+        // as one produced 125 050 — an amount nobody typed, off by four orders of magnitude,
+        // from a mistyped box. Refusing is the honest answer and is what the forms did before
+        // this parser existed, so it is a return to the earlier behaviour rather than a new
+        // strictness: `toDoubleOrNull` also rejected it, and rejected the comma cases wrongly.
+        assertNull(parsed("12,50,50"))
+        assertNull(parsed("1,23,456"))
+        assertNull(parsed("1234,56,78"))
+    }
+
+    @Test
+    fun `grouping beside a decimal point is still checked`() {
+        assertEquals(1234.56, parsed("1.234,56")!!, 1e-9)
+        assertEquals(1234.56, parsed("1,234.56")!!, 1e-9)
+        // The grouping half is malformed, so the whole thing is refused rather than repaired.
+        assertNull(parsed("1.23,456"))
+    }
+
+    @Test
+    fun `a separator with nothing after it is a decimal point`() {
+        // What a numeric keyboard sends while the user is still typing: "1200,".
+        assertEquals(1200.0, parsed("1200,")!!, 1e-9)
+        assertEquals(1200.0, parsed("1200.")!!, 1e-9)
+    }
+
+    @Test
+    fun `a minus sign survives every reading`() {
+        // The refund, the reversal, the correction. A sign that parses in one branch and is
+        // dropped in another would turn a refund into a charge.
+        assertEquals(-1234.56, parsed("-1234,56")!!, 1e-9)
+        assertEquals(-12345.0, parsed("-12,345")!!, 1e-9)
+        assertEquals(-1234567.0, parsed("-1,234,567")!!, 1e-9)
+        assertEquals(-5.0, parsed("-5")!!, 1e-9)
     }
 
     @Test
