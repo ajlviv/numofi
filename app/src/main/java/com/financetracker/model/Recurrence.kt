@@ -1,5 +1,6 @@
 package com.financetracker.model
 
+import java.time.DateTimeException
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
@@ -71,7 +72,7 @@ object Recurrence {
         val occurrences = mutableListOf<LocalDate>()
         var n = 0L
         while (true) {
-            val date = advance(anchor, frequency, n * intervalCount)
+            val date = advance(anchor, frequency, n * intervalCount) ?: break
             // Dates only increase with n, so the first one past either bound ends the walk.
             if (date.isAfter(windowEnd)) break
             if (lastDay != null && date.isAfter(lastDay)) break
@@ -104,7 +105,7 @@ object Recurrence {
 
         var n = 0L
         while (true) {
-            val date = advance(anchor, frequency, n * intervalCount)
+            val date = advance(anchor, frequency, n * intervalCount) ?: return null
             if (lastDay != null && date.isAfter(lastDay)) return null
             if (!date.isBefore(from)) return date
             n++
@@ -112,16 +113,30 @@ object Recurrence {
     }
 
     /**
-     * [anchor] advanced by [steps] whole periods.
+     * [anchor] advanced by [steps] whole periods, or null when the result is not a date.
      *
      * One place that knows which calendar field a frequency moves, so adding a frequency later
      * is a case here and nothing else. [steps] is already `n × intervalCount`.
+     *
+     * **Why null is possible.** `LocalDate` spans about a billion years, and only the *lower*
+     * bound on an interval was ever checked, so a large enough one on a yearly schedule walks
+     * off the end of the calendar and `plusYears` throws. That throw came from inside these two
+     * walks, so it took the screen down with it — a mistyped "every" box, which is the whole of
+     * the input, being able to crash the app.
+     *
+     * The bound is the calendar's own and not a rounder number, so a schedule every million
+     * years — absurd, but still a date — keeps working. Past it there is no next occurrence to
+     * report, which is the same answer an ended schedule gives.
      */
-    private fun advance(anchor: LocalDate, frequency: RepeatFrequency, steps: Long): LocalDate =
-        when (frequency) {
-            RepeatFrequency.WEEKLY -> anchor.plusWeeks(steps)
-            RepeatFrequency.MONTHLY -> anchor.plusMonths(steps)
-            RepeatFrequency.YEARLY -> anchor.plusYears(steps)
+    private fun advance(anchor: LocalDate, frequency: RepeatFrequency, steps: Long): LocalDate? =
+        try {
+            when (frequency) {
+                RepeatFrequency.WEEKLY -> anchor.plusWeeks(steps)
+                RepeatFrequency.MONTHLY -> anchor.plusMonths(steps)
+                RepeatFrequency.YEARLY -> anchor.plusYears(steps)
+            }
+        } catch (e: DateTimeException) {
+            null
         }
 
     /** The calendar date an instant falls on, as [zone] reads it. */

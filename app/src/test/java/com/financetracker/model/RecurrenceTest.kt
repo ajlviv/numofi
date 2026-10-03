@@ -239,4 +239,53 @@ class RecurrenceTest {
 
         assertNull(next)
     }
+
+    // MARK: - An interval too large to put on a calendar
+
+    @Test
+    fun `an interval beyond the calendar yields no occurrences rather than throwing`() {
+        // A user typing 2000000000 into the "every" box is a typo, not a schedule. Only the
+        // lower bound was ever checked, and `LocalDate.plusYears` throws `DateTimeException`
+        // past its own range — so the walk that asks "what is the next one?" took the screen
+        // down with it. Refused here, where both walks pass through.
+        val occurrences = between(
+            frequency = RepeatFrequency.YEARLY,
+            interval = 2_000_000_000,
+            start = LocalDate.of(2026, 1, 10),
+            from = LocalDate.of(2026, 6, 1),
+            to = LocalDate.of(2027, 6, 1)
+        )
+
+        assertEquals(emptyList<LocalDate>(), occurrences)
+    }
+
+    @Test
+    fun `the next occurrence is null for an interval beyond the calendar`() {
+        val next = Recurrence.nextOccurrence(
+            frequency = RepeatFrequency.YEARLY,
+            intervalCount = 2_000_000_000,
+            startDateMillis = millis(LocalDate.of(2026, 1, 10)),
+            endDateMillis = null,
+            from = LocalDate.of(2026, 6, 1),
+            zone = zone
+        )
+
+        assertNull(next)
+    }
+
+    @Test
+    fun `a large but representable interval still works`() {
+        // The bound is the calendar's, not a round number: a schedule every 1000000 years is
+        // absurd but it is a date, and refusing it would be refusing arithmetic that works.
+        val next = Recurrence.nextOccurrence(
+            frequency = RepeatFrequency.YEARLY,
+            intervalCount = 1_000_000,
+            startDateMillis = millis(LocalDate.of(2026, 1, 10)),
+            endDateMillis = null,
+            from = LocalDate.of(2026, 6, 1),
+            zone = zone
+        )
+
+        assertEquals(LocalDate.of(1002026, 1, 10), next)
+    }
 }

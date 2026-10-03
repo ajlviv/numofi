@@ -6,6 +6,7 @@ import com.financetracker.model.Transaction
 import com.financetracker.model.TransactionType
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -33,6 +34,48 @@ class TransactionSummaryTest {
 
     private fun of(vararg rows: Transaction) =
         TransactionSummary.of(rows.toList(), ExclusionRules(), rates, "UAH")
+
+    @Test
+    fun `an empty list on an unquotable base reports no rate rather than a zero`() {
+        // The empty case used to build its figures directly, bypassing the gate that
+        // `convertTotals` and `netWorth` both apply. With EUR as the base and no rate for it,
+        // every other screen says "no rate" and this one printed a confident `0.00 EUR` —
+        // which reads as "you broke even" rather than "this device cannot value anything".
+        val noEur = ExchangeRates(
+            toUah = mapOf("USD" to 40.0),
+            date = "01.10.2026",
+            fetchedAt = 0L
+        )
+
+        val summary = TransactionSummary.of(emptyList(), ExclusionRules(), noEur, "EUR")
+
+        assertNull(summary.converted.income)
+        assertNull(summary.converted.expense)
+        assertNull(summary.converted.balance)
+    }
+
+    @Test
+    fun `an empty list on a quotable base still totals to zero`() {
+        // The gate must not turn a genuinely empty list into a missing figure: with UAH there
+        // is nothing wrong, and the screen has real lines to draw.
+        val summary = TransactionSummary.of(emptyList(), ExclusionRules(), rates, "UAH")
+
+        assertEquals(0.0, summary.converted.income!!, 0.0)
+        assertEquals(0.0, summary.converted.expense!!, 0.0)
+        assertEquals(0.0, summary.converted.balance!!, 0.0)
+    }
+
+    @Test
+    fun `an empty list keeps the bond figure and the base it was given`() {
+        // Dropping these because there is nothing to total would blank a line the screen was
+        // showing a moment ago, so the empty case has to carry them through.
+        val summary = TransactionSummary.of(
+            emptyList(), ExclusionRules(), rates, "UAH", bondNominal = 20_000.0
+        )
+
+        assertEquals("UAH", summary.converted.base)
+        assertEquals(20_000.0, summary.converted.balance!!, 0.0)
+    }
 
     @Test
     fun `an empty list totals to nothing rather than to zero`() {
