@@ -39,6 +39,7 @@ import com.financetracker.model.BondPosition
 import com.financetracker.model.CountedTransactions
 import com.financetracker.model.CurrencyTotals
 import com.financetracker.model.ExchangeRates
+import com.financetracker.model.ExclusionRules
 import com.financetracker.model.NetWorth
 import com.financetracker.model.Transaction
 import com.financetracker.model.netWorth
@@ -54,6 +55,12 @@ import java.time.LocalDate
 fun DashboardScreen(
     transactions: List<Transaction>,
     counted: CountedTransactions? = null,
+    /**
+     * The same rules [counted] was derived from, needed because the rules apply to holdings as
+     * well as to rows. Null rather than defaulted so a caller that has not wired the settings
+     * flow up counts its holdings, which is the honest total.
+     */
+    rules: ExclusionRules? = null,
     positions: List<BondPosition> = emptyList(),
     baseCurrency: String = DEFAULT_BASE_CURRENCY,
     rates: ExchangeRates = ExchangeRates(emptyMap(), null, 0L),
@@ -88,7 +95,10 @@ fun DashboardScreen(
                 positions = positions,
                 rates = rates,
                 base = baseCurrency,
-                excluded = counted?.excluded ?: 0
+                excluded = counted?.excluded ?: 0,
+                // The holdings cards below stay on every position: a rule is about what a
+                // *total* counts, and a holding the user recorded is still worth reading.
+                rules = rules ?: ExclusionRules()
             ),
             baseCurrency = baseCurrency,
             rates = rates,
@@ -233,6 +243,21 @@ private fun NetWorthCard(
             if (result.excluded > 0) {
                 Text(
                     text = stringResource(R.string.dash_net_worth_excluded, result.excluded),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+
+            // A holding the rules removed, named separately from the rows they removed. A bond
+            // purchase is both a cash row and a position, and a rule that catches the row must
+            // catch the holding — otherwise the total would quietly gain the full nominal of
+            // something already subtracted out of the cash side of the same figure.
+            if (result.excludedHoldings > 0) {
+                Text(
+                    text = stringResource(
+                        R.string.dash_net_worth_excluded_holdings,
+                        result.excludedHoldings
+                    ),
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )

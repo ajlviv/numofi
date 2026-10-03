@@ -8,6 +8,7 @@ import com.financetracker.data.settings.DEFAULT_BASE_CURRENCY
 import com.financetracker.data.settings.SettingsRepository
 import com.financetracker.model.BondPosition
 import com.financetracker.model.CountedTransactions
+import com.financetracker.model.ExclusionRules
 import com.financetracker.model.ExchangeRates
 import com.financetracker.model.Transaction
 import com.financetracker.model.TransactionKind
@@ -76,6 +77,18 @@ class MainViewModel @Inject constructor(
         settingsRepository.exclusionRules
     ) { rows, rules -> rules.select(rows) }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), CountedTransactions.ALL)
+
+    /**
+     * The same rules [counted] was derived from.
+     *
+     * Exposed rather than rebuilt at the call site so that the rows a total was built from and
+     * the holdings it was about to add cannot come from two different rule sets. A bond
+     * purchase is a cash row and a position, and a rule that takes the row away must take the
+     * holding too — a total holding the cash of a purchase out while adding its nominal back is
+     * a total that grows by everything paid.
+     */
+    val exclusionRules: StateFlow<ExclusionRules> = settingsRepository.exclusionRules
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), ExclusionRules())
 
     /**
      * Holdings, folded from trades. Not scoped to a user, because the bonds an app knows

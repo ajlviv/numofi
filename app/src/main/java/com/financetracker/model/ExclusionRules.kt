@@ -40,6 +40,13 @@ class ExclusionRules(patterns: List<String> = emptyList()) {
         .filter { it.isNotEmpty() }
         .distinctBy { it.lowercase(Locale.ROOT) }
 
+    /** Whether one title is held back, folded against [Locale.ROOT] for the same reason. */
+    private fun excludes(title: String): Boolean {
+        if (needles.isEmpty()) return false
+        val folded = title.lowercase(Locale.ROOT)
+        return needles.any { folded.contains(it) }
+    }
+
     // Derived from [patterns] and not from the constructor argument: the trimmed, non-blank,
     // deduplicated form. Taking the argument directly would put a blank needle back in, and a
     // blank needle is a substring of every title — one stored empty rule would empty every
@@ -65,12 +72,43 @@ class ExclusionRules(patterns: List<String> = emptyList()) {
         val counted = ArrayList<Transaction>(transactions.size)
         var excluded = 0
         for (row in transactions) {
-            val title = row.title.lowercase(Locale.ROOT)
-            if (needles.any { title.contains(it) }) excluded++ else counted.add(row)
+            if (excludes(row.title)) excluded++ else counted.add(row)
         }
         return CountedTransactions(counted, excluded)
     }
+
+    /**
+     * The holdings a total may count, and how many were held back.
+     *
+     * A bond purchase is two records: a cash row for what left the account, and the position
+     * itself. [select] takes the first away on a rule matching its title, and without this the
+     * second would stay in the total — so the figure would report the full nominal of a holding
+     * whose purchase has already been subtracted out of the cash side of the same sum.
+     *
+     * Matched on [Bond.name] because that is what the cash row is titled with: the purchase
+     * writes a row called the bond's name, so a rule that catches one catches the other, and a
+     * user has one rule rather than two that must be kept in step.
+     *
+     * Returns the input list itself when there is nothing to exclude, as [select] does.
+     */
+    fun selectHoldings(positions: List<BondPosition>): CountedHoldings {
+        if (needles.isEmpty()) return CountedHoldings(positions, 0)
+        val counted = ArrayList<BondPosition>(positions.size)
+        var excluded = 0
+        for (position in positions) {
+            if (excludes(position.bond.name)) excluded++ else counted.add(position)
+        }
+        return CountedHoldings(counted, excluded)
+    }
 }
+
+/** The result of applying an [ExclusionRules] to a set of holdings. */
+data class CountedHoldings(
+    /** Only these positions may be added to a total. */
+    val counted: List<BondPosition>,
+    /** How many [counted] is short by, reported beside the total. See [CountedTransactions.excluded]. */
+    val excluded: Int
+)
 
 /** The result of applying an [ExclusionRules] to a set of rows. */
 data class CountedTransactions(

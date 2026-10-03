@@ -194,6 +194,7 @@
   <string name="dash_net_worth_unrated">Не враховано: немає курсу для %1$s</string>
   <string name="dash_net_worth_unrated_no_code">Не враховано: рядки без валюти</string>
   <string name="dash_net_worth_excluded">Не враховано за вашими правилами: %1$d транзакцій</string>
+  <string name="dash_net_worth_excluded_holdings">Не враховано за вашими правилами: %1$d активів</string>
   <string name="dash_tap_to_add">Торкніться +, щоб додати першу транзакцію</string>
   <string name="settings_tab_general">Загальні</string>
   <string name="settings_tab_data">Дані</string>

@@ -80,6 +80,7 @@ fun MainScreen(
 
     val transactions by viewModel.transactions.collectAsStateWithLifecycle()
     val counted by viewModel.counted.collectAsStateWithLifecycle()
+    val exclusionRules by viewModel.exclusionRules.collectAsStateWithLifecycle()
     val positions by viewModel.positions.collectAsStateWithLifecycle()
     val message by viewModel.message.collectAsStateWithLifecycle()
     val bankNames by viewModel.bankNames.collectAsStateWithLifecycle()
@@ -187,6 +188,7 @@ fun MainScreen(
                     DashboardScreen(
                         transactions = transactions,
                         counted = counted,
+                        rules = exclusionRules,
                         positions = positions,
                         baseCurrency = baseCurrency,
                         rates = exchangeRates,
