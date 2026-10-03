@@ -94,7 +94,6 @@ fun AddTransactionScreen(
 
     val snackbarText = when (val m = message) {
         is AddMessage.Res -> stringResource(m.id, *m.args.toTypedArray())
-        is AddMessage.Raw -> m.text
         null -> null
     }
     LaunchedEffect(snackbarText) {

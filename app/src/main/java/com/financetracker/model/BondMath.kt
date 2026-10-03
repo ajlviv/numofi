@@ -14,6 +14,45 @@ import java.time.temporal.ChronoUnit
  * spent, with no division by 100 anywhere except the one derived reading that converts a
  * money price to the percentage-of-nominal quote convention.
  */
+/**
+ * Why a bond trade was refused.
+ *
+ * Named rather than carrying the sentence, because a sentence written in Kotlin is the same
+ * sentence in every language. The validators here used to return the text itself — "Price must
+ * be above 0" — which cannot be translated at all, so a Ukrainian reader met English on the one
+ * screen in the app that checks a trade, and no amount of work on the resource tables could
+ * have reached it.
+ *
+ * Kept in the model layer with no resource ids and no Android types, so [BondMath] stays the
+ * plain arithmetic it is documented to be. Turning one of these into a sentence is the screen's
+ * job, and `BondTradeProblemTest` fails if one of them has nowhere to go.
+ */
+enum class BondTradeProblem {
+    /** No name for the instrument. A position the user cannot identify later. */
+    NAME_MISSING,
+
+    /** Zero or fewer bonds. Not a trade, and a holding of zero would sit in the list costing attention. */
+    QUANTITY_TOO_SMALL,
+
+    /** A price of zero or less, which would record a purchase of nothing for nothing. */
+    PRICE_NOT_POSITIVE,
+
+    /**
+     * More than twice the nominal, which is [MAX_PRICE_OF_NOMINAL]'s bound. Almost always a
+     * misplaced decimal rather than a price anyone was offered.
+     */
+    PRICE_TOO_LARGE,
+
+    /** The face value is what the state repays; without it there is nothing to project. */
+    NOMINAL_NOT_POSITIVE,
+
+    /** A negative coupon, which can only be a slip. */
+    COUPON_NEGATIVE,
+
+    /** The write itself failed. Distinct from every refusal above, which are about the input. */
+    NOT_SAVED
+}
+
 object BondMath {
 
     /** The most a bond can plausibly cost, as a multiple of its nominal. */
@@ -292,8 +331,8 @@ object BondMath {
     fun normaliseIsin(raw: String): String = raw.trim().uppercase()
 
     /** Error text, or null when the quantity is usable. */
-    fun validateQuantity(quantity: Int): String? = when {
-        quantity <= 0 -> "Quantity must be at least 1"
+    fun validateQuantity(quantity: Int): BondTradeProblem? = when {
+        quantity <= 0 -> BondTradeProblem.QUANTITY_TOO_SMALL
         else -> null
     }
 
@@ -306,10 +345,10 @@ object BondMath {
      * the nominal can only be a slip — most often a quantity or a comma typed in the wrong
      * box. No percentage conversion is needed or offered here.
      */
-    fun validatePrice(price: Double, nominal: Double?): String? = when {
-        price <= 0.0 -> "Price must be above 0"
+    fun validatePrice(price: Double, nominal: Double?): BondTradeProblem? = when {
+        price <= 0.0 -> BondTradeProblem.PRICE_NOT_POSITIVE
         nominal != null && nominal > 0.0 && price > MAX_PRICE_OF_NOMINAL * nominal ->
-            "Price looks too large — a bond does not trade at more than twice its nominal"
+            BondTradeProblem.PRICE_TOO_LARGE
         else -> null
     }
 
@@ -319,8 +358,8 @@ object BondMath {
      * Zero is rejected rather than divided by, because the nominal scales the coupon and the
      * price ceiling and a zero one would make both meaningless.
      */
-    fun validateNominal(nominal: Double): String? = when {
-        nominal <= 0.0 -> "Nominal must be above 0"
+    fun validateNominal(nominal: Double): BondTradeProblem? = when {
+        nominal <= 0.0 -> BondTradeProblem.NOMINAL_NOT_POSITIVE
         else -> null
     }
 
@@ -330,9 +369,9 @@ object BondMath {
      * Zero is allowed: a bond that pays only its nominal at maturity is a real thing, and
      * treating it as an error would make it unrecordable.
      */
-    fun validateCouponPercent(couponPercent: Double?): String? = when {
+    fun validateCouponPercent(couponPercent: Double?): BondTradeProblem? = when {
         couponPercent == null -> null
-        couponPercent < 0.0 -> "Coupon cannot be negative"
+        couponPercent < 0.0 -> BondTradeProblem.COUPON_NEGATIVE
         else -> null
     }
 }

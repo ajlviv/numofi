@@ -689,8 +689,10 @@ class BondMathTest {
 
     @Test
     fun `a quantity must be a whole number above zero`() {
-        assertEquals("Quantity must be at least 1", BondMath.validateQuantity(0))
-        assertEquals("Quantity must be at least 1", BondMath.validateQuantity(-3))
+        // The named problem rather than the sentence, so the assertion survives the wording and
+        // the sentence itself stays translatable.
+        assertEquals(BondTradeProblem.QUANTITY_TOO_SMALL, BondMath.validateQuantity(0))
+        assertEquals(BondTradeProblem.QUANTITY_TOO_SMALL, BondMath.validateQuantity(-3))
         assertNull(BondMath.validateQuantity(1))
     }
 

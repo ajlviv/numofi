@@ -11,6 +11,7 @@ import com.financetracker.model.BankRef
 import com.financetracker.model.Bond
 import com.financetracker.model.BondEntity
 import com.financetracker.model.BondMath
+import com.financetracker.model.BondTradeProblem
 import com.financetracker.model.BondPosition
 import com.financetracker.model.BondTrade
 import com.financetracker.model.BondTradeEntity
@@ -117,7 +118,7 @@ class BondRepository @Inject constructor(
             BondMath.normaliseIsin(bond.name)
         }
         if (isin.isBlank()) {
-            return RecordTradeResult.Invalid("Enter a name")
+            return RecordTradeResult.Invalid(BondTradeProblem.NAME_MISSING)
         }
         // Pure functions, so they stay outside: there is nothing to roll back. The price is
         // money in the bond's currency and is capped at twice the nominal, not checked
@@ -152,7 +153,7 @@ class BondRepository @Inject constructor(
             val stored = existing ?: run {
                 bondDao.insertIfAbsent(bond.toEntity(isin))
                 bondDao.getByIsin(isin)
-            } ?: return@withTransaction RecordTradeResult.Invalid("Bond could not be saved")
+            } ?: return@withTransaction RecordTradeResult.Invalid(BondTradeProblem.NOT_SAVED)
 
             val marketValue = BondMath.tradeTotal(
                 BondTrade(
@@ -295,8 +296,11 @@ class BondRepository @Inject constructor(
 sealed interface RecordTradeResult {
     data class Recorded(val tradeId: Long, val transactionId: Long) : RecordTradeResult
 
-    /** A field was out of range. [message] is for the user. */
-    data class Invalid(val message: String) : RecordTradeResult
+    /**
+     * The trade was refused. [problem] names which refusal, because the sentence belongs to the
+     * screen and a sentence written here would be English on a Ukrainian device.
+     */
+    data class Invalid(val problem: BondTradeProblem) : RecordTradeResult
 
     /**
      * More bonds sold than are held.

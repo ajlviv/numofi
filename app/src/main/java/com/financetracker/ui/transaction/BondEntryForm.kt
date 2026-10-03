@@ -36,6 +36,7 @@ import com.financetracker.R
 import com.financetracker.model.BankRef
 import com.financetracker.model.Bond
 import com.financetracker.model.BondMath
+import com.financetracker.model.BondTradeProblem
 import com.financetracker.model.BondTradeSide
 import com.financetracker.model.RECORDABLE_CURRENCIES
 import com.financetracker.ui.MoneyAmount
@@ -91,7 +92,10 @@ internal fun BondEntryForm(
     var currency by remember { mutableStateOf("UAH") }
     var settlementAmount by remember { mutableStateOf("") }
     var error by remember { mutableStateOf<String?>(null) }
-    val errorEnterName = stringResource(R.string.add_error_enter_name)
+    // Resolved here, where the resources live, rather than inside BondMath, which has to stay
+    // free of them so it remains plain arithmetic.
+    val problemText = BondTradeProblem.entries.associateWith { stringResource(bondProblemMessage(it)) }
+    val errorEnterName = problemText.getValue(BondTradeProblem.NAME_MISSING)
     val errorAccrued = stringResource(R.string.add_error_accrued_negative)
     val errorAccruedUnreadable = stringResource(R.string.add_error_accrued_unreadable)
     val errorCommissionUnreadable = stringResource(R.string.add_error_commission_unreadable)
@@ -321,7 +325,9 @@ internal fun BondEntryForm(
         when {
             priceProblem != null ->
                 Text(
-                    text = priceProblem,
+                    // The sentence, not the problem: this one is shown under the field as the
+                    // user types, so it has to be readable in their language like every other.
+                    text = problemText.sentenceFor(priceProblem),
                     color = MaterialTheme.colorScheme.error,
                     style = MaterialTheme.typography.bodySmall
                 )
@@ -474,6 +480,7 @@ internal fun BondEntryForm(
                     accruedReadable = accruedReadable,
                     commissionReadable = commissionReadable,
                     settlementAmount = if (foreign) enteredAmount else null,
+                    messages = problemText,
                     errorEnterName = errorEnterName,
                     errorAccrued = errorAccrued,
                     errorAccruedUnreadable = errorAccruedUnreadable,
@@ -551,6 +558,7 @@ private fun validate(
     accruedReadable: Boolean,
     commissionReadable: Boolean,
     settlementAmount: Double?,
+    messages: Map<BondTradeProblem, String>,
     errorEnterName: String,
     errorAccrued: String,
     errorAccruedUnreadable: String,
@@ -559,11 +567,11 @@ private fun validate(
     errorCharged: String
 ): String? = when {
     name.isBlank() -> errorEnterName
-    BondMath.validateNominal(nominal) != null -> BondMath.validateNominal(nominal)!!
-    BondMath.validateCouponPercent(coupon) != null -> BondMath.validateCouponPercent(coupon)!!
-    BondMath.validateQuantity(quantity) != null -> BondMath.validateQuantity(quantity)!!
+    BondMath.validateNominal(nominal) != null -> messages.sentenceFor(BondMath.validateNominal(nominal))
+    BondMath.validateCouponPercent(coupon) != null -> messages.sentenceFor(BondMath.validateCouponPercent(coupon))
+    BondMath.validateQuantity(quantity) != null -> messages.sentenceFor(BondMath.validateQuantity(quantity))
     BondMath.validatePrice(price, nominal.takeIf { it > 0.0 }) != null ->
-        BondMath.validatePrice(price, nominal.takeIf { it > 0.0 })!!
+        messages.sentenceFor(BondMath.validatePrice(price, nominal.takeIf { it > 0.0 }))
     // Unreadable before negative, because an unreadable figure has become a zero by the time it
     // gets here and a zero is not negative — so the negative check would pass it through as a
     // legitimate absence of accrued interest or fee.
@@ -576,6 +584,17 @@ private fun validate(
     settlementAmount != null && settlementAmount < 0.0 -> errorCharged
     else -> null
 }
+
+/**
+ * The sentence for a problem, resolved once by the composable that owns the strings.
+ *
+ * A validator that returned its own text could not be translated, so they return a
+ * [BondTradeProblem] and the caller hands down the sentences. [messages] carries them as a map
+ * rather than as five named parameters because the set grows with the enum and a parameter list
+ * would need editing in two places every time it did.
+ */
+private fun Map<BondTradeProblem, String>.sentenceFor(problem: BondTradeProblem?): String =
+    problem?.let { this[it] } ?: ""
 
 /**
  * The maturity date, optional.

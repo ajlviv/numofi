@@ -157,6 +157,12 @@
   <string name="add_error_accrued_negative">Accrued interest cannot be negative</string>
   <string name="add_error_commission_negative">Commission cannot be negative</string>
   <string name="add_error_charged_negative">Amount charged cannot be negative</string>
+  <string name="add_error_quantity">Enter at least one bond</string>
+  <string name="add_error_price">Price must be above zero</string>
+  <string name="add_error_price_large">That price looks wrong — a bond does not trade at more than twice its nominal</string>
+  <string name="add_error_nominal">Nominal must be above zero</string>
+  <string name="add_error_coupon_negative">Coupon cannot be negative</string>
+  <string name="add_error_bond_not_saved">The trade could not be saved</string>
   <string name="add_error_accrued_unreadable">Could not read the accrued interest</string>
   <string name="add_error_commission_unreadable">Could not read the commission</string>
   <string name="add_oversell">You hold only %1$d — nothing was saved</string>

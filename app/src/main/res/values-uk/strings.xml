@@ -135,6 +135,12 @@
   <string name="add_error_amount_hint">Використовуйте крапку або кому як десятковий роздільник</string>
   <string name="add_error_accrued_negative">Накопичений дохід не може бути відʼємним</string>
   <string name="add_error_commission_negative">Комісія не може бути відʼємною</string>
+  <string name="add_error_quantity">Введіть щонайменше одну облігацію</string>
+  <string name="add_error_price">Ціна має бути вище нуля</string>
+  <string name="add_error_price_large">Ця ціна виглядає неправильно — облігація не торгується вище за подвійний номінал</string>
+  <string name="add_error_nominal">Номінал має бути вище нуля</string>
+  <string name="add_error_coupon_negative">Купон не може бути від’ємним</string>
+  <string name="add_error_bond_not_saved">Не вдалося зберегти операцію</string>
   <string name="add_error_accrued_unreadable">Не вдалося прочитати накопичений відсоток</string>
   <string name="add_error_commission_unreadable">Не вдалося прочитати комісію</string>
   <string name="add_error_charged_negative">Списана сума не може бути відʼємною</string>
