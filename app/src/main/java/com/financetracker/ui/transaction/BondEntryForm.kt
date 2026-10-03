@@ -93,6 +93,8 @@ internal fun BondEntryForm(
     var error by remember { mutableStateOf<String?>(null) }
     val errorEnterName = stringResource(R.string.add_error_enter_name)
     val errorAccrued = stringResource(R.string.add_error_accrued_negative)
+    val errorAccruedUnreadable = stringResource(R.string.add_error_accrued_unreadable)
+    val errorCommissionUnreadable = stringResource(R.string.add_error_commission_unreadable)
     val errorCommission = stringResource(R.string.add_error_commission_negative)
     val errorCharged = stringResource(R.string.add_error_charged_negative)
 
@@ -118,6 +120,20 @@ internal fun BondEntryForm(
     val accruedValue = AmountInput.parse(accrued) ?: 0.0
     val commissionValue = AmountInput.parse(commission) ?: 0.0
     val couponValue = AmountInput.parse(coupon)
+    /**
+     * Whether an optional figure is absent or merely unreadable.
+     *
+     * An empty box is a decision — no accrued interest, no fee — and the zero above is the right
+     * answer for it. A box holding something the parser could not read is not: coercing it to
+     * zero recorded the trade with a figure the user never entered, understating the cost of
+     * every bond in the position, and nothing afterwards showed it. So the two are told apart
+     * here and the unreadable one is refused on save rather than quietly rounded away.
+     *
+     * Price and nominal need no such check: their zero already fails validation, which is why an
+     * unreadable value there blocks the save instead of passing.
+     */
+    val accruedReadable = accrued.isBlank() || AmountInput.parse(accrued) != null
+    val commissionReadable = commission.isBlank() || AmountInput.parse(commission) != null
     val isRedemption = side == BondTradeSide.REDEMPTION
 
     // A redemption is entered as the whole credit the bank put on the card, because that is the
@@ -455,10 +471,14 @@ internal fun BondEntryForm(
                     price = perBondPrice,
                     accrued = effectiveAccrued,
                     commission = effectiveCommission,
+                    accruedReadable = accruedReadable,
+                    commissionReadable = commissionReadable,
                     settlementAmount = if (foreign) enteredAmount else null,
                     errorEnterName = errorEnterName,
                     errorAccrued = errorAccrued,
+                    errorAccruedUnreadable = errorAccruedUnreadable,
                     errorCommission = errorCommission,
+                    errorCommissionUnreadable = errorCommissionUnreadable,
                     errorCharged = errorCharged
                 )
                 if (problem != null) {
@@ -528,10 +548,14 @@ private fun validate(
     price: Double,
     accrued: Double,
     commission: Double,
+    accruedReadable: Boolean,
+    commissionReadable: Boolean,
     settlementAmount: Double?,
     errorEnterName: String,
     errorAccrued: String,
+    errorAccruedUnreadable: String,
     errorCommission: String,
+    errorCommissionUnreadable: String,
     errorCharged: String
 ): String? = when {
     name.isBlank() -> errorEnterName
@@ -540,6 +564,11 @@ private fun validate(
     BondMath.validateQuantity(quantity) != null -> BondMath.validateQuantity(quantity)!!
     BondMath.validatePrice(price, nominal.takeIf { it > 0.0 }) != null ->
         BondMath.validatePrice(price, nominal.takeIf { it > 0.0 })!!
+    // Unreadable before negative, because an unreadable figure has become a zero by the time it
+    // gets here and a zero is not negative — so the negative check would pass it through as a
+    // legitimate absence of accrued interest or fee.
+    !accruedReadable -> errorAccruedUnreadable
+    !commissionReadable -> errorCommissionUnreadable
     accrued < 0.0 -> errorAccrued
     commission < 0.0 -> errorCommission
     // Optional, so an empty box is allowed and a typed zero is allowed; only a negative

@@ -157,6 +157,8 @@
   <string name="add_error_accrued_negative">Accrued interest cannot be negative</string>
   <string name="add_error_commission_negative">Commission cannot be negative</string>
   <string name="add_error_charged_negative">Amount charged cannot be negative</string>
+  <string name="add_error_accrued_unreadable">Could not read the accrued interest</string>
+  <string name="add_error_commission_unreadable">Could not read the commission</string>
   <string name="add_oversell">You hold only %1$d — nothing was saved</string>
   <string name="bond_title">Bonds</string>
   <string name="bond_add_trade_cd">Record a trade</string>

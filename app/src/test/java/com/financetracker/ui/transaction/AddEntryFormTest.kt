@@ -296,6 +296,75 @@ class AddEntryFormTest {
     }
 
     @Test
+    fun anUnreadableAccruedInterestIsRefusedRatherThanRecordedAsZero() {
+        var saved: BondForm? = null
+        showBondForm { saved = it }
+
+        fill("Name", "ОВДП 26/Б")
+        fill("Quantity", "20")
+        fill("Price/bond", "1010")
+        fill("Accrued / bond", "abc")
+        pressSave("Buy")
+
+        // The field used to coerce anything it could not read to zero, so a slip in the accrued
+        // figure was recorded as a purchase with no accrued interest — understating the cost of
+        // every bond in the position, quietly, and never shown again. A blank box is still fine;
+        // a box holding something unreadable is not.
+        assertNull("unreadable accrued must not save", saved)
+        compose.onNodeWithText("Could not read the accrued interest").assertExists()
+    }
+
+    @Test
+    fun anUnreadableCommissionIsRefusedRatherThanRecordedAsZero() {
+        var saved: BondForm? = null
+        showBondForm { saved = it }
+
+        fill("Name", "ОВДП 26/Б")
+        fill("Quantity", "20")
+        fill("Price/bond", "1010")
+        fill("Commission", "12,50,50")
+        pressSave("Buy")
+
+        // The same coercion, and the same silent understatement of what the trade cost. The
+        // input here is one the parser refuses rather than misreads: a mistyped box used to be
+        // read as 125 050 of commission.
+        assertNull("unreadable commission must not save", saved)
+        compose.onNodeWithText("Could not read the commission").assertExists()
+    }
+
+    @Test
+    fun blankAccruedAndCommissionStillMeanZero() {
+        var saved: BondForm? = null
+        showBondForm { saved = it }
+
+        // Both fields are optional. An empty box is a decision — there was no accrued interest
+        // and no fee — and refusing it would make the common trade impossible to enter.
+        fill("Name", "ОВДП 26/Б")
+        fill("Quantity", "20")
+        fill("Price/bond", "1010")
+        pressSave("Buy")
+
+        assertEquals(0.0, saved?.accrued ?: -1.0, 1e-9)
+        assertEquals(0.0, saved?.commission ?: -1.0, 1e-9)
+    }
+
+    @Test
+    fun anUnreadableAccruedInterestStillAllowsAFieldThatIsLeftEmpty() {
+        // The counterpart, so the refusal above cannot be satisfied by leaving the box blank and
+        // re-saving: an empty box and an unreadable box must not read the same way.
+        var saved: BondForm? = null
+        showBondForm { saved = it }
+
+        fill("Name", "ОВДП 26/Б")
+        fill("Quantity", "20")
+        fill("Price/bond", "1010")
+        fill("Commission", "25")
+        pressSave("Buy")
+
+        assertEquals(25.0, saved?.commission ?: -1.0, 1e-9)
+    }
+
+    @Test
     fun nothingIsSavedWhileTheTradeIsBeingWritten() {
         var saved: BondForm? = null
         compose.setContent {
