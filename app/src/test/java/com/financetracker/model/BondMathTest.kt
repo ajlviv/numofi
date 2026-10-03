@@ -102,13 +102,49 @@ class BondMathTest {
     }
 
     @Test
-    fun `a sale pays what it brings in`() {
-        // 1010 of price, plus 30 of accrued interest, plus 5 commission.
+    fun `a sale brings in the proceeds with the commission taken off them`() {
+        // 1010 of price, plus 30 of accrued interest, less the 5 commission the broker keeps.
+        // The fee is charged on both sides and moves opposite ways: it is added to what a
+        // purchase costs and deducted from what a sale pays. Adding it here credited the user
+        // their own fee, so a sale left the balance 10 too high — twice the commission.
         val total = BondMath.tradeTotal(
             trade(side = BondTradeSide.SELL, quantity = 1, price = 1010.0, accrued = 30.0, commission = 5.0)
         )
 
-        assertEquals(1045.0, total, 0.0)
+        assertEquals(1035.0, total, 0.0)
+    }
+
+    @Test
+    fun `a redemption brings back the nominal less the commission, and takes no accrued interest`() {
+        // Redemption returns the face value rather than a market price, so there is no
+        // premium to pay; what the broker still keeps is the fee.
+        val total = BondMath.tradeTotal(
+            trade(side = BondTradeSide.REDEMPTION, quantity = 3, price = nominal, commission = 20.0)
+        )
+
+        assertEquals(2980.0, total, 0.0)
+    }
+
+    @Test
+    fun `the commission is deducted once per sale, not once per bond`() {
+        // The same per-trade unit as a purchase, so a lot sale does not hand back a
+        // commission the broker never charged.
+        val total = BondMath.tradeTotal(
+            trade(side = BondTradeSide.SELL, quantity = 5, price = 1010.0, commission = 15.0)
+        )
+
+        assertEquals(5035.0, total, 0.0)
+    }
+
+    @Test
+    fun `a sale of one bond netting nothing is zero rather than a doubled fee`() {
+        // Price below the fee is a real thing when the user mistypes, and the total it makes
+        // is the number the ledger books. Guarded so the two signs cannot be applied twice.
+        val total = BondMath.tradeTotal(
+            trade(side = BondTradeSide.SELL, quantity = 1, price = 4.0, commission = 5.0)
+        )
+
+        assertEquals(-1.0, total, 0.0)
     }
 
     // MARK: - Coupon
@@ -653,8 +689,10 @@ class BondMathTest {
 
     @Test
     fun `a quantity must be a whole number above zero`() {
-        assertEquals("Quantity must be at least 1", BondMath.validateQuantity(0))
-        assertEquals("Quantity must be at least 1", BondMath.validateQuantity(-3))
+        // The named problem rather than the sentence, so the assertion survives the wording and
+        // the sentence itself stays translatable.
+        assertEquals(BondTradeProblem.QUANTITY_TOO_SMALL, BondMath.validateQuantity(0))
+        assertEquals(BondTradeProblem.QUANTITY_TOO_SMALL, BondMath.validateQuantity(-3))
         assertNull(BondMath.validateQuantity(1))
     }
 

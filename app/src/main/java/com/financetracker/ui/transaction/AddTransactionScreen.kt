@@ -58,11 +58,12 @@ import com.financetracker.model.TransactionType
 import com.financetracker.ui.MoneyAmount
 import com.financetracker.ui.component.RequiredLabel
 import com.financetracker.ui.component.SingleChoiceDropdown
+import com.financetracker.util.AmountInput
+import com.financetracker.util.DateFormats
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
 import java.time.ZoneOffset
-import java.util.Locale
 
 /** What the add screen is currently being used to record. */
 enum class AddEntryMode { TRANSACTION, BOND }
@@ -93,7 +94,6 @@ fun AddTransactionScreen(
 
     val snackbarText = when (val m = message) {
         is AddMessage.Res -> stringResource(m.id, *m.args.toTypedArray())
-        is AddMessage.Raw -> m.text
         null -> null
     }
     LaunchedEffect(snackbarText) {
@@ -214,7 +214,7 @@ fun AddTransactionScreen(
 }
 
 /** What the plain form collected, validated. */
-private data class TransactionForm(
+internal data class TransactionForm(
     val title: String,
     val amount: Double,
     val type: TransactionType,
@@ -234,7 +234,7 @@ private data class TransactionForm(
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun TransactionForm(
+internal fun TransactionForm(
     banks: List<BankRef>,
     noBankLabel: String,
     saving: Boolean,
@@ -249,6 +249,11 @@ private fun TransactionForm(
     var date by remember { mutableStateOf(LocalDate.now()) }
     var bank by remember { mutableStateOf<BankRef?>(null) }
     var showError by remember { mutableStateOf(false) }
+    // Read once for both the field's error state and the button's refusal below: two parses
+    // written inline are two places that could drift about what the text meant. This is the
+    // field where the old parse was wrong — it refused a comma, which is the decimal point on
+    // a Ukrainian keyboard, and reported nothing but a red outline for it.
+    val parsedAmount = AmountInput.parse(amount)
 
     Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
         // Only the two the user can mean by hand. TRANSFER is not offered: every transfer
@@ -277,6 +282,11 @@ private fun TransactionForm(
             placeholder = { Text(stringResource(R.string.add_placeholder_title)) },
             modifier = Modifier.fillMaxWidth(),
             isError = showError && title.isBlank(),
+            supportingText = if (showError && title.isBlank()) {
+                { Text(stringResource(R.string.add_error_title)) }
+            } else {
+                null
+            },
             singleLine = true
         )
 
@@ -291,7 +301,12 @@ private fun TransactionForm(
                 placeholder = { Text(stringResource(R.string.add_amount_placeholder)) },
                 modifier = Modifier.weight(1f),
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                isError = showError && (amount.isBlank() || amount.toDoubleOrNull() == null),
+                // Red for either refusal, not only for the one that failed to parse. An error
+                // message under a field with no red outline tells the reader the value is wrong
+                // while the field itself insists it is fine, and a zero is as wrong as a
+                // non-number — the message below already distinguishes them, so the outline
+                // should not.
+                isError = showError && (parsedAmount == null || parsedAmount <= 0.0),
                 singleLine = true
             )
             SingleChoiceDropdown(
@@ -300,6 +315,28 @@ private fun TransactionForm(
                 selected = currencyCode,
                 onSelect = { currencyCode = it },
                 modifier = Modifier.weight(1f)
+            )
+        }
+
+        // Refused here rather than by the field, because the field shares its row with the
+        // currency picker and a message wrapping to three lines in half a screen's width would
+        // move the row around for as long as it is shown. The two slips are named separately:
+        // text that is not a number and an amount that is zero are different mistakes, and
+        // saying which one happened is the whole reason the failure used to be invisible.
+        if (showError && parsedAmount == null) {
+            Text(
+                text = stringResource(
+                    if (amount.isBlank()) R.string.add_error_amount
+                    else R.string.add_error_amount_hint
+                ),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.error
+            )
+        } else if (showError && parsedAmount != null && parsedAmount <= 0.0) {
+            Text(
+                text = stringResource(R.string.add_error_amount),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.error
             )
         }
 
@@ -336,7 +373,7 @@ private fun TransactionForm(
 
         Button(
             onClick = {
-                val parsed = amount.toDoubleOrNull()
+                val parsed = AmountInput.parse(amount)
                 if (title.isBlank() || parsed == null || parsed <= 0.0) {
                     showError = true
                     return@Button
@@ -374,7 +411,7 @@ private fun TransactionForm(
 @Composable
 internal fun DateField(date: LocalDate, onChange: (LocalDate) -> Unit) {
     var showPicker by remember { mutableStateOf(false) }
-    val pattern = remember { java.time.format.DateTimeFormatter.ofPattern("dd MMM yyyy", Locale.getDefault()) }
+    val pattern = remember { DateFormats.date() }
 
     Box {
         OutlinedButton(onClick = { showPicker = true }) {

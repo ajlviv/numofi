@@ -30,6 +30,16 @@ data class NetWorth(
      * to supply: a total computed from a list that was never filtered has excluded nothing.
      */
     val excluded: Int = 0,
+    /**
+     * How many holdings the user's rules kept out of [total], reported separately from [excluded]
+     * because the two are removed in different places and a user who cannot tell which is which
+     * has no way to act on either.
+     *
+     * A bond purchase is a cash row and a position, so a rule can take the money away and leave
+     * the holding — which would report the full nominal of something already subtracted. This
+     * count is what says so rather than letting the total quietly grow by everything paid.
+     */
+    val excludedHoldings: Int = 0,
     val rates: ExchangeRates
 )
 
@@ -57,9 +67,19 @@ fun netWorth(
     positions: List<BondPosition>,
     rates: ExchangeRates,
     base: String,
-    excluded: Int = 0
+    excluded: Int = 0,
+    /**
+     * The user's rules, applied here to [positions] for the same reason they are not applied to
+     * [totals]: a rule about what a total counts has to reach every part of the total.
+     *
+     * Defaulted to no rules rather than required, because a caller that has not wired the
+     * settings flow up yet should get a total that counts its holdings, not one that silently
+     * omits them.
+     */
+    rules: ExclusionRules = ExclusionRules()
 ): NetWorth {
     val unquoted = linkedSetOf<String?>()
+    val holdings = rules.selectHoldings(positions)
 
     // Every figure below goes through the same gate, so that one currency being unquotable
     // takes its income and its expenses out of the total *and* out of the two lines beside it.
@@ -86,7 +106,10 @@ fun netWorth(
 
     // Grouped by denomination so that a currency is converted once rather than once per
     // holding, and so the answer does not depend on the order positions happen to arrive in.
-    val bondValue = positions
+    // `holdings.counted`, not `positions`: a purchase the user's rules removed from the cash
+    // side must be removed here too, or the total counts the nominal of something whose cost
+    // is no longer in it and grows by everything paid.
+    val bondValue = holdings.counted
         .filter { it.quantity > 0 }
         .groupBy { it.bond.nominalCurrency }
         .map { (currency, held) ->
@@ -110,6 +133,7 @@ fun netWorth(
             expense = null,
             unquoted = unquoted.toList(),
             excluded = excluded,
+            excludedHoldings = holdings.excluded,
             rates = rates
         )
     }
@@ -120,6 +144,7 @@ fun netWorth(
         expense = expense,
         unquoted = unquoted.toList(),
         excluded = excluded,
+        excludedHoldings = holdings.excluded,
         rates = rates
     )
 }

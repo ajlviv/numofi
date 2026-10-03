@@ -36,14 +36,16 @@ import com.financetracker.R
 import com.financetracker.model.BankRef
 import com.financetracker.model.Bond
 import com.financetracker.model.BondMath
+import com.financetracker.model.BondTradeProblem
 import com.financetracker.model.BondTradeSide
 import com.financetracker.model.RECORDABLE_CURRENCIES
 import com.financetracker.ui.MoneyAmount
 import com.financetracker.ui.component.RequiredLabel
 import com.financetracker.ui.component.SingleChoiceDropdown
+import com.financetracker.util.AmountInput
+import com.financetracker.util.DateFormats
 import com.financetracker.util.MoneyFormat
 import java.time.LocalDate
-import java.util.Locale
 
 /** What the bond form collected, validated. */
 internal data class BondForm(
@@ -90,8 +92,13 @@ internal fun BondEntryForm(
     var currency by remember { mutableStateOf("UAH") }
     var settlementAmount by remember { mutableStateOf("") }
     var error by remember { mutableStateOf<String?>(null) }
-    val errorEnterName = stringResource(R.string.add_error_enter_name)
+    // Resolved here, where the resources live, rather than inside BondMath, which has to stay
+    // free of them so it remains plain arithmetic.
+    val problemText = BondTradeProblem.entries.associateWith { stringResource(bondProblemMessage(it)) }
+    val errorEnterName = problemText.getValue(BondTradeProblem.NAME_MISSING)
     val errorAccrued = stringResource(R.string.add_error_accrued_negative)
+    val errorAccruedUnreadable = stringResource(R.string.add_error_accrued_unreadable)
+    val errorCommissionUnreadable = stringResource(R.string.add_error_commission_unreadable)
     val errorCommission = stringResource(R.string.add_error_commission_negative)
     val errorCharged = stringResource(R.string.add_error_charged_negative)
 
@@ -112,11 +119,25 @@ internal fun BondEntryForm(
     LaunchedEffect(isin) { onLookup(isin) }
 
     val quantityValue = quantity.toIntOrNull() ?: 0
-    val priceValue = price.replace(',', '.').toDoubleOrNull() ?: 0.0
-    val nominalValue = nominal.replace(',', '.').toDoubleOrNull() ?: 0.0
-    val accruedValue = accrued.replace(',', '.').toDoubleOrNull() ?: 0.0
-    val commissionValue = commission.replace(',', '.').toDoubleOrNull() ?: 0.0
-    val couponValue = coupon.replace(',', '.').toDoubleOrNull()
+    val priceValue = AmountInput.parse(price) ?: 0.0
+    val nominalValue = AmountInput.parse(nominal) ?: 0.0
+    val accruedValue = AmountInput.parse(accrued) ?: 0.0
+    val commissionValue = AmountInput.parse(commission) ?: 0.0
+    val couponValue = AmountInput.parse(coupon)
+    /**
+     * Whether an optional figure is absent or merely unreadable.
+     *
+     * An empty box is a decision — no accrued interest, no fee — and the zero above is the right
+     * answer for it. A box holding something the parser could not read is not: coercing it to
+     * zero recorded the trade with a figure the user never entered, understating the cost of
+     * every bond in the position, and nothing afterwards showed it. So the two are told apart
+     * here and the unreadable one is refused on save rather than quietly rounded away.
+     *
+     * Price and nominal need no such check: their zero already fails validation, which is why an
+     * unreadable value there blocks the save instead of passing.
+     */
+    val accruedReadable = accrued.isBlank() || AmountInput.parse(accrued) != null
+    val commissionReadable = commission.isBlank() || AmountInput.parse(commission) != null
     val isRedemption = side == BondTradeSide.REDEMPTION
 
     // A redemption is entered as the whole credit the bank put on the card, because that is the
@@ -159,7 +180,7 @@ internal fun BondEntryForm(
         null
     }
     val foreign = !currency.equals(bondCurrency, ignoreCase = true)
-    val enteredAmount = settlementAmount.replace(',', '.').toDoubleOrNull()
+    val enteredAmount = AmountInput.parse(settlementAmount)
     val settlement = marketTotal?.let { BondMath.settlement(it, bondCurrency, currency, enteredAmount) }
 
     Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
@@ -304,7 +325,9 @@ internal fun BondEntryForm(
         when {
             priceProblem != null ->
                 Text(
-                    text = priceProblem,
+                    // The sentence, not the problem: this one is shown under the field as the
+                    // user types, so it has to be readable in their language like every other.
+                    text = problemText.sentenceFor(priceProblem),
                     color = MaterialTheme.colorScheme.error,
                     style = MaterialTheme.typography.bodySmall
                 )
@@ -454,10 +477,15 @@ internal fun BondEntryForm(
                     price = perBondPrice,
                     accrued = effectiveAccrued,
                     commission = effectiveCommission,
+                    accruedReadable = accruedReadable,
+                    commissionReadable = commissionReadable,
                     settlementAmount = if (foreign) enteredAmount else null,
+                    messages = problemText,
                     errorEnterName = errorEnterName,
                     errorAccrued = errorAccrued,
+                    errorAccruedUnreadable = errorAccruedUnreadable,
                     errorCommission = errorCommission,
+                    errorCommissionUnreadable = errorCommissionUnreadable,
                     errorCharged = errorCharged
                 )
                 if (problem != null) {
@@ -527,18 +555,28 @@ private fun validate(
     price: Double,
     accrued: Double,
     commission: Double,
+    accruedReadable: Boolean,
+    commissionReadable: Boolean,
     settlementAmount: Double?,
+    messages: Map<BondTradeProblem, String>,
     errorEnterName: String,
     errorAccrued: String,
+    errorAccruedUnreadable: String,
     errorCommission: String,
+    errorCommissionUnreadable: String,
     errorCharged: String
 ): String? = when {
     name.isBlank() -> errorEnterName
-    BondMath.validateNominal(nominal) != null -> BondMath.validateNominal(nominal)!!
-    BondMath.validateCouponPercent(coupon) != null -> BondMath.validateCouponPercent(coupon)!!
-    BondMath.validateQuantity(quantity) != null -> BondMath.validateQuantity(quantity)!!
+    BondMath.validateNominal(nominal) != null -> messages.sentenceFor(BondMath.validateNominal(nominal))
+    BondMath.validateCouponPercent(coupon) != null -> messages.sentenceFor(BondMath.validateCouponPercent(coupon))
+    BondMath.validateQuantity(quantity) != null -> messages.sentenceFor(BondMath.validateQuantity(quantity))
     BondMath.validatePrice(price, nominal.takeIf { it > 0.0 }) != null ->
-        BondMath.validatePrice(price, nominal.takeIf { it > 0.0 })!!
+        messages.sentenceFor(BondMath.validatePrice(price, nominal.takeIf { it > 0.0 }))
+    // Unreadable before negative, because an unreadable figure has become a zero by the time it
+    // gets here and a zero is not negative — so the negative check would pass it through as a
+    // legitimate absence of accrued interest or fee.
+    !accruedReadable -> errorAccruedUnreadable
+    !commissionReadable -> errorCommissionUnreadable
     accrued < 0.0 -> errorAccrued
     commission < 0.0 -> errorCommission
     // Optional, so an empty box is allowed and a typed zero is allowed; only a negative
@@ -546,6 +584,17 @@ private fun validate(
     settlementAmount != null && settlementAmount < 0.0 -> errorCharged
     else -> null
 }
+
+/**
+ * The sentence for a problem, resolved once by the composable that owns the strings.
+ *
+ * A validator that returned its own text could not be translated, so they return a
+ * [BondTradeProblem] and the caller hands down the sentences. [messages] carries them as a map
+ * rather than as five named parameters because the set grows with the enum and a parameter list
+ * would need editing in two places every time it did.
+ */
+private fun Map<BondTradeProblem, String>.sentenceFor(problem: BondTradeProblem?): String =
+    problem?.let { this[it] } ?: ""
 
 /**
  * The maturity date, optional.
@@ -559,7 +608,7 @@ private fun validate(
 @Composable
 private fun MaturityField(maturity: LocalDate?, onChange: (LocalDate?) -> Unit, modifier: Modifier = Modifier) {
     var showPicker by remember { mutableStateOf(false) }
-    val pattern = remember { java.time.format.DateTimeFormatter.ofPattern("dd MMM yyyy", Locale.getDefault()) }
+    val pattern = remember { DateFormats.date() }
     val maturityLabel = stringResource(R.string.add_maturity)
 
     Row(modifier = modifier, verticalAlignment = Alignment.CenterVertically) {
@@ -596,9 +645,13 @@ private fun MaturityField(maturity: LocalDate?, onChange: (LocalDate?) -> Unit, 
                         )
                     }
                     showPicker = false
-                }) { Text("OK") }
+                }) { Text(stringResource(R.string.add_ok)) }
             },
-            dismissButton = { TextButton(onClick = { showPicker = false }) { Text("Cancel") } }
+            dismissButton = {
+                TextButton(onClick = { showPicker = false }) {
+                    Text(stringResource(R.string.cancel))
+                }
+            }
         ) {
             androidx.compose.material3.DatePicker(state = state)
         }

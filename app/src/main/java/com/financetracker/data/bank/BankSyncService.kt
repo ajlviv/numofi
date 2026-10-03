@@ -10,6 +10,8 @@ import com.financetracker.model.BankNames
 import com.financetracker.model.SearchText
 import com.financetracker.model.TransactionEntity
 import com.financetracker.model.TransactionType
+import com.financetracker.model.TransferDirection
+import com.financetracker.model.TransferPairing
 import com.financetracker.repository.BankRepository
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
@@ -80,6 +82,7 @@ class BankSyncService @Inject constructor(
         var skipped = 0
         var completedRequests = 0
         var lastRequestAt = 0L
+        val importedRows = mutableListOf<TransactionEntity>()
 
         val existing = transactionDao.getExternalIdsForUser(userId).toMutableSet()
         // Read once for the whole sync: every row this writes carries Monobank, and the
@@ -106,22 +109,34 @@ class BankSyncService @Inject constructor(
                 completedRequests++
 
                 for (bankTx in fetched) {
+                    // A pending authorisation is not money that moved. The bank reports it
+                    // now and reports the settled purchase again later under a second id,
+                    // so importing it writes the same purchase twice under two keys that
+                    // dedupe can never merge — the ledger ends up holding both, and neither
+                    // a later sync nor a restore can tell which one to drop. Waiting costs
+                    // nothing: when the authorisation clears, its own statement arrives.
+                    // A hold that never clears was never spent, so nothing is lost by this.
+                    // Not counted as a duplicate either — it was never stored, and telling
+                    // the user they already have a purchase they never had is its own lie.
+                    if (bankTx.isHold) continue
+
                     // Namespaced by provider so two banks cannot collide on ids.
                     val externalId = "${provider.id}_${bankTx.id}"
                     if (externalId in existing) {
                         skipped++
                         continue
                     }
-                    transactionDao.insert(
-                        toEntity(
-                            bankTx,
-                            userId,
-                            provider.id,
-                            BankCode.MONOBANK,
-                            account,
-                            bankNames
-                        )
+                    val row = toEntity(
+                        bankTx,
+                        userId,
+                        provider.id,
+                        BankCode.MONOBANK,
+                        account,
+                        bankNames
                     )
+                    // Kept with the id the insert gave it, so a transfer recognised below can
+                    // be written back as the row it is rather than as a copy of one.
+                    importedRows += row.copy(id = transactionDao.insert(row))
                     existing.add(externalId)
                     imported++
                 }
@@ -129,6 +144,10 @@ class BankSyncService @Inject constructor(
                 onProgress(SyncProgress(completedRequests, totalRequests, imported, 0))
             }
         }
+
+        // After every window, not inside one: the two legs of a transfer usually come from
+        // two different account requests, and pairing them per account would never see both.
+        recogniseTransfers(importedRows)
 
         return Result(accounts = accounts.size, imported = imported, skippedDuplicates = skipped)
             .also {
@@ -139,6 +158,39 @@ class BankSyncService @Inject constructor(
                 }
             }
     }
+
+    /**
+     * Relabels the legs of a transfer the bank reported as two separate movements.
+     *
+     * Only [rows] — what this run imported — is considered. A row the user has since
+     * corrected by hand is therefore never revisited, because a later sync over an
+     * overlapping period will skip it on the bank id and so never offer it here. That is the
+     * whole reason the pass is scoped this narrowly rather than sweeping the table: a
+     * relabelled row has to be something the user can override and keep.
+     *
+     * Only the type and its direction change. The amount is never recomputed, so nothing
+     * here can put a figure in the ledger that the bank did not state, and the haystack is
+     * left alone because the type is not part of what it indexes.
+     *
+     * No backup is requested: pairing runs on rows this sync has already written, so the
+     * upload [sync] asks for on a non-empty import already covers the relabelling.
+     *
+     * The whole run's rows are held in memory, which is what lets the two legs be found in
+     * different account requests. That is bounded by the caller's window rather than by the
+     * table — the settings screen asks for the gap since the last sync, at most as many days
+     * back as the user chose, default 30 — so this is hundreds of rows rather than the whole
+     * history, and the pairing's comparison of every arrival against every departure is not
+     * a cost worth restructuring.
+     */
+    private suspend fun recogniseTransfers(rows: List<TransactionEntity>) {
+        for (pair in TransferPairing.pairs(rows)) {
+            transactionDao.update(pair.inbound.asTransfer(TransferDirection.IN))
+            transactionDao.update(pair.outbound.asTransfer(TransferDirection.OUT))
+        }
+    }
+
+    private fun TransactionEntity.asTransfer(direction: TransferDirection) =
+        copy(type = TransactionType.TRANSFER, transferDirection = direction)
 
     /**
      * Splits `[from, to]` into provider-sized steps, newest first, so the most recent

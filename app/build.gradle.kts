@@ -146,4 +146,14 @@ dependencies {
     androidTestImplementation("androidx.test.espresso:espresso-core:3.5.1")
     androidTestImplementation(composeBom)
     androidTestImplementation("androidx.compose.ui:ui-test-junit4")
+    // Compose UI tests on the JVM, through Robolectric, rather than on a device. The reasoning
+    // is the same as for the Room tests above: an instrumented run needs an APK installed and a
+    // device attached, so these would only run on the machine that happened to have a phone
+    // plugged in. Robolectric resolves real resources and a real composition, so a screen can be
+    // driven — a field typed into, a button pressed, the resulting text asserted — as part of the
+    // ordinary `testDebugUnitTest` run. `ui-test-manifest` above is what gives a composition its
+    // host, and it is on the debug variant, which is the variant Robolectric loads.
+    testImplementation(composeBom)
+    testImplementation("androidx.compose.ui:ui-test-junit4")
+    testImplementation("androidx.compose.ui:ui-test-manifest")
 }

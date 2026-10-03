@@ -8,8 +8,10 @@ import com.financetracker.data.settings.DEFAULT_BASE_CURRENCY
 import com.financetracker.data.settings.SettingsRepository
 import com.financetracker.model.BondPosition
 import com.financetracker.model.CountedTransactions
+import com.financetracker.model.ExclusionRules
 import com.financetracker.model.ExchangeRates
 import com.financetracker.model.Transaction
+import com.financetracker.model.TransactionKind
 import com.financetracker.repository.AuthRepository
 import com.financetracker.repository.BankRepository
 import com.financetracker.repository.BondRepository
@@ -77,6 +79,18 @@ class MainViewModel @Inject constructor(
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), CountedTransactions.ALL)
 
     /**
+     * The same rules [counted] was derived from.
+     *
+     * Exposed rather than rebuilt at the call site so that the rows a total was built from and
+     * the holdings it was about to add cannot come from two different rule sets. A bond
+     * purchase is a cash row and a position, and a rule that takes the row away must take the
+     * holding too — a total holding the cash of a purchase out while adding its nominal back is
+     * a total that grows by everything paid.
+     */
+    val exclusionRules: StateFlow<ExclusionRules> = settingsRepository.exclusionRules
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), ExclusionRules())
+
+    /**
      * Holdings, folded from trades. Not scoped to a user, because the bonds an app knows
      * about are the same for everyone who signs in on the device — they are public terms,
      * not anyone's data, and the trades that produce a position are already only ever
@@ -120,6 +134,20 @@ class MainViewModel @Inject constructor(
         viewModelScope.launch {
             runCatching { transactionRepository.deleteTransaction(id) }
                 .onFailure { _message.value = R.string.main_delete_failed }
+        }
+    }
+
+    /**
+     * Retypes a row the user has corrected.
+     *
+     * The escape hatch for a type this app inferred rather than read. A bank does not say
+     * whether one movement was income, spending, or a move between the user's own accounts,
+     * so a pairing that guesses wrong is only acceptable because it can be undone here.
+     */
+    fun setTransactionType(id: Long, kind: TransactionKind) {
+        viewModelScope.launch {
+            runCatching { transactionRepository.setType(id, kind) }
+                .onFailure { _message.value = R.string.detail_type_change_failed }
         }
     }
 

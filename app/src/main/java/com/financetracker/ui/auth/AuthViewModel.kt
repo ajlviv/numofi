@@ -106,11 +106,6 @@ class AuthViewModel @Inject constructor(
         _authState.value = AuthState.Unauthenticated(describe(throwable))
     }
 
-    fun onSignInCancelled() {
-        _isGoogleFlowInProgress.value = false
-        _authState.value = AuthState.Unauthenticated()
-    }
-
     /** Clears the session. The session observer then drives state to Unauthenticated. */
     fun signOut() {
         viewModelScope.launch {

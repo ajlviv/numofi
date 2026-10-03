@@ -35,6 +35,10 @@
   <string name="common_manual">Вручну</string>
   <string name="bank_archived">%1$s (в архіві)</string>
   <string name="detail_screen_title">Деталі транзакції</string>
+  <string name="detail_type_picker_title">Змінити тип</string>
+  <string name="detail_type_transfer_in">Переказ отримано</string>
+  <string name="detail_type_transfer_out">Переказ надіслано</string>
+  <string name="detail_type_change_failed">Не вдалося змінити тип</string>
   <string name="detail_section_transaction">Транзакція</string>
   <string name="detail_section_payment">Оплата</string>
   <string name="detail_section_provenance">Походження</string>
@@ -90,6 +94,9 @@
   <string name="cat_uncategorised">Без категорії</string>
   <string name="add_screen_title">Додати</string>
   <string name="add_mode_transaction">Транзакція</string>
+  <string name="add_amount_placeholder">0,00</string>
+  <string name="add_coupon_placeholder">9,5</string>
+  <string name="add_mode_bond">ОВДП</string>
   <string name="add_placeholder_title">напр., Зарплата</string>
   <string name="add_currency">Валюта</string>
   <string name="add_placeholder_category">напр., Їжа, Транспорт</string>
@@ -123,8 +130,19 @@
   <string name="add_redeemed_per_bond">%1$s за облігацію</string>
   <string name="add_redeemed_coupon_hint">Виплата містить купон — запишіть його окремим доходом</string>
   <string name="add_error_enter_name">Введіть назву</string>
+  <string name="add_error_title">Введіть назву</string>
+  <string name="add_error_amount">Введіть суму більшу за нуль</string>
+  <string name="add_error_amount_hint">Використовуйте крапку або кому як десятковий роздільник</string>
   <string name="add_error_accrued_negative">Накопичений дохід не може бути відʼємним</string>
   <string name="add_error_commission_negative">Комісія не може бути відʼємною</string>
+  <string name="add_error_quantity">Введіть щонайменше одну облігацію</string>
+  <string name="add_error_price">Ціна має бути вище нуля</string>
+  <string name="add_error_price_large">Ця ціна виглядає неправильно — облігація не торгується вище за подвійний номінал</string>
+  <string name="add_error_nominal">Номінал має бути вище нуля</string>
+  <string name="add_error_coupon_negative">Купон не може бути від’ємним</string>
+  <string name="add_error_bond_not_saved">Не вдалося зберегти операцію</string>
+  <string name="add_error_accrued_unreadable">Не вдалося прочитати накопичений відсоток</string>
+  <string name="add_error_commission_unreadable">Не вдалося прочитати комісію</string>
   <string name="add_error_charged_negative">Списана сума не може бути відʼємною</string>
   <string name="add_oversell">У вас лише %1$d — нічого не збережено</string>
   <string name="bond_title">Облігації</string>
@@ -156,7 +174,6 @@
   <string name="list_summary_empty">Немає транзакцій для підсумку</string>
   <string name="list_summary_one">1 транзакція</string>
   <string name="list_summary_many">%1$d транзакцій</string>
-  <string name="list_no_currency">Валюта не вказана</string>
   <string name="list_net">Чистий залишок</string>
   <string name="list_date_from">З %1$s</string>
   <string name="list_date_until">До %1$s</string>
@@ -174,7 +191,6 @@
   <string name="main_add_transaction">Додати транзакцію</string>
   <string name="main_delete_failed">Не вдалося видалити транзакцію</string>
   <string name="dash_recent">Останні</string>
-  <string name="dash_cash">Готівка</string>
   <string name="dash_bonds">Облігації</string>
   <string name="dash_bonds_currency">Облігації · %1$s</string>
   <string name="dash_held_cost">%1$d у портфелі · собівартість %2$s</string>
@@ -185,12 +201,19 @@
   <string name="dash_net_worth_income">Надходження</string>
   <string name="dash_net_worth_expense">Витрати</string>
   <string name="dash_net_worth_basis">Готівка за балансом, облігації за номіналом. Це не ринкова оцінка.</string>
+  <string name="dash_net_worth_all_time">За весь час, зокрема до будь-якого фільтра за період.</string>
   <string name="dash_net_worth_stale">Курси НБУ станом на %1$s</string>
   <string name="dash_net_worth_no_rate">Немає курсу для %1$s</string>
   <string name="dash_net_worth_unrated">Не враховано: немає курсу для %1$s</string>
   <string name="dash_net_worth_unrated_no_code">Не враховано: рядки без валюти</string>
   <string name="dash_net_worth_excluded">Не враховано за вашими правилами: %1$d транзакцій</string>
+  <string name="dash_net_worth_excluded_holdings">Не враховано за вашими правилами: %1$d активів</string>
   <string name="dash_tap_to_add">Торкніться +, щоб додати першу транзакцію</string>
+  <!-- Dashboard period selector for the income/spent flows. -->
+  <string name="dash_period_all_time">За весь час</string>
+  <string name="dash_period_mtd">Цього місяця</string>
+  <string name="dash_period_90d">Останні 90 днів</string>
+  <string name="dash_flow_window">У вибраному вікні</string>
   <string name="settings_tab_general">Загальні</string>
   <string name="settings_tab_data">Дані</string>
   <string name="settings_tab_account">Акаунт</string>
@@ -303,7 +326,6 @@
   <string name="settings_restore">Відновити з файлу резервної копії</string>
   <string name="settings_restore_blurb">Додає з файлу все, чого тут ще немає. Нічого не видаляється й не замінюється, тому файл можна відновити кілька разів.</string>
   <string name="settings_restore_pick">Вибрати файл резервної копії</string>
-  <string name="settings_restore_in_progress">Відновлення…</string>
   <string name="settings_restore_done">Відновлено %1$d нових записів. %2$d уже були тут.</string>
   <string name="settings_restore_nothing_new">У цьому файлі нічого нового — усі %1$d записів уже були тут.</string>
   <string name="settings_restore_wrong_account">Цей файл належить іншому обліковому запису, тому нічого не відновлено. Увійдіть як цей обліковий запис і спробуйте ще раз.</string>
@@ -357,5 +379,4 @@
   <string name="settings_app_lock_locked_title">Finance Tracker заблоковано</string>
   <string name="settings_app_lock_locked_body">Ваші баланси приховані, доки ви не розблокуєте застосунок.</string>
   <string name="settings_app_lock_unlock">Розблокувати</string>
-
 </resources>

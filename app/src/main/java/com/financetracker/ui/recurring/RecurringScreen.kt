@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -43,11 +44,10 @@ import com.financetracker.model.RecurringPayment
 import com.financetracker.model.TransactionType
 import com.financetracker.model.UpcomingTotals
 import com.financetracker.ui.MoneyAmount
+import com.financetracker.util.DateFormats
 import com.financetracker.util.MoneyFormat
 import java.time.LocalDate
 import java.time.ZoneId
-import java.time.format.DateTimeFormatter
-import java.util.Locale
 
 /**
  * The scheduled-payments screen: what is committed, and the schedules that say so.
@@ -105,10 +105,14 @@ fun RecurringScreen(
 
     Scaffold(
         modifier = modifier,
+        // Owned by MainScreen's Scaffold, not by this one — see the same note on the bonds
+        // screen. Reserving the system bars twice is what puts a gap above every nested title.
+        contentWindowInsets = WindowInsets(0, 0, 0, 0),
         snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
             TopAppBar(
                 title = { Text(stringResource(R.string.recurring_title)) },
+                windowInsets = WindowInsets(0, 0, 0, 0),
                 actions = {
                     IconButton(onClick = { adding = true }) {
                         Icon(
@@ -242,7 +246,7 @@ private fun ScheduleCard(
     onDelete: () -> Unit
 ) {
     val zone = remember { ZoneId.systemDefault() }
-    val dateFormat = remember { DateTimeFormatter.ofPattern("dd MMM yyyy", Locale.getDefault()) }
+    val dateFormat = remember { DateFormats.date() }
 
     Card(modifier = Modifier.fillMaxWidth().clickable(onClick = onEdit)) {
         Column(

@@ -53,8 +53,6 @@ sealed interface AddMessage {
     /** Localized copy; [args] fill the positional placeholders in order. */
     data class Res(@StringRes val id: Int, val args: List<Any> = emptyList()) : AddMessage
 
-    /** Repository or exception text shown verbatim; never translated. */
-    data class Raw(val text: String) : AddMessage
 }
 
 @HiltViewModel
@@ -237,7 +235,8 @@ class AddTransactionViewModel @Inject constructor(
             is RecordTradeResult.Recorded -> _saved.trySend(Unit)
             is RecordTradeResult.Oversell ->
                 _message.value = AddMessage.Res(R.string.add_oversell, listOf(result.held))
-            is RecordTradeResult.Invalid -> _message.value = AddMessage.Raw(result.message)
+            is RecordTradeResult.Invalid ->
+                _message.value = AddMessage.Res(bondProblemMessage(result.problem), emptyList())
         }
     }
 }

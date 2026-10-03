@@ -36,6 +36,7 @@ import com.financetracker.ui.MoneyAmount
 import com.financetracker.ui.TransactionAppearance
 import com.financetracker.ui.component.MultiSelectDropdown
 import com.financetracker.util.CategoryLabel
+import com.financetracker.util.DateFormats
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
@@ -81,7 +82,7 @@ fun TransactionListScreen(
     val cardLabels by viewModel.cardLabels.collectAsStateWithLifecycle()
     val banks by viewModel.banks.collectAsStateWithLifecycle()
     val summary by viewModel.summary.collectAsStateWithLifecycle()
-    val dateFormat = DateTimeFormatter.ofPattern("MMM dd, yyyy")
+    val dateFormat = remember { DateFormats.date() }
     var summaryVisible by rememberSaveable { mutableStateOf(false) }
 
     Column(modifier = modifier.fillMaxSize()) {
@@ -181,7 +182,7 @@ fun TransactionListScreen(
                     }
                 }
             }
-            items(transactions) { transaction ->
+            items(transactions, key = { it.id }) { transaction ->
                 TransactionListItem(
                     transaction = transaction,
                     dateFormat = dateFormat,
@@ -235,15 +236,15 @@ private fun SummaryPanel(summary: TransactionSummary) {
                     color = MaterialTheme.colorScheme.error
                 )
             } else {
-                SummaryAmount(stringResource(R.string.income), income, converted.base, Color(0xFF2E7D32))
-                SummaryAmount(stringResource(R.string.expenses), expense, converted.base, Color(0xFFC62828))
+                SummaryAmount(stringResource(R.string.income), income, converted.base, TransactionAppearance.Income)
+                SummaryAmount(stringResource(R.string.expenses), expense, converted.base, TransactionAppearance.Expense)
                 // A negative net is the number that matters, so it is the one that changes
                 // colour; the other two are coloured by what they always mean.
                 SummaryAmount(
                     label = stringResource(R.string.list_net),
                     amount = balance,
                     currencyCode = converted.base,
-                    color = if (balance < 0) Color(0xFFC62828) else Color(0xFF2E7D32)
+                    color = if (balance < 0) TransactionAppearance.Expense else TransactionAppearance.Income
                 )
             }
 
@@ -281,7 +282,7 @@ private fun SummaryAmount(label: String, amount: Double, currencyCode: String?, 
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Text(label, style = MaterialTheme.typography.bodyMedium, color = Color.Gray)
+        Text(label, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
         MoneyAmount(
             amount = amount,
             currencyCode = currencyCode,
@@ -486,7 +487,7 @@ private fun LocalDate.toPickerMillis(): Long =
 private fun Long.toPickerDate(): LocalDate =
     Instant.ofEpochMilli(this).atZone(ZoneOffset.UTC).toLocalDate()
 
-private fun LocalDate.shortDate(): String = DateTimeFormatter.ofPattern("d MMM").format(this)
+private fun LocalDate.shortDate(): String = DateFormats.shortDate().format(this)
 
 @Composable
 private fun EmptyState(hasFilters: Boolean) {
@@ -495,7 +496,7 @@ private fun EmptyState(hasFilters: Boolean) {
             Icons.Default.AccountBalanceWallet,
             contentDescription = null,
             modifier = Modifier.size(64.dp),
-            tint = Color.Gray
+            tint = MaterialTheme.colorScheme.onSurfaceVariant
         )
         Spacer(modifier = Modifier.height(16.dp))
         Text(
@@ -505,13 +506,13 @@ private fun EmptyState(hasFilters: Boolean) {
             text = if (hasFilters) stringResource(R.string.list_nothing_matches)
                 else stringResource(R.string.no_transactions),
             style = MaterialTheme.typography.bodyLarge,
-            color = Color.Gray
+            color = MaterialTheme.colorScheme.onSurfaceVariant
         )
         Text(
             text = if (hasFilters) stringResource(R.string.list_try_clearing)
                 else stringResource(R.string.list_tap_to_add),
             style = MaterialTheme.typography.bodySmall,
-            color = Color.Gray
+            color = MaterialTheme.colorScheme.onSurfaceVariant
         )
     }
 }
@@ -571,7 +572,7 @@ private fun TransactionListItem(
                 Text(
                     text = "$categoryText • ${Instant.ofEpochMilli(transaction.timestamp).atZone(ZoneId.systemDefault()).toLocalDateTime().format(dateFormat)}",
                     style = MaterialTheme.typography.bodySmall,
-                    color = Color.Gray,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
@@ -579,7 +580,7 @@ private fun TransactionListItem(
                     Text(
                         text = provenance,
                         style = MaterialTheme.typography.bodySmall,
-                        color = Color.Gray,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
@@ -603,7 +604,7 @@ private fun TransactionListItem(
                 Text(
                     text = transaction.note.orEmpty(),
                     style = MaterialTheme.typography.bodySmall,
-                    color = Color.Gray,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                     minLines = 1,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis

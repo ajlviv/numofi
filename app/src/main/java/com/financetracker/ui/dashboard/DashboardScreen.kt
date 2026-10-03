@@ -1,16 +1,15 @@
 package com.financetracker.ui.dashboard
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -19,13 +18,17 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -37,8 +40,8 @@ import com.financetracker.R
 import com.financetracker.data.settings.DEFAULT_BASE_CURRENCY
 import com.financetracker.model.BondPosition
 import com.financetracker.model.CountedTransactions
-import com.financetracker.model.CurrencyTotals
 import com.financetracker.model.ExchangeRates
+import com.financetracker.model.ExclusionRules
 import com.financetracker.model.NetWorth
 import com.financetracker.model.Transaction
 import com.financetracker.model.netWorth
@@ -54,10 +57,22 @@ import java.time.LocalDate
 fun DashboardScreen(
     transactions: List<Transaction>,
     counted: CountedTransactions? = null,
+    /**
+     * The same rules [counted] was derived from, needed because the rules apply to holdings as
+     * well as to rows. Null rather than defaulted so a caller that has not wired the settings
+     * flow up counts its holdings, which is the honest total.
+     */
+    rules: ExclusionRules? = null,
     positions: List<BondPosition> = emptyList(),
     baseCurrency: String = DEFAULT_BASE_CURRENCY,
     rates: ExchangeRates = ExchangeRates(emptyMap(), null, 0L),
     onRefreshRates: () -> Unit = {},
+    /**
+     * Opens a row. Required rather than defaulted to a no-op, for the reason the type badge
+     * 's callback is: a row that looks tappable and is not is worse than no row, because
+     * the list has already promised it.
+     */
+    onTransactionClick: (Transaction) -> Unit,
     modifier: Modifier = Modifier
 ) {
     // Two lists, on purpose. The total is built from `counted`, which has the user's exclusion
@@ -69,6 +84,24 @@ fun DashboardScreen(
     // honest total rather than a silently empty one.
     val rows = counted?.counted ?: transactions
     val totals = totalsByCurrency(rows)
+
+    // Income and spent are flows, so they can be scoped to a window while the net-worth headline
+    // above stays a stock value. ALL_TIME is the default and matches the old behaviour exactly:
+    // every row passes the filter, so returning users see nothing change.
+    //
+    // The windowed flows are derived by recomputing netWorth() over the filtered rows with no
+    // holdings. That reuses the same rate gate (see the comment in netWorth), so income, spent
+    // and the headline are converted on identical terms — the one invariant the dashboard must
+    // never break.
+    var period by rememberSaveable { mutableStateOf(DashboardPeriod.ALL_TIME) }
+    val windowedResult = netWorth(
+        totals = totalsByCurrency(rows.filter { period.contains(it.timestamp) }),
+        positions = emptyList(),
+        rates = rates,
+        base = baseCurrency,
+        excluded = counted?.excluded ?: 0,
+        rules = rules ?: ExclusionRules()
+    )
 
     Column(
         modifier = modifier
@@ -82,14 +115,20 @@ fun DashboardScreen(
         // to convert through, and stopped being true the moment there was one. Splitting now
         // would show the same money twice, once unconverted and once converted, and make the
         // user reconcile them.
-        NetWorthCard(
+                NetWorthCard(
             result = netWorth(
                 totals = totals,
                 positions = positions,
                 rates = rates,
                 base = baseCurrency,
-                excluded = counted?.excluded ?: 0
+                excluded = counted?.excluded ?: 0,
+                // The holdings cards below stay on every position: a rule is about what a
+                // *total* counts, and a holding the user recorded is still worth reading.
+                rules = rules ?: ExclusionRules()
             ),
+            windowedResult = windowedResult,
+            period = period,
+            onPeriodChange = { period = it },
             baseCurrency = baseCurrency,
             rates = rates,
             onRefresh = onRefreshRates
@@ -112,7 +151,7 @@ fun DashboardScreen(
         } else {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 transactions.take(5).forEach { transaction ->
-                    TransactionRow(transaction)
+                    TransactionRow(transaction, onTransactionClick)
                 }
             }
         }
@@ -136,6 +175,9 @@ fun DashboardScreen(
 @Composable
 private fun NetWorthCard(
     result: NetWorth,
+    windowedResult: NetWorth,
+    period: DashboardPeriod,
+    onPeriodChange: (DashboardPeriod) -> Unit,
     baseCurrency: String,
     rates: ExchangeRates,
     onRefresh: () -> Unit
@@ -148,7 +190,7 @@ private fun NetWorthCard(
             Text(
                 text = stringResource(R.string.dash_net_worth),
                 style = MaterialTheme.typography.bodyMedium,
-                color = Color.Gray
+                color = MaterialTheme.colorScheme.onSurfaceVariant
             )
             Spacer(modifier = Modifier.height(4.dp))
 
@@ -175,16 +217,51 @@ private fun NetWorthCard(
             Text(
                 text = stringResource(R.string.dash_net_worth_basis),
                 style = MaterialTheme.typography.labelSmall,
-                color = Color.Gray
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            // Said on the figure itself, not only under the flows. The chips below scope income
+            // and spent to a window and deliberately leave this number alone, so a reader who
+            // picks "This month" sees a month of flows under an all-time total. That is the
+            // right behaviour — a windowed total with no bonds in it would not be a net worth —
+            // but it is only right if the headline says which it is.
+            Text(
+                text = stringResource(R.string.dash_net_worth_all_time),
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
             )
 
             // Flows, converted on the same terms as the total above and inside the same
             // unquoted gate, so the two lines always add up to the figure they explain. Kept
             // here rather than in blocks per currency: they are properties of the total, not of
             // any one account.
-            val income = result.income
-            val expense = result.expense
+                        val income = windowedResult.income
+            val expense = windowedResult.expense
             if (income != null && expense != null) {
+                Spacer(modifier = Modifier.height(8.dp))
+                // The headline is a stock; these are flows, so they can be windowed. The
+                // selector lives with the flows, not the total. The two share a rate gate
+                // (see netWorth), so the figures always reconcile.
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    DashboardPeriod.entries.forEach { p ->
+                        FilterChip(
+                            selected = p == period,
+                            onClick = { onPeriodChange(p) },
+                            label = { Text(stringResource(p.labelRes)) }
+                        )
+                    }
+                }
+                if (period != DashboardPeriod.ALL_TIME) {
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = stringResource(R.string.dash_flow_window),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
                 Spacer(modifier = Modifier.height(8.dp))
                 Row(modifier = Modifier.fillMaxWidth()) {
                     FlowFigure(
@@ -238,6 +315,21 @@ private fun NetWorthCard(
                 )
             }
 
+            // A holding the rules removed, named separately from the rows they removed. A bond
+            // purchase is both a cash row and a position, and a rule that catches the row must
+            // catch the holding — otherwise the total would quietly gain the full nominal of
+            // something already subtracted out of the cash side of the same figure.
+            if (result.excludedHoldings > 0) {
+                Text(
+                    text = stringResource(
+                        R.string.dash_net_worth_excluded_holdings,
+                        result.excludedHoldings
+                    ),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+
             result.unquoted.forEach { currency ->
                 Text(
                     text = currency
@@ -255,113 +347,12 @@ private fun NetWorthCard(
 @Composable
 private fun RowScope.FlowFigure(label: String, amount: Double, currencyCode: String) {
     Column(modifier = Modifier.weight(1f)) {
-        Text(text = label, style = MaterialTheme.typography.labelSmall, color = Color.Gray)
+        Text(text = label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         MoneyAmount(
             amount = amount,
             currencyCode = currencyCode,
             style = MaterialTheme.typography.titleMedium,
             fontWeight = FontWeight.SemiBold
-        )
-    }
-}
-
-/**
- * One currency's cash, its income and its expenses, together.
- *
- * These were three separate cards of two different sizes — a filled balance card above a pair
- * of smaller totals — which is why they never lined up: "equal height" was something the
- * layout had to be asked to agree on and could not, because the balance card was taller by its
- * own padding and type scale. One card per currency makes the three the same height by
- * construction rather than by agreement, keeps the two flows on a single row of equal columns,
- * and stops a history in several currencies from repeating a balance-then-totals block down
- * the screen once per currency.
- *
- * The balance stays the largest figure, since it is the one number the screen exists to show.
- * Income and expense keep their own colours so the pair reads without consulting the labels.
- * The balance deliberately takes no colour: it already means something on its own, and a third
- * colour in the row would make the three look like three kinds of the same figure.
- */
-@Composable
-private fun CurrencySummaryCard(
-    currencyCode: String?,
-    balance: Double,
-    income: Double,
-    expense: Double,
-    showCurrencyLabel: Boolean
-) {
-    Card(elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)) {
-        Column(modifier = Modifier.fillMaxWidth().padding(20.dp)) {
-            if (showCurrencyLabel) {
-                Text(
-                    text = currencyCode ?: stringResource(R.string.list_no_currency),
-                    style = MaterialTheme.typography.labelMedium,
-                    color = Color.Gray
-                )
-                Spacer(modifier = Modifier.height(8.dp))
-            }
-            Text(
-                // Not "Total Balance", which it is no longer the whole of. What this shows is
-                // cash; a bond holding is worth something and is reported separately, because
-                // the two cannot be added without inventing a rate.
-                text = stringResource(R.string.dash_cash),
-                style = MaterialTheme.typography.bodyMedium,
-                color = Color.Gray
-            )
-            Spacer(modifier = Modifier.height(4.dp))
-            MoneyAmount(
-                amount = balance,
-                currencyCode = currencyCode,
-                style = MaterialTheme.typography.headlineMedium,
-                fontWeight = FontWeight.Bold
-            )
-            Spacer(modifier = Modifier.height(16.dp))
-            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-            Spacer(modifier = Modifier.height(16.dp))
-            // Two equal columns, equal in height as well as width: an amount that wraps on one
-            // side must not leave the other floating at a different baseline.
-            Row(
-                modifier = Modifier.fillMaxWidth().height(IntrinsicSize.Min),
-                horizontalArrangement = Arrangement.spacedBy(16.dp)
-            ) {
-                SummaryFigure(
-                    label = stringResource(R.string.income),
-                    amount = income,
-                    currencyCode = currencyCode,
-                    color = TransactionAppearance.Income
-                )
-                SummaryFigure(
-                    label = stringResource(R.string.expenses),
-                    amount = expense,
-                    currencyCode = currencyCode,
-                    color = TransactionAppearance.Expense
-                )
-            }
-        }
-    }
-}
-
-/**
- * One side of a currency card's flow row.
- *
- * Takes its own weight rather than accepting a [Modifier], so the two figures cannot be given
- * different widths by a caller and stop lining up with each other or with the balance above.
- */
-@Composable
-private fun RowScope.SummaryFigure(
-    label: String,
-    amount: Double,
-    currencyCode: String?,
-    color: Color
-) {
-    Column(modifier = Modifier.weight(1f).fillMaxHeight()) {
-        Text(label, style = MaterialTheme.typography.labelMedium, color = Color.Gray)
-        Spacer(modifier = Modifier.height(2.dp))
-        MoneyAmount(
-            amount = amount,
-            currencyCode = currencyCode,
-            style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.Bold,
-            color = color
         )
     }
 }
@@ -388,7 +379,7 @@ private fun InvestmentCard(positions: List<BondPosition>, currencyCode: String) 
             Text(
                 text = if (positions.size > 1) stringResource(R.string.dash_bonds_currency, currencyCode) else stringResource(R.string.dash_bonds),
                 style = MaterialTheme.typography.bodySmall,
-                color = Color.Gray
+                color = MaterialTheme.colorScheme.onSurfaceVariant
             )
             Spacer(modifier = Modifier.height(4.dp))
             MoneyAmount(
@@ -397,10 +388,18 @@ private fun InvestmentCard(positions: List<BondPosition>, currencyCode: String) 
                 style = MaterialTheme.typography.titleLarge,
                 fontWeight = FontWeight.Bold
             )
+            // Immediately under the figure, as the bond screen puts it. The card also carries
+            // `dash_honest_label` at the foot, but a caveat four rows below the number is read
+            // after the number, not before it, and this is the largest figure on the card.
+            Text(
+                text = stringResource(R.string.bond_at_last_price),
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
             Text(
                 text = stringResource(R.string.dash_held_cost, heldCount, MoneyFormat.format(cost, currencyCode)),
                 style = MaterialTheme.typography.bodySmall,
-                color = Color.Gray
+                color = MaterialTheme.colorScheme.onSurfaceVariant
             )
             Spacer(modifier = Modifier.height(8.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
@@ -421,7 +420,7 @@ private fun InvestmentCard(positions: List<BondPosition>, currencyCode: String) 
             Text(
                 text = stringResource(R.string.dash_honest_label),
                 style = MaterialTheme.typography.labelSmall,
-                color = Color.Gray
+                color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
     }
@@ -430,7 +429,7 @@ private fun InvestmentCard(positions: List<BondPosition>, currencyCode: String) 
 @Composable
 private fun InvestmentFigure(label: String, value: String, color: Color?) {
     Column {
-        Text(text = label, style = MaterialTheme.typography.labelSmall, color = Color.Gray)
+        Text(text = label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         Text(
             text = value,
             style = MaterialTheme.typography.bodyMedium,
@@ -444,10 +443,10 @@ private fun withSign(value: Double, currency: String): String =
     (if (value > 0) "+" else "") + MoneyFormat.format(value, currency)
 
 @Composable
-private fun TransactionRow(transaction: Transaction) {
+private fun TransactionRow(transaction: Transaction, onClick: (Transaction) -> Unit) {
     val categoryRes = CategoryLabel.resource(transaction.category)
     Row(
-        modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
+        modifier = Modifier.fillMaxWidth().clickable { onClick(transaction) }.padding(vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Box(
@@ -476,7 +475,7 @@ private fun TransactionRow(transaction: Transaction) {
             Text(
                 text = if (categoryRes != 0) stringResource(categoryRes) else CategoryLabel.label(transaction.category),
                 style = MaterialTheme.typography.bodySmall,
-                color = Color.Gray
+                color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
 
@@ -500,12 +499,12 @@ private fun EmptyState() {
         Text(
             text = stringResource(R.string.no_transactions),
             style = MaterialTheme.typography.bodyLarge,
-            color = Color.Gray
+            color = MaterialTheme.colorScheme.onSurfaceVariant
         )
         Text(
             text = stringResource(R.string.dash_tap_to_add),
             style = MaterialTheme.typography.bodySmall,
-            color = Color.Gray
+            color = MaterialTheme.colorScheme.onSurfaceVariant
         )
     }
 }

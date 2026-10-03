@@ -66,19 +66,22 @@ fun of(
 ): TransactionSummary {
     val selection = rules.select(transactions)
     if (transactions.isEmpty()) {
-        // Not EMPTY: the bond figure and the base are still real, and dropping them because
-        // there is nothing to total would blank a line the screen showed a moment ago.
-        return EMPTY.copy(
-            converted = ConvertedTotals(base, 0.0, 0.0, 0.0, emptyList(), bondNominal)
-        )
+        // Routed through `convertTotals` rather than built by hand, because that is what applies
+        // the gate deciding whether the base can be quoted at all. Building the zeros here
+        // skipped it, so an empty list on an unquotable base printed a confident `0.00 EUR`
+        // where every other screen says "no rate" — and a zero reads as "you broke even", which
+        // is the one claim an empty list cannot support. The bond figure and the base go through
+        // with it, so a line the screen was showing a moment ago does not blank out.
+        return EMPTY.copy(converted = convertTotals(emptyList(), rates, base, bondNominal))
     }
-        val totals = totalsByCurrency(selection.counted)
-        return TransactionSummary(
-            count = transactions.size,
-            totals = totals,
-            converted = convertTotals(totals, rates, base, bondNominal),
-            excluded = selection.excluded
-        )
-    }
+
+    val totals = totalsByCurrency(selection.counted)
+    return TransactionSummary(
+        count = transactions.size,
+        totals = totals,
+        converted = convertTotals(totals, rates, base, bondNominal),
+        excluded = selection.excluded
+    )
+}
     }
 }

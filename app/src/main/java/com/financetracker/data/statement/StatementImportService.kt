@@ -7,6 +7,8 @@ import com.financetracker.model.BankNames
 import com.financetracker.model.SearchText
 import com.financetracker.model.TransactionEntity
 import com.financetracker.model.TransactionType
+import com.financetracker.model.TransferDirection
+import com.financetracker.model.TransferPairing
 import com.financetracker.repository.BankRepository
 import kotlinx.coroutines.flow.first
 import java.math.BigDecimal
@@ -78,11 +80,68 @@ class StatementImportService @Inject constructor(
         //
         // Not asked for when nothing was written, because a file that was entirely duplicates
         // has not changed the data and the backup already in Drive is still correct.
-        if (imported > 0) {
+        // Run even when every line was a duplicate, because a re-import is how a table written
+        // before this behaviour existed gets the transfers in it recognised. The count of
+        // imported rows says nothing about whether the ledger changed: the counterpart of an
+        // already-stored leg is usually in a different file the user opens later, and pairing
+        // relabels both halves.
+        val paired = recogniseTransfers(userId, rows)
+
+        // Asked for once, after the file rather than per row: the burst of requests a row-at-a-
+        // time import would produce collapses into a single extra upload anyway, and saying
+        // why is what lets the status line report "after an import" rather than just "now".
+        //
+        // Not asked for when nothing was written, because a file that was entirely duplicates
+        // has not changed the data and the backup already in Drive is still correct. A relabelled
+        // pair is a change to what this device believes, so it counts as a write even though no
+        // row was inserted — otherwise the file in Drive would keep describing the old types.
+        if (imported > 0 || paired > 0) {
             backupRequests.requestUpload(BackupReason.IMPORT)
         }
         return Result(imported, duplicates, alreadySynced)
     }
+
+    /**
+     * Relabels the two legs of a transfer that arrived in different statements.
+     *
+     * A transfer between the user's own accounts is one movement the banks report twice: a
+     * debit on the account it left and a credit on the one it reached. Left as an income and
+     * an expense they inflate both figures on the dashboard. Bank sync has recognised these
+     * since it was written, but the two legs there come from one provider's response and land
+     * within minutes — a statement puts them in different files a user imports at different
+     * times, hours apart, so the sync's window finds none of them.
+     *
+     * The rows are read back from the table rather than kept from the insert loop, because the
+     * counterpart is usually not in this file at all: the sending bank's statement and the
+     * receiving bank's are separate documents, and whichever the user opens second is the one
+     * that completes the pair. The range is the file's own span widened by the window, so a
+     * leg stored by an earlier import is in reach without reading the whole history.
+     *
+     * A leg already relabelled is a [TransactionType.TRANSFER], which [TransferPairing] does
+     * not pair, so a repeated import is a no-op here and cannot re-pair a finished pair.
+     *
+     * Returns how many pairs were relabelled, which is what tells the caller whether the
+     * ledger changed.
+     */
+    private suspend fun recogniseTransfers(userId: String, rows: List<StatementRow>): Int {
+        val from = rows.minOfOrNull { it.timestamp } ?: return 0
+        val to = rows.maxOfOrNull { it.timestamp } ?: return 0
+
+        val stored = transactionDao.getInRange(
+            userId,
+            from - TransferPairing.STATEMENT_WINDOW_MILLIS,
+            to + TransferPairing.STATEMENT_WINDOW_MILLIS
+        )
+        val pairs = TransferPairing.pairsWithin(stored, TransferPairing.STATEMENT_WINDOW_MILLIS)
+        for (pair in pairs) {
+            transactionDao.update(pair.inbound.asTransfer(TransferDirection.IN))
+            transactionDao.update(pair.outbound.asTransfer(TransferDirection.OUT))
+        }
+        return pairs.size
+    }
+
+    private fun TransactionEntity.asTransfer(direction: TransferDirection) =
+        copy(type = TransactionType.TRANSFER, transferDirection = direction)
 
     /**
      * Amount is quantised to kopecks so that two exports of the same transaction
