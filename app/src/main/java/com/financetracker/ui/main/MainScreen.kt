@@ -174,7 +174,7 @@ fun MainScreen(
             // Only where something can be added. The transactions list is a browsing screen,
             // the settings screen is a list of controls, and the bonds screen has its own
             // button in its app bar for the one thing that can be added there.
-            if (items[selectedTab] == MainBottomNavDestination.DASHBOARD) {
+            if (items[selectedTab] == MainBottomNavDestination.DASHBOARD || items[selectedTab] == MainBottomNavDestination.TRANSACTIONS) {
                 FloatingActionButton(onClick = { addEntryMode = AddEntryMode.TRANSACTION }) {
                     Icon(Icons.Default.Add, contentDescription = stringResource(R.string.main_add_transaction))
                 }

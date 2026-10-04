@@ -86,10 +86,7 @@ object TransactionDetails {
             ),
             DetailSection(
                 title = "Stored",
-                fields = listOf(
-                    DetailField("Row ID", transaction.id.toString(), raw = true),
-                    DetailField("Timestamp (epoch ms)", transaction.timestamp.toString(), raw = true)
-                )
+                fields = listOf()
             )
         )
     }

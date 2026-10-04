@@ -154,8 +154,8 @@
   <string name="bond_figure_cost_per">Ціна за облігацію</string>
   <string name="bond_figure_unrealised">Нереалізований результат</string>
   <string name="bond_fully_sold">Більше не в портфелі. Залишено тут, бо тут збережені угоди.</string>
-  <string name="bond_expected_at_maturity">До погашення: номінал %1$s + купон %2$s × %3$d = %4$s</string>
-  <string name="bond_expected_at_maturity_prorated">До погашення: номінал %1$s + купон %2$s = %3$s</string>
+  <string name="bond_expected_at_maturity">Номінал %1$s + купон %2$s × %3$d = %4$s до погашення</string>
+  <string name="bond_expected_at_maturity_prorated">Номінал %1$s + купон %2$s = %3$s до погашення</string>
   <string name="bond_coupon_full">Купон %1$.2f%% кожні %2$d міс. — %3$s на рік</string>
   <string name="bond_coupon_period">Купон %1$.2f%% кожні %2$d міс.</string>
   <string name="bond_coupon_only">Купон %1$.2f%%</string>
@@ -197,7 +197,7 @@
   <string name="dash_unrealised">Нереалізований</string>
   <string name="dash_coupon_a_year">Купон на рік</string>
   <string name="dash_honest_label">За останньою ціною, яку ви ввели. Не ринкова оцінка — цей застосунок не має джерела цін.</string>
-  <string name="dash_net_worth">Загальна вартість</string>
+  <string name="dash_net_worth">Усього активів</string>
   <string name="dash_net_worth_income">Надходження</string>
   <string name="dash_net_worth_expense">Витрати</string>
   <string name="dash_net_worth_basis">Готівка за балансом, облігації за номіналом. Це не ринкова оцінка.</string>

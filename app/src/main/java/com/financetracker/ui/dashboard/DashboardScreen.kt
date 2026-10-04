@@ -377,7 +377,7 @@ private fun InvestmentCard(positions: List<BondPosition>, currencyCode: String) 
     Card(elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)) {
         Column(modifier = Modifier.padding(16.dp)) {
             Text(
-                text = if (positions.size > 1) stringResource(R.string.dash_bonds_currency, currencyCode) else stringResource(R.string.dash_bonds),
+                text = if (held.size > 1) stringResource(R.string.dash_bonds_currency, currencyCode) else stringResource(R.string.dash_bonds),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )

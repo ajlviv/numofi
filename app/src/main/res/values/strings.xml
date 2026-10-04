@@ -22,7 +22,7 @@
   <string name="save">Save</string>
   <string name="no_transactions">No transactions yet</string>
   <string name="settings">Settings</string>
-  <string name="dashboard">Dashboard</string>
+  <string name="dashboard">Overview</string>
   <string name="transactions">Transactions</string>
   <string name="common_title">Title</string>
   <string name="common_category">Category</string>
@@ -175,8 +175,8 @@
   <string name="bond_figure_cost_per">Cost/bond</string>
   <string name="bond_figure_unrealised">Unrealised</string>
   <string name="bond_fully_sold">No longer held. Kept here because the trades are.</string>
-  <string name="bond_expected_at_maturity">At maturity: principal %1$s + coupon %2$s × %3$d = %4$s</string>
-  <string name="bond_expected_at_maturity_prorated">At maturity: principal %1$s + coupon %2$s = %3$s</string>
+  <string name="bond_expected_at_maturity">Principal %1$s + coupon %2$s × %3$d = %4$s at maturity</string>
+  <string name="bond_expected_at_maturity_prorated">Principal %1$s + coupon %2$s = %3$s at maturity</string>
   <string name="bond_coupon_full">Coupon %1$.2f%% every %2$d months — %3$s a year</string>
   <string name="bond_coupon_period">Coupon %1$.2f%% every %2$d months</string>
   <string name="bond_coupon_only">Coupon %1$.2f%%</string>
@@ -219,7 +219,7 @@
   <string name="dash_unrealised">Unrealised</string>
   <string name="dash_coupon_a_year">Coupon a year</string>
   <string name="dash_honest_label">At the last price you entered. Not a market valuation — this app has no price feed.</string>
-  <string name="dash_net_worth">Total net worth</string>
+  <string name="dash_net_worth">Total assets</string>
   <string name="dash_net_worth_income">Income</string>
   <string name="dash_net_worth_expense">Spent</string>
   <string name="dash_net_worth_basis">Cash at ledger balance, bonds at nominal. Not a market valuation.</string>
@@ -358,7 +358,7 @@
   <string name="settings_restore_failed">Restore failed. Nothing was restored.</string>
 
   <!-- Recurring payments. A projection of what is committed, never a ledger entry. -->
-  <string name="main_scheduled">Scheduled</string>
+  <string name="main_scheduled">Plans</string>
   <string name="recurring_title">Scheduled payments</string>
   <string name="recurring_empty_title">Nothing scheduled yet</string>
   <string name="recurring_empty_subtitle">Add a payment that repeats — rent, a subscription, a loan instalment.</string>
