@@ -94,4 +94,65 @@ class DashboardPeriodTest {
         val w = DashboardPeriod.LAST_90_DAYS.window(nowMillis, zone)!!
         assertEquals(nowMillis - 90 * DashboardPeriod.DAY_MS, w.from)
     }
+
+    @Test
+    fun `this-year starts at the first millisecond of the current year`() {
+        val w = DashboardPeriod.THIS_YEAR.window(nowMillis, zone)!!
+        assertEquals(Instant.parse("2026-01-01T00:00:00Z").toEpochMilli(), w.from)
+        assertEquals(nowMillis, w.to)
+    }
+
+    @Test
+    fun `this-year is half-open the start is in the boundary is out`() {
+        val jan1 = Instant.parse("2026-01-01T00:00:00Z").toEpochMilli()
+        assertTrue(DashboardPeriod.THIS_YEAR.contains(jan1, nowMillis, zone))
+        assertTrue(DashboardPeriod.THIS_YEAR.contains(nowMillis - 1, nowMillis, zone))
+        assertFalse(DashboardPeriod.THIS_YEAR.contains(nowMillis, nowMillis, zone))
+    }
+
+    @Test
+    fun `this-year excludes the last millisecond of the previous year`() {
+        val dec31End = Instant.parse("2025-12-31T23:59:59.999Z").toEpochMilli()
+        assertFalse(DashboardPeriod.THIS_YEAR.contains(dec31End, nowMillis, zone))
+    }
+
+    @Test
+    fun `this-year covers a whole leap year when asked on its last day`() {
+        // 2024 is a leap year, so its last day is the 366th. Anchoring to day-of-year 1 has to
+        // land on Jan 1 rather than on day 365, which a `minusDays(365)` shortcut would do.
+        val lastMomentOfLeapYear = Instant.parse("2024-12-31T23:59:59Z").toEpochMilli()
+        val w = DashboardPeriod.THIS_YEAR.window(lastMomentOfLeapYear, zone)!!
+        assertEquals(Instant.parse("2024-01-01T00:00:00Z").toEpochMilli(), w.from)
+        assertTrue(DashboardPeriod.THIS_YEAR.contains(Instant.parse("2024-02-29T12:00:00Z").toEpochMilli(), lastMomentOfLeapYear, zone))
+    }
+
+    @Test
+    fun `this-year always contains month-to-date`() {
+        // The selector offers overlapping windows; switching to a wider one must never appear
+        // to lose rows. Month-to-date is nested in this-year on every day of the year, because
+        // the 1st of this month is never earlier than the 1st of January.
+        assertTrue(
+            DashboardPeriod.MONTH_TO_DATE.window(nowMillis, zone)!!.from >=
+                DashboardPeriod.THIS_YEAR.window(nowMillis, zone)!!.from
+        )
+    }
+
+    @Test
+    fun `this-year is narrower than 90 days early in the year and wider late in it`() {
+        // The two windows cross: on 15 Feb, 90 days back reaches into the previous year, so
+        // LAST_90_DAYS starts earlier and covers more. From March onwards the year boundary
+        // overtakes it and THIS_YEAR becomes the wider of the two. Neither is a superset of the
+        // other all year, which is why this is pinned rather than assumed.
+        val earlyInYear = Instant.parse("2026-02-15T12:00:00Z").toEpochMilli()
+        val lateInYear = Instant.parse("2026-06-15T12:00:00Z").toEpochMilli()
+
+        assertTrue(
+            DashboardPeriod.THIS_YEAR.window(earlyInYear, zone)!!.from >
+                DashboardPeriod.LAST_90_DAYS.window(earlyInYear, zone)!!.from
+        )
+        assertTrue(
+            DashboardPeriod.THIS_YEAR.window(lateInYear, zone)!!.from <
+                DashboardPeriod.LAST_90_DAYS.window(lateInYear, zone)!!.from
+        )
+    }
 }

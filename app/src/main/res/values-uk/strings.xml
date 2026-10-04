@@ -212,6 +212,7 @@
   <!-- Dashboard period selector for the income/spent flows. -->
   <string name="dash_period_all_time">За весь час</string>
   <string name="dash_period_mtd">Цього місяця</string>
+  <string name="dash_period_year">Цього року</string>
   <string name="dash_period_90d">Останні 90 днів</string>
   <string name="dash_flow_window">У вибраному вікні</string>
   <string name="settings_tab_general">Загальні</string>

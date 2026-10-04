@@ -24,7 +24,8 @@ import java.time.ZonedDateTime
 enum class DashboardPeriod(@StringRes val labelRes: Int) {
     ALL_TIME(R.string.dash_period_all_time),
     MONTH_TO_DATE(R.string.dash_period_mtd),
-    LAST_90_DAYS(R.string.dash_period_90d);
+    LAST_90_DAYS(R.string.dash_period_90d),
+    THIS_YEAR(R.string.dash_period_year);
 
     /**
      * Half-open millisecond bounds `[from, to)` at [nowMillis], or null for no window.
@@ -33,6 +34,7 @@ enum class DashboardPeriod(@StringRes val labelRes: Int) {
         ALL_TIME -> null
         MONTH_TO_DATE -> TimeWindow(monthStart(nowMillis, zone), nowMillis)
         LAST_90_DAYS -> TimeWindow(nowMillis - DAY_MS * 90, nowMillis)
+        THIS_YEAR -> TimeWindow(yearStart(nowMillis, zone), nowMillis)
     }
 
     /**
@@ -48,6 +50,16 @@ enum class DashboardPeriod(@StringRes val labelRes: Int) {
     private fun monthStart(nowMillis: Long, zone: ZoneId): Long =
         ZonedDateTime.ofInstant(Instant.ofEpochMilli(nowMillis), zone)
             .withDayOfMonth(1)
+            .withHour(0)
+            .withMinute(0)
+            .withSecond(0)
+            .withNano(0)
+            .toInstant()
+            .toEpochMilli()
+
+    private fun yearStart(nowMillis: Long, zone: ZoneId): Long =
+        ZonedDateTime.ofInstant(Instant.ofEpochMilli(nowMillis), zone)
+            .withDayOfYear(1)
             .withHour(0)
             .withMinute(0)
             .withSecond(0)

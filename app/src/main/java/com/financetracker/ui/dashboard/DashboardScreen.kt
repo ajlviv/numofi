@@ -2,6 +2,7 @@ package com.financetracker.ui.dashboard
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -241,8 +242,15 @@ private fun NetWorthCard(
                 // The headline is a stock; these are flows, so they can be windowed. The
                 // selector lives with the flows, not the total. The two share a rate gate
                 // (see netWorth), so the figures always reconcile.
+                // Scrollable, because the options are a row of chips whose combined width grows
+                // with the label translations and the number of periods, and a fixed row simply
+                // clips the last chip off the right edge of a narrow screen — which leaves a
+                // period that can be neither seen nor selected. Same treatment as the filter
+                // rows in the transaction list.
                 Row(
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .horizontalScroll(rememberScrollState()),
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {

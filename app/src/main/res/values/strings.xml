@@ -234,6 +234,7 @@
   <!-- Dashboard period selector for the income/spent flows. -->
   <string name="dash_period_all_time">All time</string>
   <string name="dash_period_mtd">This month</string>
+  <string name="dash_period_year">This year</string>
   <string name="dash_period_90d">Last 90 days</string>
   <string name="dash_flow_window">In the selected window</string>
   <string name="settings_tab_general">General</string>
