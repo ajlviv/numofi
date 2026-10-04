@@ -149,7 +149,9 @@ internal fun RecurringEntryForm(
                 singleLine = true
             )
 
-            SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
+            // Same spacing as the other segmented selectors: `space` is the segment overlap,
+            // so a negative value is the gap between the buttons.
+            SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth(), space = (-8).dp) {
                 listOf(TransactionType.EXPENSE, TransactionType.INCOME).forEach { option ->
                     SegmentedButton(
                         selected = type == option,

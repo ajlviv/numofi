@@ -147,7 +147,9 @@ fun AddTransactionScreen(
             contentPadding = PaddingValues(vertical = 8.dp)
         ) {
             item {
-                SingleChoiceSegmentedButtonRow {
+                // Spaced rather than fused: `space` is the overlap between segments, so a
+                // negative value is the gap, like every other selector row on this screen.
+                SingleChoiceSegmentedButtonRow(space = (-8).dp) {
                     AddEntryMode.entries.forEach { entry ->
                         SegmentedButton(
                             selected = mode == entry,
@@ -259,7 +261,8 @@ internal fun TransactionForm(
         // Only the two the user can mean by hand. TRANSFER is not offered: every transfer
         // this app records is a bond trade, and letting someone file a bare transfer would
         // let cash leave the balance with nothing to say what it became.
-        SingleChoiceSegmentedButtonRow {
+        // Same spacing as the mode selector above: separate buttons, not one control.
+        SingleChoiceSegmentedButtonRow(space = (-8).dp) {
             listOf(TransactionType.INCOME, TransactionType.EXPENSE).forEach { type ->
                 SegmentedButton(
                     selected = selectedType == type,

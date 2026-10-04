@@ -184,7 +184,9 @@ internal fun BondEntryForm(
     val settlement = marketTotal?.let { BondMath.settlement(it, bondCurrency, currency, enteredAmount) }
 
     Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
-        SingleChoiceSegmentedButtonRow {
+        // Same spacing as the other segmented selectors: `space` is the segment overlap,
+        // so a negative value is the gap between the buttons.
+        SingleChoiceSegmentedButtonRow(space = (-8).dp) {
             BondTradeSide.entries.forEach { entry ->
                 SegmentedButton(
                     selected = side == entry,
