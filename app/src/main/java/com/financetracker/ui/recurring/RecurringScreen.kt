@@ -221,12 +221,6 @@ private fun UpcomingCard(upcoming: UpcomingTotals, baseCurrency: String) {
                 )
             }
 
-            Text(
-                text = stringResource(R.string.recurring_upcoming_honest),
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-
             upcoming.rates.date?.let { date ->
                 Text(
                     text = stringResource(R.string.dash_net_worth_stale, date),

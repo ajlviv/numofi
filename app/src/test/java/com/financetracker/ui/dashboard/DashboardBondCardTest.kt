@@ -19,18 +19,12 @@ import org.junit.Test
 import org.junit.runner.RunWith
 
 /**
- * What the dashboard says about a holding, and how loudly.
+ * What the dashboard says about a holding.
  *
- * The figure on the bond card is quantity × the last price the user entered, not nominal. That is
- * a legitimate thing to show — it is what the position is marked at — but a number nobody has
- * labelled is a claim, and this card sits directly under a net worth figure that is at nominal
- * by design. The two disagree by the discount to par plus fees, so the caveat has to be on the
- * card rather than somewhere else in the app.
- *
- * It was there, and it was at the foot: "At the last price you entered. Not a market valuation."
- * Four figures below the number it qualifies, after a figure the eye arrives at first. These
- * tests exist because that placement went unnoticed on a review that had already checked the
- * page — a caveat that is present but read after the number is not the same as one read with it.
+ * The figure on the bond card is quantity × the last price the user entered, not nominal, while
+ * the net worth headline above it counts the same holding at nominal. The two disagree by the
+ * discount to par plus fees, so these tests pin which reading each figure is: the headline must
+ * stay at nominal, and the card must show the marked value rather than quietly agreeing with it.
  */
 @RunWith(AndroidJUnit4::class)
 class DashboardBondCardTest {
@@ -104,22 +98,6 @@ class DashboardBondCardTest {
     }
 
     @Test
-    fun theMarkedValueIsLabelledOnTheCardItself() {
-        show(listOf(position()))
-
-        compose.onNodeWithText("at last entered price").assertIsDisplayed()
-    }
-
-    @Test
-    fun theCardSaysItIsNotAMarketValuation() {
-        show(listOf(position()))
-
-        // Twice on the dashboard by design: once for the net worth basis, once for this card.
-        // Both are wanted, so the count is what is asserted.
-        assertEquals(2, compose.onAllNodesWithText("Not a market valuation", substring = true).fetchSemanticsNodes().size)
-    }
-
-    @Test
     fun netWorthCountsTheHoldingAtNominalNotAtTheMarkedValue() {
         val purchase = Transaction(
             id = 1L,
@@ -178,7 +156,7 @@ class DashboardBondCardTest {
     }
 
     @Test
-    fun thePeriodSelectorOffersTheThreeWindowsAndTheHeadlineStaysAllTime() {
+    fun thePeriodSelectorOffersTheWindowsAndTheHeadlineStaysAllTime() {
         val purchase = Transaction(
             id = 1L,
             title = "ОВДП 26/Б",
@@ -191,12 +169,13 @@ class DashboardBondCardTest {
         )
         show(listOf(position()), transactions = listOf(purchase))
 
-        compose.onNodeWithText("All time").assertIsDisplayed()
+        // The button carries the current period; the rest are in the menu it opens.
+        compose.onNodeWithText("All time").performClick()
         compose.onNodeWithText("This month").assertIsDisplayed()
         compose.onNodeWithText("Last 90 days").assertIsDisplayed()
 
         // The headline is the all-time figure whatever the selector says. A windowed total with
-        // no bonds in it would not be a net worth, so the chips move the flows and not this.
+        // no bonds in it would not be a net worth, so the selector moves the flows and not this.
         compose.onNodeWithText("-200.00", substring = true).assertIsDisplayed()
 
         compose.onNodeWithText("Last 90 days").performClick()

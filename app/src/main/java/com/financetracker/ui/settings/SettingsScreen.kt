@@ -154,7 +154,11 @@ fun SettingsScreen(
             // while the tab's sections scroll underneath.
             Column {
                 TopAppBar(
-                    title = { Text(stringResource(R.string.settings)) },
+                    // The build, not the word "Settings": the bottom bar already names this tab,
+                    // so the header carries the identity the Account tab used to show.
+                    title = {
+                        Text(stringResource(R.string.settings_version, BuildConfig.VERSION_NAME))
+                    },
                     windowInsets = WindowInsets(0, 0, 0, 0),
                     navigationIcon = {
                         if (showBackButton) {
@@ -257,7 +261,10 @@ private fun GeneralTab(
     SettingsTabContent(scrollState = scrollState, modifier = modifier) {
         SettingsSection(title = stringResource(R.string.settings_preferences)) {
             RowLabel(stringResource(R.string.settings_theme_mode))
-            SingleChoiceSegmentedButtonRow {
+            // `space` is the dimension the segments overlap by, so a negative value is the gap
+            // between them. The default (BorderWidth) is what fuses them into a single control,
+            // which is the look being replaced here.
+            SingleChoiceSegmentedButtonRow(space = (-8).dp) {
                 ThemeMode.entries.forEach { mode ->
                     SegmentedButton(
                         selected = themeMode == mode,
@@ -287,12 +294,6 @@ private fun GeneralTab(
         }
 
         SettingsSection(title = stringResource(R.string.settings_base_currency)) {
-            Text(
-                text = stringResource(R.string.settings_base_currency_blurb),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-
             BaseCurrencySection(
                 baseCurrency = baseCurrency,
                 rates = exchangeRates,
@@ -320,11 +321,6 @@ private fun GeneralTab(
         }
 
         SettingsSection(title = stringResource(R.string.settings_app_lock)) {
-            Text(
-                text = stringResource(R.string.settings_app_lock_blurb),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
             AppLockSection(
                 enabled = appLockEnabled,
                 capability = lockCapability,
@@ -538,15 +534,6 @@ private fun AccountTab(
                     color = MaterialTheme.colorScheme.error
                 )
             }
-            // The version belongs inside the card with sign-out rather than floating above it,
-            // so it cannot be read as the caption to a list of rows. Read from BuildConfig
-            // rather than spelled out: the string and Gradle's versionName were two sources
-            // and had already drifted ("v1.0.0" against "1.0").
-            Text(
-                text = stringResource(R.string.settings_version, BuildConfig.VERSION_NAME),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
         }
     }
 }

@@ -84,9 +84,7 @@ class TransactionDetailsTest {
                 "Bank",
                 "Card",
                 "Source",
-                "External ID",
-                "Row ID",
-                "Timestamp (epoch ms)"
+                "External ID"
             ),
             labels
         )
@@ -127,11 +125,10 @@ class TransactionDetailsTest {
     }
 
     @Test
-    fun `the stored amount and timestamp are unformatted`() {
-        val t = transaction(id = 42)
-        assertEquals("1234.56", value(t, "Amount (stored)"))
-        assertEquals("42", value(t, "Row ID"))
-        assertEquals(t.timestamp.toString(), value(t, "Timestamp (epoch ms)"))
+    fun `the stored amount is unformatted`() {
+        // Printed as stored rather than rounded for a person: it is the only figure on the card
+        // that can be compared against the statement the row came from.
+        assertEquals("1234.56", value(transaction(), "Amount (stored)"))
     }
 
     @Test
@@ -161,7 +158,6 @@ class TransactionDetailsTest {
     fun `only the values that are stored verbatim are marked raw`() {
         val byLabel = fields(transaction()).associate { it.label to it.raw }
         assertTrue(byLabel.getValue("Amount (stored)"))
-        assertTrue(byLabel.getValue("Timestamp (epoch ms)"))
         assertTrue(byLabel.getValue("External ID"))
         assertFalse(byLabel.getValue("Title"))
         assertFalse(byLabel.getValue("Category"))

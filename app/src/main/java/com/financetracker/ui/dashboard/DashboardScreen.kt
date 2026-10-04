@@ -2,7 +2,6 @@ package com.financetracker.ui.dashboard
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -21,7 +20,6 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -49,6 +47,7 @@ import com.financetracker.model.netWorth
 import com.financetracker.model.totalsByCurrency
 import com.financetracker.ui.MoneyAmount
 import com.financetracker.ui.TransactionAppearance
+import com.financetracker.ui.component.SingleChoiceDropdown
 import com.financetracker.util.CategoryLabel
 import com.financetracker.util.MoneyFormat
 import java.time.LocalDate
@@ -188,11 +187,29 @@ private fun NetWorthCard(
 
     Card(elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)) {
         Column(modifier = Modifier.fillMaxWidth().padding(20.dp)) {
-            Text(
-                text = stringResource(R.string.dash_net_worth),
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
+            // The label and the period selector share the top row. The selector windows the
+            // flows below, not this total, and keeping it out of the figure's way leaves the
+            // number the widest thing on the card.
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = stringResource(R.string.dash_net_worth),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                SingleChoiceDropdown(
+                    label = stringResource(R.string.dash_period_all_time),
+                    options = DashboardPeriod.entries.map { it to stringResource(it.labelRes) },
+                    selected = period,
+                    onSelect = onPeriodChange,
+                    // Wrap-content rather than the shared default: this control sits in the
+                    // corner beside the label, not across the card.
+                    modifier = Modifier
+                )
+            }
             Spacer(modifier = Modifier.height(4.dp))
 
             val total = result.total
@@ -215,16 +232,11 @@ private fun NetWorthCard(
             }
 
             Spacer(modifier = Modifier.height(8.dp))
-            Text(
-                text = stringResource(R.string.dash_net_worth_basis),
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            // Said on the figure itself, not only under the flows. The chips below scope income
-            // and spent to a window and deliberately leave this number alone, so a reader who
-            // picks "This month" sees a month of flows under an all-time total. That is the
-            // right behaviour — a windowed total with no bonds in it would not be a net worth —
-            // but it is only right if the headline says which it is.
+            // Said on the figure itself, not only under the flows. The selector above scopes
+            // income and spent to a window and deliberately leaves this number alone, so a
+            // reader who picks "This month" sees a month of flows under an all-time total. That
+            // is the right behaviour — a windowed total with no bonds in it would not be a net
+            // worth — but it is only right if the headline says which it is.
             Text(
                 text = stringResource(R.string.dash_net_worth_all_time),
                 style = MaterialTheme.typography.labelSmall,
@@ -235,42 +247,13 @@ private fun NetWorthCard(
             // unquoted gate, so the two lines always add up to the figure they explain. Kept
             // here rather than in blocks per currency: they are properties of the total, not of
             // any one account.
-                        val income = windowedResult.income
+            val income = windowedResult.income
             val expense = windowedResult.expense
             if (income != null && expense != null) {
                 Spacer(modifier = Modifier.height(8.dp))
-                // The headline is a stock; these are flows, so they can be windowed. The
-                // selector lives with the flows, not the total. The two share a rate gate
+                // The headline is a stock; these are flows, so the selector at the top of the
+                // card windows them and leaves the total above alone. The two share a rate gate
                 // (see netWorth), so the figures always reconcile.
-                // Scrollable, because the options are a row of chips whose combined width grows
-                // with the label translations and the number of periods, and a fixed row simply
-                // clips the last chip off the right edge of a narrow screen — which leaves a
-                // period that can be neither seen nor selected. Same treatment as the filter
-                // rows in the transaction list.
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .horizontalScroll(rememberScrollState()),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    DashboardPeriod.entries.forEach { p ->
-                        FilterChip(
-                            selected = p == period,
-                            onClick = { onPeriodChange(p) },
-                            label = { Text(stringResource(p.labelRes)) }
-                        )
-                    }
-                }
-                if (period != DashboardPeriod.ALL_TIME) {
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Text(
-                        text = stringResource(R.string.dash_flow_window),
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-                Spacer(modifier = Modifier.height(8.dp))
                 Row(modifier = Modifier.fillMaxWidth()) {
                     FlowFigure(
                         label = stringResource(R.string.dash_net_worth_income),
@@ -396,14 +379,6 @@ private fun InvestmentCard(positions: List<BondPosition>, currencyCode: String) 
                 style = MaterialTheme.typography.titleLarge,
                 fontWeight = FontWeight.Bold
             )
-            // Immediately under the figure, as the bond screen puts it. The card also carries
-            // `dash_honest_label` at the foot, but a caveat four rows below the number is read
-            // after the number, not before it, and this is the largest figure on the card.
-            Text(
-                text = stringResource(R.string.bond_at_last_price),
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
             Text(
                 text = stringResource(R.string.dash_held_cost, heldCount, MoneyFormat.format(cost, currencyCode)),
                 style = MaterialTheme.typography.bodySmall,
@@ -424,12 +399,6 @@ private fun InvestmentCard(positions: List<BondPosition>, currencyCode: String) 
                     )
                 }
             }
-            Spacer(modifier = Modifier.height(8.dp))
-            Text(
-                text = stringResource(R.string.dash_honest_label),
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
         }
     }
 }

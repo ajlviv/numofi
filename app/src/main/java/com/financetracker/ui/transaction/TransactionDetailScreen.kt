@@ -287,8 +287,6 @@ private fun fieldLabelResource(label: String): Int = when (label) {
     "Card" -> R.string.detail_card
     "Source" -> R.string.detail_source
     "External ID" -> R.string.detail_external_id
-    "Row ID" -> R.string.detail_row_id
-    "Timestamp (epoch ms)" -> R.string.detail_timestamp
     else -> 0
 }
 
@@ -297,6 +295,5 @@ private fun sectionTitleResource(title: String): Int = when (title) {
     "Transaction" -> R.string.detail_section_transaction
     "Payment" -> R.string.detail_section_payment
     "Provenance" -> R.string.detail_section_provenance
-    "Stored" -> R.string.detail_section_stored
     else -> 0
 }

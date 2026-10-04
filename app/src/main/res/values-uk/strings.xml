@@ -42,15 +42,12 @@
   <string name="detail_section_transaction">Транзакція</string>
   <string name="detail_section_payment">Оплата</string>
   <string name="detail_section_provenance">Походження</string>
-  <string name="detail_section_stored">Збережене</string>
   <string name="detail_not_set">Не вказано</string>
   <string name="detail_currency_iso">Валюта (ISO 4217)</string>
   <string name="detail_amount_stored">Сума (збережена)</string>
   <string name="detail_card">Картка</string>
   <string name="detail_source">Джерело</string>
   <string name="detail_external_id">Зовнішній ID</string>
-  <string name="detail_row_id">ID рядка</string>
-  <string name="detail_timestamp">Часова мітка (epoch мс)</string>
   <string name="detail_delete_title">Видалити транзакцію?</string>
   <string name="detail_delete_body">«%1$s» буде остаточно видалено.</string>
   <string name="lang_system_default">Мова системи</string>
@@ -149,7 +146,6 @@
   <string name="bond_add_trade_cd">Зафіксувати угоду</string>
   <string name="bond_empty_title">Облігацій ще немає</string>
   <string name="bond_empty_subtitle">Запишіть купівлю — і вона з\'явиться тут.</string>
-  <string name="bond_at_last_price">за останньою введеною ціною</string>
   <string name="bond_figure_held">У портфелі</string>
   <string name="bond_figure_cost_per">Ціна за облігацію</string>
   <string name="bond_figure_unrealised">Нереалізований результат</string>
@@ -196,11 +192,9 @@
   <string name="dash_held_cost">%1$d у портфелі · собівартість %2$s</string>
   <string name="dash_unrealised">Нереалізований</string>
   <string name="dash_coupon_a_year">Купон на рік</string>
-  <string name="dash_honest_label">За останньою ціною, яку ви ввели. Не ринкова оцінка — цей застосунок не має джерела цін.</string>
   <string name="dash_net_worth">Усього активів</string>
   <string name="dash_net_worth_income">Надходження</string>
   <string name="dash_net_worth_expense">Витрати</string>
-  <string name="dash_net_worth_basis">Готівка за балансом, облігації за номіналом. Це не ринкова оцінка.</string>
   <string name="dash_net_worth_all_time">За весь час, зокрема до будь-якого фільтра за період.</string>
   <string name="dash_net_worth_stale">Курси НБУ станом на %1$s</string>
   <string name="dash_net_worth_no_rate">Немає курсу для %1$s</string>
@@ -214,14 +208,12 @@
   <string name="dash_period_mtd">Цього місяця</string>
   <string name="dash_period_year">Цього року</string>
   <string name="dash_period_90d">Останні 90 днів</string>
-  <string name="dash_flow_window">У вибраному вікні</string>
   <string name="settings_tab_general">Загальні</string>
   <string name="settings_tab_data">Дані</string>
   <string name="settings_tab_account">Акаунт</string>
   <string name="settings_preferences">Параметри</string>
   <string name="settings_theme_mode">Режим теми</string>
   <string name="settings_base_currency">Підсумок в одній валюті</string>
-  <string name="settings_base_currency_blurb">Показувати на головному екрані одну цифру загальної вартості, перераховану за офіційним курсом НБУ. Картки по валютах лишаються нижче.</string>
   <string name="settings_exclusion_rules">Не враховувати в підсумках</string>
   <string name="settings_exclusion_rules_blurb">Будь-яка транзакція, в назві якої є хоч одне з цих слів, не потрапляє в підсумки. Самі транзакції лишаються в списку — їх враховують лише суми.</string>
   <string name="settings_exclusion_rule_label">Шукати текст</string>
@@ -360,7 +352,6 @@
   <string name="recurring_upcoming_expense">Витрати</string>
   <string name="recurring_upcoming_income">Надходження</string>
   <string name="recurring_upcoming_none">У цьому вікні нічого не заплановано.</string>
-  <string name="recurring_upcoming_honest">Спрогнозовано з ваших розкладів — це не те, що вже сплачено.</string>
   <string name="recurring_save_failed">Не вдалося зберегти розклад.</string>
   <string name="recurring_delete_title">Видалити розклад?</string>
   <string name="recurring_delete_body">«%1$s» буде остаточно видалено.</string>
@@ -368,7 +359,6 @@
   <!-- App lock. A prompt the device owns, so the copy names what the device has rather than
        what the app would like it to have. -->
   <string name="settings_app_lock">Блокування застосунку</string>
-  <string name="settings_app_lock_blurb">Питати відбиток пальця, обличчя або код блокування екрана перед тим, як показати будь-що. Застосунок не бачить, що ви використали — перевіряє лише пристрій.</string>
   <string name="settings_app_lock_switch">Вимагати розблокування при відкритті</string>
   <string name="settings_app_lock_cd_switch">Вимагати розблокування при відкритті</string>
   <string name="settings_app_lock_biometric">Розблокується відбитком пальця або обличчям</string>

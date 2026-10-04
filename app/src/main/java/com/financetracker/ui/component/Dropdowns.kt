@@ -96,12 +96,14 @@ internal fun <T> SingleChoiceDropdown(
     options: List<Pair<T, String>>,
     selected: T,
     onSelect: (T) -> Unit,
-    modifier: Modifier = Modifier
+    // Applied to the button. Full width by default, which is what a form field wants; a caller
+    // placing the control in a corner passes `Modifier` so it wraps its own label instead.
+    modifier: Modifier = Modifier.fillMaxWidth()
 ) {
     var expanded by remember { mutableStateOf(false) }
 
-    Box(modifier = modifier) {
-        OutlinedButton(onClick = { expanded = true }, modifier = Modifier.fillMaxWidth()) {
+    Box {
+        OutlinedButton(onClick = { expanded = true }, modifier = modifier) {
             Text(
                 text = options.firstOrNull { it.first == selected }?.second ?: label,
                 maxLines = 1,

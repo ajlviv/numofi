@@ -83,10 +83,6 @@ object TransactionDetails {
                     DetailField("Source", transaction.source ?: MISSING, raw = true),
                     DetailField("External ID", transaction.externalId ?: MISSING, raw = true)
                 )
-            ),
-            DetailSection(
-                title = "Stored",
-                fields = listOf()
             )
         )
     }

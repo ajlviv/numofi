@@ -150,14 +150,6 @@ private fun PositionCard(position: BondPosition) {
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold
                     )
-                    // Not a valuation. This app has no price feed, so the only price it knows
-                    // is the one on the last trade the user entered, and a number dressed up
-                    // as a current value would be read as one.
-                    Text(
-                        text = stringResource(R.string.bond_at_last_price),
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
                 }
             }
 
