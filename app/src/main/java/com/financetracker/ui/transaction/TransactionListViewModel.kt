@@ -16,6 +16,7 @@ import com.financetracker.model.TransactionType
 import com.financetracker.repository.AuthRepository
 import com.financetracker.repository.BankRepository
 import com.financetracker.repository.BondRepository
+import com.financetracker.util.CategoryLabel
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.FlowPreview
@@ -54,6 +55,27 @@ enum class TransactionTypeFilter(@StringRes val labelRes: Int, val type: Transac
 }
 
 /**
+ * One chip in the category filter.
+ *
+ * [label] is the identity of the chip and what the user reads — produced by [CategoryLabel] so
+ * an MCC code reads as "Groceries" instead of `mcc_5411`. [labelRes] is the `cat_*` translation
+ * of that label, or 0 when the label is the user's own typed wording echoing back at them, in
+ * which case the composable renders [label] as it is.
+ *
+ * [keys] is every stored value behind the label, because the query matches on the stored
+ * value: `mcc_5411` and a hand-typed "Groceries" share a label and therefore share a chip, so
+ * picking it selects both spellings rather than whichever one the bank happened to send.
+ *
+ * The groups partition the stored keys — no key belongs to two options — so toggling one chip
+ * can never disturb another.
+ */
+data class CategoryOption(
+    val label: String,
+    @StringRes val labelRes: Int,
+    val keys: Set<String>
+)
+
+/**
  * The filter state behind the transaction screen.
  *
  * Every filter is a set, and an empty set means "no constraint", which is what lets the DAO
@@ -68,17 +90,37 @@ enum class TransactionTypeFilter(@StringRes val labelRes: Int, val type: Transac
 data class TransactionFilter(
     val bankCodes: Set<String> = emptySet(),
     val cardLabels: Set<String> = emptySet(),
+    val categories: Set<String> = emptySet(),
     val type: TransactionTypeFilter = TransactionTypeFilter.ALL,
     val from: LocalDate? = null,
     val to: LocalDate? = null
 ) {
     val isActive: Boolean
         get() = bankCodes.isNotEmpty() || cardLabels.isNotEmpty() ||
-            type != TransactionTypeFilter.ALL || from != null || to != null
+            categories.isNotEmpty() || type != TransactionTypeFilter.ALL ||
+            from != null || to != null
 
     fun toggledBank(code: String) = copy(bankCodes = bankCodes.toggle(code))
 
     fun toggledCard(label: String) = copy(cardLabels = cardLabels.toggle(label))
+
+    /**
+     * Toggles a whole [option], not one of its keys.
+     *
+     * A chip stands for every spelling behind its label, so it is either on or off. The test
+     * is "is any of them selected" rather than "are all of them": since the groups partition
+     * the stored keys and this is the only thing that writes [categories], a half-selected
+     * group cannot arise, and asking about one key is enough to say which way the chip goes.
+     * Were one ever to arise, removing the whole group is the answer that leaves no residue
+     * the user cannot see.
+     */
+    fun toggledCategory(option: CategoryOption) = copy(
+        categories = if (option.keys.any { it in categories }) {
+            categories - option.keys
+        } else {
+            categories + option.keys
+        }
+    )
 
     fun withType(type: TransactionTypeFilter) = copy(type = type)
 
@@ -144,6 +186,33 @@ enum class DatePreset(@StringRes val labelRes: Int) {
 }
 
 /**
+ * Collapses distinct stored categories onto the labels they resolve to, so a category the
+ * bank coded as `mcc_5411` and one the user typed as "Groceries" are one option, not two
+ * identical ones.
+ *
+ * Sorted by [CategoryOption.label], the canonical English label, rather than by the raw key.
+ * The key sort would order the same two options differently depending on which spelling the
+ * bank happened to send, and the English sort is the only one available here that does not
+ * need a `Context`: the labels a reader actually sees are translated at the composable, and
+ * a list whose order is fixed by data rather than by locale is still a list in a known order.
+ */
+internal fun groupCategoryOptions(categories: List<String>): List<CategoryOption> =
+    categories
+        .groupBy { CategoryLabel.label(it) }
+        .map { (label, keys) ->
+            CategoryOption(
+                label = label,
+                // Every key in the group resolves to this one label, so the first that has a
+                // `cat_*` resource names the group for every spelling in it. 0 when none does,
+                // which is the free-text case: the label is the user's own wording and there
+                // is no table to improve on.
+                labelRes = keys.firstNotNullOfOrNull { CategoryLabel.resource(it).takeIf { res -> res != 0 } } ?: 0,
+                keys = keys.toSet()
+            )
+        }
+        .sortedBy { it.label }
+
+/**
  * The filter resolved into the exact values the query binds.
  *
  * Built as one value so `distinctUntilChanged` can suppress a re-query: it compares by
@@ -154,6 +223,7 @@ private data class FilterQuery(
     val banks: List<String>,
     val cards: List<String>,
     val types: List<TransactionType>,
+    val categories: List<String>,
     val fromMillis: Long?,
     val toMillis: Long?
 ) {
@@ -162,6 +232,7 @@ private data class FilterQuery(
             filter.bankCodes.sorted(),
             filter.cardLabels.sorted(),
             filter.types.sortedBy { it.name },
+            filter.categories.sorted(),
             filter.startMillis(zone),
             filter.endMillis(zone)
         )
@@ -280,9 +351,10 @@ class TransactionListViewModel @Inject constructor(
                     query.banks,
                     query.cards,
                     query.types,
-                    query.fromMillis,
-                    query.toMillis,
-                    search
+                    categories = query.categories,
+                    fromMillis = query.fromMillis,
+                    toMillis = query.toMillis,
+                    search = search
                 )
             }.flatMapLatest { it }
         }
@@ -330,6 +402,26 @@ class TransactionListViewModel @Inject constructor(
     ) { banks, refs -> refs.offeredCards(banks) }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
+/**
+ * The categories the filter offers, collapsed to one option per resolved label.
+ *
+ * Built from the rows the user actually has — like [cardLabels] — rather than the settings
+ * list, because a bank-synced `mcc_5411` is in none of those lists and the user will still
+ * want to filter it out. The settings list is also a DataStore cache, and a restore drops
+ * every cache; offering categories the user still has rows for is what keeps this working on
+ * a restored device.
+ *
+ * Not narrowed by the selected banks, unlike [cardLabels]: a card belongs to the bank that
+ * issued it and a category belongs to nothing, so there is no such thing as a category the
+ * current bank selection rules out. Narrowing anyway would make the chips change as banks are
+ * toggled, which reads as the app having lost options rather than as a narrower list.
+ */
+val categoryOptions: StateFlow<List<CategoryOption>> = authRepository.currentUid
+        .filterNotNull()
+        .flatMapLatest { uid -> transactionDao.getCategoryRefs(uid) }
+        .map { refs -> groupCategoryOptions(refs) }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
     fun onSearchChange(value: String) {
         _search.value = value
     }
@@ -343,6 +435,10 @@ class TransactionListViewModel @Inject constructor(
 
     fun onCardToggled(label: String) {
         _filter.value = _filter.value.toggledCard(label)
+    }
+
+    fun onCategoryToggled(option: CategoryOption) {
+        _filter.value = _filter.value.toggledCategory(option)
     }
 
     fun onTypeSelected(type: TransactionTypeFilter) {

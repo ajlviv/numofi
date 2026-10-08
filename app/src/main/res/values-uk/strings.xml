@@ -167,6 +167,7 @@
   <string name="list_hide_totals">Приховати підсумки</string>
   <string name="list_banks">Банки</string>
   <string name="list_cards">Картки</string>
+  <string name="list_categories">Категорії</string>
   <string name="list_summary_empty">Немає транзакцій для підсумку</string>
   <string name="list_summary_one">1 транзакція</string>
   <string name="list_summary_many">%1$d транзакцій</string>

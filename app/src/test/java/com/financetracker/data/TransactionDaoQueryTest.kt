@@ -45,13 +45,14 @@ class TransactionDaoQueryTest {
         bank: String?,
         card: String?,
         note: String? = null,
-        timestamp: Long = day
+        timestamp: Long = day,
+        category: String = "grocery"
     ) = TransactionEntity(
         userId = "uid-1",
         title = title,
         amount = amount,
         type = type,
-        category = "grocery",
+        category = category,
         timestamp = timestamp,
         note = note,
         externalId = "x-$title-$amount",
@@ -62,7 +63,7 @@ class TransactionDaoQueryTest {
         searchText = SearchText.of(
             title,
             note,
-            "grocery",
+            category,
             BankNames.ref(bank, seededBankNames),
             card
         )
@@ -106,7 +107,10 @@ class TransactionDaoQueryTest {
         // Every collection filter is passed empty here, which is the case the guard flags
         // exist for. `col IN ()` is a syntax error in SQLite, so if the flags were not
         // short-circuiting this would fail outright rather than quietly return everything.
-        assertEquals(4, dao.getFiltered("uid-1", emptyList(), emptyList(), emptyList()).first().size)
+        assertEquals(
+            4,
+            dao.getFiltered("uid-1", emptyList(), emptyList(), emptyList(), emptyList()).first().size
+        )
     }
 
     @Test
@@ -284,6 +288,93 @@ class TransactionDaoQueryTest {
     @Test
     fun `card refs are scoped to the user`() = runTest {
         assertEquals(emptyList<CardRef>(), dao.getCardRefs("uid-2").first())
+    }
+
+    @Test
+    fun `category narrows on its own`() = runTest {
+        dao.insertAll(
+            listOf(
+                row("Сільпо", 100.0, TransactionType.EXPENSE, BankCode.MONOBANK, "c", category = "mcc_5411")
+            )
+        )
+
+        val byStoredKey = dao.getFiltered("uid-1", categories = listOf("mcc_5411")).first()
+        val byTypedKey = dao.getFiltered("uid-1", categories = listOf("grocery")).first()
+
+        // Matched as stored, with no case folding and no label lookup: "Groceries" is not a
+        // stored value, so it is not what the chip binds. The chip is the thing that knows
+        // mcc_5411 and "grocery" are one chip, and it binds both keys.
+        assertEquals(listOf("Сільпо"), byStoredKey.map { it.title })
+        assertEquals(4, byTypedKey.size)
+    }
+
+    @Test
+    fun `several categories are a union`() = runTest {
+        dao.insertAll(
+            listOf(
+                row("Сільпо", 100.0, TransactionType.EXPENSE, BankCode.MONOBANK, "c", category = "mcc_5411"),
+                row("АТБ", 200.0, TransactionType.EXPENSE, BankCode.MONOBANK, "c", category = "mcc_5412")
+            )
+        )
+
+        val rows = dao.getFiltered(
+            "uid-1",
+            categories = listOf("mcc_5411", "mcc_5412")
+        ).first()
+
+        // Only the two rows carrying one of the two keys come back; the four seeded rows are
+        // `grocery`, which resolves to the same label and is not in the set. What this asserts
+        // is that a key outside the set stays out, whatever it reads as once labelled.
+        assertEquals(setOf("Сільпо", "АТБ"), rows.map { it.title }.toSet())
+    }
+
+    @Test
+    fun `a category nobody has used matches nothing`() = runTest {
+        // A chip can only offer a category the user already has a row for, so this is not
+        // reachable from the screen. It is still the case that has to hold, because the chip
+        // binds keys rather than labels and a stale selection outlives the row it came from.
+        assertEquals(0, dao.getFiltered("uid-1", categories = listOf("mcc_7995")).first().size)
+    }
+
+    @Test
+    fun `category combines with the other filters`() = runTest {
+        dao.insertAll(
+            listOf(
+                row("Сільпо", 100.0, TransactionType.EXPENSE, BankCode.MONOBANK, "c", category = "mcc_5411")
+            )
+        )
+
+        val rows = dao.getFiltered(
+            "uid-1",
+            bankCodes = listOf(BankCode.MONOBANK),
+            categories = listOf("mcc_5411"),
+            types = listOf(TransactionType.EXPENSE)
+        ).first()
+
+        assertEquals(listOf("Сільпо"), rows.map { it.title })
+    }
+
+    @Test
+    fun `every category the user has is offered once`() = runTest {
+        dao.insertAll(
+            listOf(
+                row("Сільпо", 100.0, TransactionType.EXPENSE, BankCode.MONOBANK, "c", category = "mcc_5411"),
+                row("Сільпо ще", 110.0, TransactionType.EXPENSE, BankCode.MONOBANK, "c", category = "mcc_5411"),
+                row("Паливо", 200.0, TransactionType.EXPENSE, BankCode.MONOBANK, "c", category = "mcc_5541")
+            )
+        )
+
+        // Raw keys and DISTINCT, because the caller groups them by label and can only offer
+        // one chip per label. A list that kept every row would offer the same category twice.
+        assertEquals(
+            listOf("grocery", "mcc_5411", "mcc_5541"),
+            dao.getCategoryRefs("uid-1").first()
+        )
+    }
+
+    @Test
+    fun `category refs are scoped to the user`() = runTest {
+        assertEquals(emptyList<String>(), dao.getCategoryRefs("uid-2").first())
     }
 
     @Test

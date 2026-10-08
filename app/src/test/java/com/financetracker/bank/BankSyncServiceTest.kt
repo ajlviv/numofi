@@ -63,11 +63,14 @@ class BankSyncServiceTest {
             cardCount: Int,
             types: List<TransactionType>,
             typeCount: Int,
+            categories: List<String>,
+            categoryCount: Int,
             fromMillis: Long?,
             toMillis: Long?,
             search: String?
         ): Flow<List<TransactionEntity>> = error("unused")
         override fun getCardRefs(userId: String): Flow<List<CardRef>> = error("unused")
+        override fun getCategoryRefs(userId: String): Flow<List<String>> = error("unused")
         override fun getByType(userId: String, type: String): Flow<List<TransactionEntity>> = error("unused")
         override fun getRecentTransactions(userId: String, limit: Int): Flow<List<TransactionEntity>> = error("unused")
     }

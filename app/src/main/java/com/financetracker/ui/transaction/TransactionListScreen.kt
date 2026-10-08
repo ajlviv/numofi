@@ -80,6 +80,7 @@ fun TransactionListScreen(
     val filter by viewModel.filter.collectAsStateWithLifecycle()
     val search by viewModel.search.collectAsStateWithLifecycle()
     val cardLabels by viewModel.cardLabels.collectAsStateWithLifecycle()
+    val categoryOptions by viewModel.categoryOptions.collectAsStateWithLifecycle()
     val banks by viewModel.banks.collectAsStateWithLifecycle()
     val summary by viewModel.summary.collectAsStateWithLifecycle()
     val dateFormat = remember { DateFormats.date() }
@@ -157,6 +158,23 @@ fun TransactionListScreen(
                     options = cardLabels.map { it to it },
                     isSelected = { it in filter.cardLabels },
                     onToggle = viewModel::onCardToggled
+                )
+            }
+            if (categoryOptions.isNotEmpty()) {
+                MultiSelectDropdown(
+                    label = stringResource(R.string.list_categories),
+                    // Same pattern CategoryDropdown and the settings list use: the stored key
+                    // resolves to a cat_* resource for anything the label table names, and a
+                    // free-typed category is its own wording in every language, so it is shown
+                    // as written rather than through a table that cannot improve on it.
+                    options = categoryOptions.map { option ->
+                        option to if (option.labelRes != 0) stringResource(option.labelRes)
+                        else option.label
+                    },
+                    // Matches the toggle, which asks about any key too: the chip is on or off
+                    // for the whole group, so the two can never disagree about which it is.
+                    isSelected = { option -> option.keys.any { it in filter.categories } },
+                    onToggle = viewModel::onCategoryToggled
                 )
             }
             if (filter.isActive) {

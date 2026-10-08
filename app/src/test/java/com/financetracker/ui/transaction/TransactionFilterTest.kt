@@ -1,5 +1,6 @@
 package com.financetracker.ui.transaction
 
+import com.financetracker.R
 import com.financetracker.model.BankCode
 import com.financetracker.model.BankRef
 import com.financetracker.model.Transaction
@@ -131,6 +132,72 @@ class TransactionFilterTest {
         assertTrue(TransactionFilter().toggledCard("mo-card").isActive)
         assertTrue(TransactionFilter(from = LocalDate.of(2026, 9, 1)).isActive)
         assertTrue(TransactionFilter(to = LocalDate.of(2026, 9, 1)).isActive)
+    }
+
+    @Test
+    fun `a chosen category makes the filter active`() {
+        assertTrue(TransactionFilter(categories = setOf("mcc_5411")).isActive)
+    }
+
+    @Test
+    fun `picking a category chip selects every spelling behind its label`() {
+        // The chip is one thing the user taps and the query binds keys, so a chip covering
+        // mcc_5411, mcc_5499 and a hand-typed "Groceries" has to add all three. Selecting one
+        // spelling would leave the chip looking off while the list is narrowed.
+        val option = groupCategoryOptions(listOf("mcc_5411", "mcc_5499", "Groceries")).single()
+
+        assertEquals(setOf("mcc_5411", "mcc_5499", "Groceries"), option.keys)
+        assertEquals(
+            setOf("mcc_5411", "mcc_5499", "Groceries"),
+            TransactionFilter().toggledCategory(option).categories
+        )
+    }
+
+    @Test
+    fun `picking a category chip again clears every spelling behind its label`() {
+        val option = groupCategoryOptions(listOf("mcc_5411", "Groceries")).single()
+        val on = TransactionFilter(categories = setOf("mcc_5411", "Groceries"))
+
+        assertEquals(emptySet<String>(), on.toggledCategory(option).categories)
+    }
+
+    @Test
+    fun `one category chip leaves the others selected`() {
+        val options = groupCategoryOptions(listOf("mcc_5411", "mcc_5541"))
+        val both = options.fold(TransactionFilter()) { filter, option -> filter.toggledCategory(option) }
+
+        assertEquals(2, both.categories.size)
+        // Groups partition the keys, so clearing one cannot take a key the other chip owns.
+        assertEquals(
+            setOf("mcc_5541"),
+            both.toggledCategory(options.first { "mcc_5411" in it.keys }).categories
+        )
+    }
+
+    @Test
+    fun `a category chip is keyed on the label, not on one spelling of it`() {
+        // Two categories the user has rows for, one bank-coded and one typed, read as the
+        // same thing on the row and so must be one chip. Offering both would put "Groceries"
+        // in the dropdown twice, each half as useful as the other.
+        val options = groupCategoryOptions(listOf("mcc_5411", "Groceries", "mcc_5541"))
+
+        // Ordered by the resolved label, not by the key: "mcc_5411" would otherwise sort before
+        // "mcc_5541" anyway, but "Groceries" typed by hand would sort ahead of every mcc code
+        // and the dropdown's order would depend on which spelling the bank sent.
+        assertEquals(listOf("Fuel", "Groceries"), options.map { it.label })
+        assertEquals(setOf("mcc_5541"), options.first().keys)
+        assertEquals(setOf("mcc_5411", "Groceries"), options.last().keys)
+    }
+
+    @Test
+    fun `a category chip is translated when the label table has a word for it`() {
+        // The same rule the list row and the settings list follow: a stored key that resolves
+        // to a cat_* resource renders as a translation, and free-typed wording is shown as
+        // written because no table can improve on the user's own words.
+        val options = groupCategoryOptions(listOf("mcc_5411", "food_delivery"))
+
+        assertEquals(R.string.cat_groceries, options.first { it.label == "Groceries" }.labelRes)
+        assertEquals(0, options.first { it.label == "Food Delivery" }.labelRes)
     }
 
     @Test

@@ -188,6 +188,7 @@
   <string name="list_hide_totals">Hide totals</string>
   <string name="list_banks">Banks</string>
   <string name="list_cards">Cards</string>
+  <string name="list_categories">Categories</string>
   <string name="list_summary_empty">No transactions to total</string>
   <string name="list_summary_one">1 transaction</string>
   <string name="list_summary_many">%1$d transactions</string>
