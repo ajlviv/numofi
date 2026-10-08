@@ -12,10 +12,15 @@ import com.financetracker.model.ExclusionRules
 import com.financetracker.model.ExchangeRates
 import com.financetracker.model.Transaction
 import com.financetracker.model.TransactionKind
+import com.financetracker.model.UpcomingTotals
+import com.financetracker.model.upcoming
 import com.financetracker.repository.AuthRepository
 import com.financetracker.repository.BankRepository
 import com.financetracker.repository.BondRepository
+import com.financetracker.repository.RecurringPaymentRepository
 import com.financetracker.repository.TransactionRepository
+import java.time.LocalDate
+import java.time.ZoneId
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -36,6 +41,7 @@ class MainViewModel @Inject constructor(
     private val authRepository: AuthRepository,
     private val transactionRepository: TransactionRepository,
     private val bondRepository: BondRepository,
+    private val recurringPaymentRepository: RecurringPaymentRepository,
     private val rates: ExchangeRateRepository,
     private val settingsRepository: SettingsRepository,
     bankRepository: BankRepository
@@ -99,6 +105,29 @@ class MainViewModel @Inject constructor(
     val positions: StateFlow<List<BondPosition>> = bondRepository.observePositions()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
+
+
+    /**
+     * The next [DASHBOARD_UPCOMING_DAYS] days of commitments, converted into the base currency.
+     */
+    val upcomingPlans: StateFlow<UpcomingTotals> = authRepository.currentUid.filterNotNull()
+        .flatMapLatest { uid ->
+            combine(
+                recurringPaymentRepository.observe(uid),
+                exchangeRates,
+                baseCurrency
+            ) { list, ratesCache, base ->
+                val zone = ZoneId.systemDefault()
+                val today = LocalDate.now(zone)
+                upcoming(list, ratesCache, base, today, today.plusDays(DASHBOARD_UPCOMING_DAYS), zone)
+            }
+        }
+        .stateIn(
+            viewModelScope,
+            SharingStarted.WhileSubscribed(5_000),
+            UpcomingTotals(0.0, 0.0, emptyList(), ExchangeRates(emptyMap(), null, 0L), emptyList())
+        )
+
     /**
      * Snackbar copy, as a resource id so the UI can resolve it in its own scope and locale.
      * Deliberately not the exception's message: that text is developer English and may leak
@@ -153,5 +182,9 @@ class MainViewModel @Inject constructor(
 
     fun clearMessage() {
         _message.value = null
+    }
+
+    private companion object {
+        const val DASHBOARD_UPCOMING_DAYS = 14L
     }
 }

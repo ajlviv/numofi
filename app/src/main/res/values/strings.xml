@@ -404,4 +404,6 @@
   <string name="settings_app_lock_locked_title">Finance Tracker is locked</string>
   <string name="settings_app_lock_locked_body">Your balances are hidden until you unlock.</string>
   <string name="settings_app_lock_unlock">Unlock</string>
+  <string name="dash_scheduled_plans">Scheduled plans</string>
+  <string name="dash_scheduled_none">Nothing scheduled in the next 14 days.</string>
 </resources>

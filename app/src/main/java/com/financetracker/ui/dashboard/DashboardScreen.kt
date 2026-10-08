@@ -43,6 +43,7 @@ import com.financetracker.model.ExchangeRates
 import com.financetracker.model.ExclusionRules
 import com.financetracker.model.NetWorth
 import com.financetracker.model.Transaction
+import com.financetracker.model.UpcomingTotals
 import com.financetracker.model.netWorth
 import com.financetracker.model.totalsByCurrency
 import com.financetracker.ui.MoneyAmount
@@ -64,6 +65,7 @@ fun DashboardScreen(
      */
     rules: ExclusionRules? = null,
     positions: List<BondPosition> = emptyList(),
+    upcoming: UpcomingTotals = UpcomingTotals(0.0, 0.0, emptyList(), ExchangeRates(emptyMap(), null, 0L), emptyList()),
     baseCurrency: String = DEFAULT_BASE_CURRENCY,
     rates: ExchangeRates = ExchangeRates(emptyMap(), null, 0L),
     onRefreshRates: () -> Unit = {},
@@ -138,10 +140,25 @@ fun DashboardScreen(
         // nominal, which is a claim about maturity; this is the position and the price the user
         // typed in. One card per bond denomination still, because two denominations have no
         // common price and `marketValue` cannot be added across them.
-        if (positions.isNotEmpty()) {
-            positions.groupBy { it.bond.nominalCurrency }.forEach { (currency, inCurrency) ->
-                InvestmentCard(positions = inCurrency, currencyCode = currency)
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            val bondCards = positions.groupBy { it.bond.nominalCurrency }
+            if (bondCards.isNotEmpty()) {
+                bondCards.forEach { (currency, inCurrency) ->
+                    InvestmentCard(
+                        positions = inCurrency,
+                        currencyCode = currency,
+                        modifier = Modifier.weight(1f)
+                    )
+                }
             }
+            ScheduledPlansCard(
+                upcoming = upcoming,
+                baseCurrency = baseCurrency,
+                modifier = Modifier.weight(1f)
+            )
         }
 
         Text(stringResource(R.string.dash_recent), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
@@ -356,7 +373,11 @@ private fun RowScope.FlowFigure(label: String, amount: Double, currencyCode: Str
  * EUR, and a card per currency keeps them apart without inventing a rate.
  */
 @Composable
-private fun InvestmentCard(positions: List<BondPosition>, currencyCode: String) {
+private fun InvestmentCard(
+    positions: List<BondPosition>,
+    currencyCode: String,
+    modifier: Modifier = Modifier
+) {
     val held = positions.filter { it.quantity > 0 }
     val value = held.sumOf { it.marketValue }
     val cost = held.sumOf { it.cost }
@@ -365,7 +386,10 @@ private fun InvestmentCard(positions: List<BondPosition>, currencyCode: String) 
     val annualCoupon = held.sumOf { it.annualCouponIncome ?: 0.0 }
     val heldCount = held.sumOf { it.quantity }
 
-    Card(elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)) {
+    Card(
+        modifier = modifier,
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+    ) {
         Column(modifier = Modifier.padding(16.dp)) {
             Text(
                 text = if (held.size > 1) stringResource(R.string.dash_bonds_currency, currencyCode) else stringResource(R.string.dash_bonds),
@@ -404,7 +428,7 @@ private fun InvestmentCard(positions: List<BondPosition>, currencyCode: String) 
 }
 
 @Composable
-private fun InvestmentFigure(label: String, value: String, color: Color?) {
+private fun Figure(label: String, value: String, color: Color? = null) {
     Column {
         Text(text = label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         Text(
@@ -414,6 +438,11 @@ private fun InvestmentFigure(label: String, value: String, color: Color?) {
             color = color ?: MaterialTheme.colorScheme.onSurface
         )
     }
+}
+
+@Composable
+private fun InvestmentFigure(label: String, value: String, color: Color?) {
+    Figure(label, value, color)
 }
 
 private fun withSign(value: Double, currency: String): String =
@@ -483,5 +512,76 @@ private fun EmptyState() {
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
+    }
+}
+@Composable
+private fun ScheduledPlansCard(
+    upcoming: UpcomingTotals,
+    baseCurrency: String,
+    modifier: Modifier = Modifier
+) {
+    Card(
+        modifier = modifier,
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Text(
+                text = stringResource(R.string.dash_scheduled_plans),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Spacer(modifier = Modifier.height(4.dp))
+            val expense = upcoming.expense
+            val income = upcoming.income
+            if (expense != null && income != null) {
+                MoneyAmount(
+                    amount = -expense + income,
+                    currencyCode = baseCurrency,
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold
+                )
+            } else {
+                Text(
+                    text = stringResource(R.string.dash_net_worth_no_rate, baseCurrency),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            Spacer(modifier = Modifier.height(8.dp))
+            if (upcoming.items.isEmpty()) {
+                Text(
+                    text = stringResource(R.string.dash_scheduled_none),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            } else {
+                Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                    Figure(
+                        stringResource(R.string.recurring_upcoming_expense),
+                        MoneyFormat.format(expense ?: 0.0, baseCurrency)
+                    )
+                    Figure(
+                        stringResource(R.string.recurring_upcoming_income),
+                        MoneyFormat.format(income ?: 0.0, baseCurrency)
+                    )
+                }
+            }
+            upcoming.unquoted.forEach { code ->
+                Text(
+                    text = code
+                        ?.let { stringResource(R.string.dash_net_worth_unrated, it) }
+                        ?: stringResource(R.string.dash_net_worth_unrated_no_code),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.error
+                )
+            }
+            upcoming.rates.date?.let { date ->
+                Text(
+                    text = stringResource(R.string.dash_net_worth_stale, date),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
     }
 }

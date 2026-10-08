@@ -107,6 +107,7 @@ fun MainScreen(
     val bankNames by viewModel.bankNames.collectAsStateWithLifecycle()
     val baseCurrency by viewModel.baseCurrency.collectAsStateWithLifecycle()
     val exchangeRates by viewModel.exchangeRates.collectAsStateWithLifecycle()
+    val upcomingPlans by viewModel.upcomingPlans.collectAsStateWithLifecycle()
 
     // On entering the dashboard rather than on a timer: the question is whether this screen has
     // been seen since the last daily rate, not how long it has been open.
@@ -213,6 +214,7 @@ fun MainScreen(
                         positions = positions,
                         baseCurrency = baseCurrency,
                         rates = exchangeRates,
+                        upcoming = upcomingPlans,
                         onRefreshRates = viewModel::refreshRates,
                         // Same destination as the list below, so a row on the dashboard opens the
                         // same detail screen the Transactions tab would open it in.
