@@ -130,6 +130,16 @@ interface TransactionDao {
     suspend fun getExternalIdsForUser(userId: String): List<String>
 
     /**
+     * Past titles and the categories the user gave them, for import suggestions.
+     *
+     * Newest first, so the caller can prefer what the user chose most recently for the same
+     * wording. Folded in Kotlin at the call site because SQLite's `lower()` folds ASCII
+     * only and these titles are largely Cyrillic.
+     */
+    @Query("SELECT title, category FROM transactions WHERE userId = :userId ORDER BY timestamp DESC, id DESC")
+    suspend fun getTitleCategoryPairs(userId: String): List<TitleCategory>
+
+    /**
      * One row by its id.
      *
      * Read before a write so a write that would change nothing can be recognised as one. A

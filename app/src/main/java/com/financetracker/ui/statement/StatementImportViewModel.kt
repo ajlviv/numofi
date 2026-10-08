@@ -42,7 +42,25 @@ sealed interface StatementImportUiState {
         /** Pre-filled from the file's own headers; null until the user picks one. */
         val bankCode: String?,
         /** True when nothing recognised the file, so a bank has to be chosen by hand. */
-        val bankUnresolved: Boolean
+        val bankUnresolved: Boolean,
+        /**
+         * Per-row category choices, by row index in [rows].
+         *
+         * Absent means "use the suggestion": the preview shows
+         * [com.financetracker.util.CategorySuggestion] for the row and only stores what the
+         * user actually changes. Nothing is written until [confirm], so correcting the choice
+         * freely never touches the ledger.
+         */
+        val categoryOverrides: Map<Int, String> = emptyMap(),
+        /**
+         * The title → category history the suggestions are computed from, read once when the
+         * file was parsed.
+         *
+         * Carried in the state rather than re-read per recomposition, and folded with the
+         * same [com.financetracker.util.CategorySuggestion.foldHistory] the service uses at
+         * confirm, so the value under each row's dropdown is the value that gets stored.
+         */
+        val history: Map<String, String> = emptyMap()
     ) : StatementImportUiState
 
     data class Done(
@@ -67,6 +85,8 @@ class StatementImportViewModel @Inject constructor(
     private val fileReader: StatementFileReader,
     private val importService: StatementImportService,
     private val authRepository: AuthRepository,
+    private val settingsRepository: com.financetracker.data.settings.SettingsRepository,
+    private val transactionDao: com.financetracker.data.TransactionDao,
     bankRepository: BankRepository
 ) : ViewModel() {
 
@@ -78,6 +98,15 @@ class StatementImportViewModel @Inject constructor(
      * good moment to be looking at something the user has put away.
      */
     val banks: StateFlow<List<Bank>> = bankRepository.activeBanks
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+    /**
+     * The user's category list, for the per-row suggestion dropdowns in the preview.
+     *
+     * Empty until DataStore emits; the preview falls back to the defaults through
+     * [CategorySuggestion], so a row always has something to suggest.
+     */
+    val categories: StateFlow<List<String>> = settingsRepository.categories
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
     fun onFileSelected(uri: Uri?) {
@@ -109,6 +138,16 @@ class StatementImportViewModel @Inject constructor(
 
                 is StatementParseOutcome.Parsed -> {
                     val result = outcome.result
+                    // The same fold the service runs at confirm, so the value the preview
+                    // offers for a title is the value that will be stored for it.
+                    val uid = authRepository.currentUid.first()
+                    val history = if (uid == null) {
+                        emptyMap()
+                    } else {
+                        com.financetracker.util.CategorySuggestion.foldHistory(
+                            transactionDao.getTitleCategoryPairs(uid)
+                        )
+                    }
                     StatementImportUiState.Preview(
                         rows = result.rows.map { it.copy(bankCode = detectedBank) },
                         skippedRows = result.skippedRows,
@@ -118,7 +157,8 @@ class StatementImportViewModel @Inject constructor(
                             null
                         },
                         bankCode = detectedBank,
-                        bankUnresolved = detectedBank == null
+                        bankUnresolved = detectedBank == null,
+                        history = history
                     )
                 }
             }
@@ -138,6 +178,19 @@ class StatementImportViewModel @Inject constructor(
         )
     }
 
+    /**
+     * Records the category the user picked for one preview row.
+     *
+     * One-off values (typed, not in the settings list) are kept as-is: they ride along into
+     * the stored row without joining the list, the same contract the form dropdowns keep.
+     */
+    fun onCategorySelected(rowIndex: Int, category: String) {
+        val preview = _state.value as? StatementImportUiState.Preview ?: return
+        _state.value = preview.copy(
+            categoryOverrides = preview.categoryOverrides + (rowIndex to category)
+        )
+    }
+
     fun confirm() {
         val preview = _state.value as? StatementImportUiState.Preview ?: return
         // Refuse rather than filing the file under an unnamed bank: the whole point of the
@@ -154,8 +207,9 @@ class StatementImportViewModel @Inject constructor(
                 _state.value = StatementImportUiState.Error(R.string.import_sign_in)
                 return@launch
             }
+            val categories = settingsRepository.categories.first()
             val result = withContext(Dispatchers.IO) {
-                importService.import(uid, preview.rows)
+                importService.import(uid, preview.rows, categories, preview.categoryOverrides)
             }
             _state.value = StatementImportUiState.Done(
                 result.imported,

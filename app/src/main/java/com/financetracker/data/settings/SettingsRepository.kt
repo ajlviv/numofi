@@ -12,6 +12,7 @@ import androidx.datastore.preferences.preferencesDataStore
 import dagger.hilt.android.qualifiers.ApplicationContext
 import com.financetracker.model.ExchangeRates
 import com.financetracker.model.ExclusionRules
+import com.financetracker.model.Categories
 import com.financetracker.model.RECORDABLE_CURRENCIES
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
@@ -46,6 +47,7 @@ class SettingsRepository @Inject constructor(
         val RATES_DATE = stringPreferencesKey("rates_date")
         val RATES_FETCHED_AT = longPreferencesKey("rates_fetched_at")
         val EXCLUSION_RULES = stringPreferencesKey("exclusion_rules")
+        val CATEGORIES = stringPreferencesKey("categories")
         val APP_LOCK_ENABLED = booleanPreferencesKey("app_lock_enabled")
 
         fun rateKey(code: String) = doublePreferencesKey("rates_$code")
@@ -232,6 +234,40 @@ class SettingsRepository @Inject constructor(
         context.dataStore.edit { prefs ->
             if (rules.isEmpty) prefs.remove(Keys.EXCLUSION_RULES)
             else prefs[Keys.EXCLUSION_RULES] = encodeExclusionRules(rules.patterns)
+        }
+    }
+
+    /**
+     * The user's category list, or [DEFAULT_CATEGORIES] on a fresh install.
+     *
+     * Like exclusion rules this is a preference, not ledger data: trimming and dedupe happen
+     * in [com.financetracker.model.Categories], and an unreadable value reads as the defaults
+     * rather than as an error. Absent from the backup snapshot — a restored device falls back
+     * to the defaults while stored rows keep their own `category` verbatim, so a missing list
+     * never rewrites history and neither `AppDatabase.version` nor `BackupSnapshot.FORMAT`
+     * moves for it.
+     */
+    val categories: Flow<List<String>> = context.dataStore.data.map { prefs ->
+        readCategories(prefs[Keys.CATEGORIES])
+    }
+
+    /**
+     * The whole list in one write, replacing rather than merging — the same unit-of-storage
+     * reasoning as [saveExclusionRules]: a per-category key would orphan a key behind every
+     * deleted category.
+     */
+    suspend fun saveCategories(names: List<String>) {
+        val cleaned = Categories(names).names
+        context.dataStore.edit { prefs ->
+            if (cleaned.isEmpty()) prefs.remove(Keys.CATEGORIES)
+            else prefs[Keys.CATEGORIES] = encodeCategories(cleaned)
+        }
+    }
+
+    /** Restores the default popular list, discarding the user's edits. */
+    suspend fun resetCategories() {
+        context.dataStore.edit { prefs ->
+            prefs[Keys.CATEGORIES] = encodeCategories(DEFAULT_CATEGORIES)
         }
     }
 

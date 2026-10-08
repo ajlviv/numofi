@@ -233,6 +233,7 @@
   <string name="settings_tab_general">General</string>
   <string name="settings_tab_data">Data</string>
   <string name="settings_tab_account">Account</string>
+<string name="settings_tab_categories">Categories</string>
   <string name="settings_preferences">Preferences</string>
   <string name="settings_theme_mode">Theme mode</string>
   <string name="settings_base_currency">Total in one currency</string>
@@ -241,6 +242,15 @@
   <string name="settings_exclusion_rule_label">Text to match</string>
   <string name="settings_exclusion_duplicate">That rule is already in the list</string>
   <string name="settings_cd_remove_exclusion">Remove rule %1$s</string>
+  <string name="settings_categories">Categories</string>
+  <string name="settings_categories_blurb">The list the category dropdown offers in every form. A row keeps its own category, so editing this never rewrites what is already stored.</string>
+  <string name="settings_category_label">Category name</string>
+  <string name="settings_category_duplicate">That category is already in the list</string>
+  <string name="settings_cd_remove_category">Remove category %1$s</string>
+  <string name="settings_categories_reset">Reset to defaults</string>
+  <string name="settings_category_use_typed">Use “%1$s”</string>
+  <string name="settings_category_one_off_hint">One-off value — saved on this row only, not added to the list.</string>
+  <string name="settings_category_suggested">Suggested: %1$s</string>
   <string name="settings_base_currency_pick">Currency to total in</string>
   <string name="settings_rates_as_of">NBU rates as of %1$s</string>
   <string name="settings_rates_never">No rates fetched yet</string>

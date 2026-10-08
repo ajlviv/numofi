@@ -65,6 +65,7 @@ fun RecurringScreen(
     val schedules by viewModel.schedules.collectAsStateWithLifecycle()
     val upcoming by viewModel.upcoming.collectAsStateWithLifecycle()
     val banks by viewModel.banks.collectAsStateWithLifecycle()
+    val categories by viewModel.categories.collectAsStateWithLifecycle()
     val baseCurrency by viewModel.baseCurrency.collectAsStateWithLifecycle()
     val message by viewModel.message.collectAsStateWithLifecycle()
 
@@ -93,6 +94,7 @@ fun RecurringScreen(
         RecurringEntryForm(
             existing = open,
             banks = banks,
+            categories = categories,
             onSave = { form -> viewModel.save(open?.id, form) },
             onCancel = {
                 adding = false

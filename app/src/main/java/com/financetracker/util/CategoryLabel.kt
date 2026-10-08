@@ -107,15 +107,28 @@ object CategoryLabel {
      * The string resource for a stored key, or 0 when the label is not this object's to
      * translate.
      *
-     * 0 means [label] is echoing the user's own words back at them — the `prettify` path for
-     * free-typed categories — which no translation table can improve on; the screen then
-     * renders [label] as it is. Everything else resolves through [RESOURCE_BY_LABEL], keyed
-     * by the *English* label rather than the stored key so that the exact and range tables
-     * above stay the single source of category grouping. `CategoryResourceParityTest` pins
-     * every non-zero result against `res/values/strings.xml`, so the two cannot drift.
+     * 0 means [label] is echoing the user's own words back at them — the `prettify` path
+     * for free-typed categories — which no translation table can improve on; the screen
+     * then renders [label] as it is. Every other label resolves through [RESOURCE_BY_LABEL],
+     * which is keyed by the canonical English label so the exact and range tables above stay
+     * the single source of category grouping.
+     *
+     * The stored value is tried first: a category is saved under its English label (`"Fast
+     * food"`, `"Travel & transport"` …), and those literals are the keys here, so a direct
+     * lookup hits without going through [label]. Routing a default straight through [label]
+     * instead title-cases it (`"Fast Food"`), misses the key, and drops the lookup to 0 —
+     * which is why the multi-word defaults rendered in English for a Ukrainian reader. mcc
+     * codes are never stored this way, so they reach the same table via [label] unchanged.
+     * `CategoryResourceParityTest` — which only drives `resource` from mcc keys, the special
+     * `imported`/`other`/`investments`/blank slots, and a deliberately untranslatable
+     * free-text key — stays green.
      */
     @StringRes
-    fun resource(category: String?): Int = RESOURCE_BY_LABEL[label(category)] ?: 0
+    fun resource(category: String?): Int {
+        val key = category?.trim().orEmpty()
+        RESOURCE_BY_LABEL[key]?.let { return it }
+        return RESOURCE_BY_LABEL[label(category)] ?: 0
+    }
 
     private val RESOURCE_BY_LABEL: Map<String, Int> = mapOf(
         "Phone & data" to R.string.cat_phone_data,

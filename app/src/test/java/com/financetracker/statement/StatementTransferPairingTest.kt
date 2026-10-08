@@ -47,6 +47,9 @@ class StatementTransferPairingTest {
 
         override suspend fun getExternalIdsForUser(userId: String) = stored.mapNotNull { it.externalId }
 
+        override suspend fun getTitleCategoryPairs(userId: String) =
+            stored.map { com.financetracker.data.TitleCategory(it.title, it.category) }
+
         override suspend fun getById(id: Long) = stored.firstOrNull { it.id == id }
 
         override suspend fun getInRange(userId: String, from: Long, to: Long) =

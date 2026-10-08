@@ -36,6 +36,9 @@ class StatementImportServiceTest {
 
         override suspend fun getExternalIdsForUser(userId: String) = stored.mapNotNull { it.externalId }
 
+        override suspend fun getTitleCategoryPairs(userId: String) =
+            stored.map { com.financetracker.data.TitleCategory(it.title, it.category) }
+
         override suspend fun getById(id: Long) = stored.firstOrNull { it.id == id }
 
         override suspend fun getInRange(userId: String, from: Long, to: Long) =
@@ -314,5 +317,57 @@ class StatementImportServiceTest {
 
         assertEquals(0, result.imported)
         assertEquals(1, result.alreadySynced)
+    }
+
+    @Test
+    fun `an imported row reuses the category the user gave the same title before`() = runTest {
+        val dao = FakeDao()
+        dao.stored += TransactionEntity(
+            id = 99,
+            userId = "uid-1",
+            title = "TORUS",
+            amount = 100.0,
+            type = TransactionType.EXPENSE,
+            category = "Groceries",
+            timestamp = row("-100.00", BankCode.UKRSIBBANK, day = "01.08.2026").timestamp,
+            externalId = "old-1",
+            source = "uk",
+            currencyCode = "UAH",
+            bankCode = BankCode.UKRSIBBANK
+        )
+        StatementImportService(dao, bankRepository(), FakeBackupRequests()).import(
+            "uid-1",
+            listOf(row("-5.00", BankCode.UKRSIBBANK, day = "02.09.2026")),
+            listOf("Groceries", "Other")
+        )
+
+        assertEquals("Groceries", dao.stored.last().category)
+    }
+
+    @Test
+    fun `a preview override wins over the suggestion`() = runTest {
+        val dao = FakeDao()
+        StatementImportService(dao, bankRepository(), FakeBackupRequests()).import(
+            "uid-1",
+            listOf(row("-100.00", BankCode.UKRSIBBANK)),
+            listOf("Groceries", "Other"),
+            mapOf(0 to "Кава")
+        )
+
+        assertEquals("Кава", dao.stored.single().category)
+    }
+
+    @Test
+    fun `an unknown title falls back to Other and stays searchable by it`() = runTest {
+        val dao = FakeDao()
+        StatementImportService(dao, bankRepository(), FakeBackupRequests()).import(
+            "uid-1",
+            listOf(row("-100.00", BankCode.UKRSIBBANK, description = "SOMETHING NEW")),
+            listOf("Groceries", "Other")
+        )
+
+        val stored = dao.stored.single()
+        assertEquals("Other", stored.category)
+        assertTrue(stored.searchText!!.contains("other"))
     }
 }

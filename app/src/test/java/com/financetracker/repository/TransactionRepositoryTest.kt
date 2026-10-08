@@ -40,6 +40,8 @@ class TransactionRepositoryTest {
         override suspend fun delete(id: Long): Int = 1
         override suspend fun deleteAllForUser(userId: String): Int = 3
         override suspend fun getExternalIdsForUser(userId: String): List<String> = error("unused")
+        override suspend fun getTitleCategoryPairs(userId: String): List<com.financetracker.data.TitleCategory> =
+            error("unused")
         override suspend fun getInRange(userId: String, from: Long, to: Long): List<TransactionEntity> =
             error("unused")
         override fun getAllForUser(userId: String): Flow<List<TransactionEntity>> = error("unused")

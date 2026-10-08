@@ -211,6 +211,7 @@
   <string name="settings_tab_general">Загальні</string>
   <string name="settings_tab_data">Дані</string>
   <string name="settings_tab_account">Акаунт</string>
+<string name="settings_tab_categories">Категорії</string>
   <string name="settings_preferences">Параметри</string>
   <string name="settings_theme_mode">Режим теми</string>
   <string name="settings_base_currency">Підсумок в одній валюті</string>
@@ -219,6 +220,15 @@
   <string name="settings_exclusion_rule_label">Шукати текст</string>
   <string name="settings_exclusion_duplicate">Це правило вже є у списку</string>
   <string name="settings_cd_remove_exclusion">Видалити правило «%1$s»</string>
+  <string name="settings_categories">Категорії</string>
+  <string name="settings_categories_blurb">Список, який пропонує спадне меню категорій у кожній формі. Рядок зберігає власну категорію, тож редагування списку не переписує вже збережене.</string>
+  <string name="settings_category_label">Назва категорії</string>
+  <string name="settings_category_duplicate">Така категорія вже є у списку</string>
+  <string name="settings_cd_remove_category">Видалити категорію «%1$s»</string>
+  <string name="settings_categories_reset">Скинути до типових</string>
+  <string name="settings_category_use_typed">Використати «%1$s»</string>
+  <string name="settings_category_one_off_hint">Разове значення — збережеться лише в цьому рядку, до списку не додається.</string>
+  <string name="settings_category_suggested">Запропоновано: %1$s</string>
   <string name="settings_base_currency_pick">Валюта підсумку</string>
   <string name="settings_rates_as_of">Курси НБУ станом на %1$s</string>
   <string name="settings_rates_never">Курси ще не завантажено</string>

@@ -60,11 +60,16 @@ class AddTransactionViewModel @Inject constructor(
     private val authRepository: AuthRepository,
     private val transactionRepository: TransactionRepository,
     private val bondRepository: BondRepository,
+    private val settingsRepository: com.financetracker.data.settings.SettingsRepository,
     bankRepository: BankRepository
 ) : ViewModel() {
 
     /** The banks a new row can be filed under. Archived ones are for history, not for new. */
     val banks: StateFlow<List<Bank>> = bankRepository.activeBanks
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+    /** The user's category list; empty until DataStore emits, so the form waits for it. */
+    val categories: StateFlow<List<String>> = settingsRepository.categories
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
     private val _bondSearch = MutableStateFlow<Bond?>(null)

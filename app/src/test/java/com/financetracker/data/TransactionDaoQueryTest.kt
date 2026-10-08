@@ -89,6 +89,14 @@ class TransactionDaoQueryTest {
     fun tearDown() = db.close()
 
     @Test
+    fun `title categories come back newest first`() = runTest {
+        val pairs = dao.getTitleCategoryPairs("uid-1")
+
+        // Seeded newest-first by timestamp: TORUS is the latest row.
+        assertEquals(listOf("TORUS", "Поповнення", "АПТЕКА", "Lunch"), pairs.map { it.title })
+    }
+
+    @Test
     fun `no filter returns everything`() = runTest {
         assertEquals(4, dao.getFiltered("uid-1").first().size)
     }

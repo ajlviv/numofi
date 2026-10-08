@@ -373,6 +373,56 @@ class SettingsViewModel @Inject constructor(
         viewModelScope.launch { settingsRepository.setBaseCurrency(code) }
     }
 
+    // Categories
+
+    val categories: StateFlow<List<String>> = settingsRepository.categories
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+    private val _categoryInput = MutableStateFlow("")
+    val categoryInput: StateFlow<String> = _categoryInput.asStateFlow()
+
+    private val _categoryMessage = MutableStateFlow<SettingsMessage?>(null)
+    val categoryMessage: StateFlow<SettingsMessage?> = _categoryMessage.asStateFlow()
+
+    fun onCategoryInputChange(value: String) {
+        _categoryInput.value = value
+        if (_categoryMessage.value != null) _categoryMessage.value = null
+    }
+
+    /**
+     * Adds the typed category to the user's list.
+     *
+     * Uniqueness is decided here in Kotlin with full-Unicode folding: SQLite's `lower()`
+     * folds ASCII only and these names may be Ukrainian, so two spellings of one name would
+     * otherwise become two list entries. The screen disables the button on blank input, so
+     * reaching here blank means the UI changed rather than the user typed.
+     */
+    fun addCategory() {
+        val name = _categoryInput.value.trim()
+        if (name.isEmpty()) return
+        viewModelScope.launch {
+            if (categories.value.any { it.equals(name, ignoreCase = true) }) {
+                _categoryMessage.value = SettingsMessage.Res(R.string.settings_category_duplicate)
+            } else {
+                settingsRepository.saveCategories(categories.value + name)
+                _categoryInput.value = ""
+                _categoryMessage.value = null
+            }
+        }
+    }
+
+    fun removeCategory(name: String) {
+        viewModelScope.launch { settingsRepository.saveCategories(categories.value - name) }
+    }
+
+    fun resetCategories() {
+        viewModelScope.launch {
+            settingsRepository.resetCategories()
+            _categoryInput.value = ""
+            _categoryMessage.value = null
+        }
+    }
+
     /**
      * Fetches from NBU and says which of the three outcomes it was.
      *

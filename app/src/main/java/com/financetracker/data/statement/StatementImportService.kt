@@ -10,6 +10,7 @@ import com.financetracker.model.TransactionType
 import com.financetracker.model.TransferDirection
 import com.financetracker.model.TransferPairing
 import com.financetracker.repository.BankRepository
+import com.financetracker.util.CategorySuggestion
 import kotlinx.coroutines.flow.first
 import java.math.BigDecimal
 import java.math.RoundingMode
@@ -44,12 +45,33 @@ class StatementImportService @Inject constructor(
         val alreadySynced: Int
     )
 
-    suspend fun import(userId: String, rows: List<StatementRow>): Result {
+    /**
+     * Writes statement rows into local storage.
+     *
+     * @param categories the user's category list, used only for suggestions.
+     * @param categoryOverrides per-row choices from the import preview, by row index. Absent
+     * means "use the suggestion": [com.financetracker.util.CategorySuggestion] over the row's
+     * title and the stored `imported` key, with the title history of rows already in the
+     * ledger as the fallback. Overrides and one-off typed values are stored verbatim and
+     * never added to the settings list.
+     */
+    suspend fun import(
+        userId: String,
+        rows: List<StatementRow>,
+        categories: List<String> = emptyList(),
+        categoryOverrides: Map<Int, String> = emptyMap()
+    ): Result {
         val existing = transactionDao.getExternalIdsForUser(userId).toMutableSet()
         val content = ContentIndex.load(transactionDao, userId, rows)
         // Read once for the whole file rather than per row: the haystack needs the bank's
         // name so the rows stay findable by it, and that lookup is the same for every line.
         val bankNames = bankRepository.names.first()
+        // One read for the whole file as well: past titles and their categories, so each
+        // row's suggestion can prefer what the user chose last time for the same wording.
+        // The fold is shared with the preview so the two agree on what is suggested.
+        val history = CategorySuggestion.foldHistory(
+            transactionDao.getTitleCategoryPairs(userId)
+        )
 
         var imported = 0
         var duplicates = 0
@@ -70,7 +92,9 @@ class StatementImportService @Inject constructor(
                 continue
             }
 
-            transactionDao.insert(row.toEntity(userId, fingerprint, bankNames))
+            val category = categoryOverrides[row.rowIndex]
+                ?: CategorySuggestion.suggest(CATEGORY_IMPORTED, row.description, categories, history)
+            transactionDao.insert(row.toEntity(userId, fingerprint, bankNames, category))
             content.add(row.bankCode, row)
             imported++
         }
@@ -166,13 +190,14 @@ class StatementImportService @Inject constructor(
     private fun StatementRow.toEntity(
         userId: String,
         externalId: String,
-        bankNames: Map<String, String>
+        bankNames: Map<String, String>,
+        category: String = CATEGORY_IMPORTED
     ) = TransactionEntity(
         userId = userId,
         title = description.ifBlank { "Imported transaction" },
         amount = absoluteAmount.toDouble(),
         type = if (isExpense) TransactionType.EXPENSE else TransactionType.INCOME,
-        category = CATEGORY_IMPORTED,
+        category = category,
         timestamp = timestamp,
         note = null,
         externalId = externalId,
@@ -185,7 +210,7 @@ class StatementImportService @Inject constructor(
         searchText = SearchText.of(
             description,
             null,
-            CATEGORY_IMPORTED,
+            category,
             BankNames.ref(bankCode, bankNames),
             cardLabel
         )

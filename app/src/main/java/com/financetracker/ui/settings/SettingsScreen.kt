@@ -73,6 +73,7 @@ import com.financetracker.data.backup.BackupStatus
 import com.financetracker.data.backup.driveRootUriIfInstalled
 import com.financetracker.data.bank.BankProvider
 import com.financetracker.data.bank.BankSyncService
+import com.financetracker.data.settings.DEFAULT_CATEGORIES
 import com.financetracker.data.settings.SettingsRepository
 import com.financetracker.model.Bank
 import com.financetracker.model.ExchangeRates
@@ -88,6 +89,7 @@ import com.financetracker.ui.statement.formatPreviewDate
 import com.financetracker.data.settings.ThemeMode
 import com.financetracker.security.LocalExternalActivityLaunch
 import com.financetracker.security.LockCapability
+import com.financetracker.util.CategoryLabel
 
 /**
  * The three groups the page is split into, and the label each is titled by.
@@ -104,7 +106,8 @@ import com.financetracker.security.LockCapability
 private enum class SettingsTab(@StringRes val labelRes: Int) {
     GENERAL(R.string.settings_tab_general),
     DATA(R.string.settings_tab_data),
-    ACCOUNT(R.string.settings_tab_account)
+    ACCOUNT(R.string.settings_tab_account),
+    CATEGORIES(R.string.settings_tab_categories)
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -140,6 +143,7 @@ fun SettingsScreen(
     val generalScroll = rememberScrollState()
     val dataScroll = rememberScrollState()
     val accountScroll = rememberScrollState()
+    val categoriesScroll = rememberScrollState()
 
     Scaffold(
         // The tabs are drawn inside MainScreen's Scaffold, which has already reserved the
@@ -203,6 +207,11 @@ fun SettingsScreen(
             SettingsTab.ACCOUNT -> AccountTab(
                 modifier = tabModifier,
                 scrollState = accountScroll,
+                viewModel = viewModel
+            )
+            SettingsTab.CATEGORIES -> CategoriesTab(
+                modifier = tabModifier,
+                scrollState = categoriesScroll,
                 viewModel = viewModel
             )
         }
@@ -325,6 +334,45 @@ private fun GeneralTab(
                 enabled = appLockEnabled,
                 capability = lockCapability,
                 onChange = viewModel::setAppLockEnabled
+            )
+        }
+    }
+}
+
+/**
+ * Where the categories the app assigns and the ones the user types live together.
+ *
+ * Lifted out of General so that tab reads as "how the app looks and counts" (preferences,
+ * base currency, exclusions, app lock) and this one is purely about the labels transactions
+ * carry — the same separation General already draws by keeping its own sections apart. It is
+ * its own tab rather than a General subsection because a typed category is user data, not a
+ * preference, and deserves the same weight as the banks and backups Data holds.
+ */
+@Composable
+private fun CategoriesTab(
+    scrollState: ScrollState,
+    modifier: Modifier = Modifier,
+    viewModel: SettingsViewModel
+) {
+    val categories by viewModel.categories.collectAsStateWithLifecycle()
+    val categoryInput by viewModel.categoryInput.collectAsStateWithLifecycle()
+    val categoryMessage by viewModel.categoryMessage.collectAsStateWithLifecycle()
+
+    SettingsTabContent(scrollState = scrollState, modifier = modifier) {
+        SettingsSection(title = stringResource(R.string.settings_categories)) {
+            Text(
+                text = stringResource(R.string.settings_categories_blurb),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            CategoriesSection(
+                categories = categories,
+                input = categoryInput,
+                message = categoryMessage,
+                onInputChange = viewModel::onCategoryInputChange,
+                onAdd = viewModel::addCategory,
+                onRemove = viewModel::removeCategory,
+                onReset = viewModel::resetCategories
             )
         }
     }
@@ -680,6 +728,89 @@ private fun ExclusionRulesSection(
                     contentDescription = stringResource(R.string.settings_cd_remove_exclusion, pattern)
                 )
             }
+        }
+    }
+}
+
+/**
+ * The user's own category list — the set the dropdown offers in every form.
+ *
+ * Lifted onto its own tab to separate user data (a category a row carries) from preference
+ * (how the app counts). Each label resolves through [CategoryLabel.resource] so a stored
+ * English key — "Fast food", "Travel & transport" — renders in the selected language instead
+ * of echoing the key, which is what let multi-word defaults leak through in English.
+ */
+@Composable
+private fun CategoriesSection(
+    categories: List<String>,
+    input: String,
+    message: SettingsMessage?,
+    onInputChange: (String) -> Unit,
+    onAdd: () -> Unit,
+    onRemove: (String) -> Unit,
+    onReset: () -> Unit
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        OutlinedTextField(
+            value = input,
+            onValueChange = onInputChange,
+            label = { Text(stringResource(R.string.settings_category_label)) },
+            modifier = Modifier.weight(1f),
+            singleLine = true
+        )
+        // Disabled on blank rather than refusing after the tap, so what is required is visible
+        // before the button is pressed, matching ExclusionRulesSection.
+        Button(onClick = onAdd, enabled = input.isNotBlank()) {
+            Text(stringResource(R.string.settings_add))
+        }
+    }
+
+    message?.let {
+        Text(
+            text = it.resolve(),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.primary
+        )
+    }
+
+    categories.forEachIndexed { index, name ->
+        // Hairlines between rows, as in ExclusionRulesSection: these separate items of the
+        // same kind, so they do not compete with the card boundary around the whole group.
+        if (index > 0) {
+            HorizontalDivider()
+        }
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            // The same pattern CategoryDropdown uses: a row's category is a stored English
+            // key, so a cat_* resource is rendered via stringResource and a free-typed name
+            // falls back to echoing it. The `cat_` lookup is the translation; the raw key is
+            // never shown for anything the table names.
+            val res = CategoryLabel.resource(name)
+            Text(
+                text = if (res != 0) stringResource(res) else name,
+                style = MaterialTheme.typography.bodyMedium,
+                modifier = Modifier.weight(1f)
+            )
+            IconButton(onClick = { onRemove(name) }) {
+                Icon(
+                    Icons.Default.Close,
+                    contentDescription = stringResource(R.string.settings_cd_remove_category, name)
+                )
+            }
+        }
+    }
+
+    // A reset is only offered once there is something to reset to: on the defaults already,
+    // there is nothing the button could do that the list is not already showing.
+    if (categories != DEFAULT_CATEGORIES && categories.isNotEmpty()) {
+        TextButton(onClick = onReset) {
+            Text(stringResource(R.string.settings_categories_reset))
         }
     }
 }

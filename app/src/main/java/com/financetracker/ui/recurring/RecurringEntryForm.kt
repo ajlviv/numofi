@@ -41,6 +41,7 @@ import com.financetracker.model.RECORDABLE_CURRENCIES
 import com.financetracker.model.RepeatFrequency
 import com.financetracker.model.RecurringPayment
 import com.financetracker.model.TransactionType
+import com.financetracker.ui.component.CategoryDropdown
 import com.financetracker.ui.component.RequiredLabel
 import com.financetracker.ui.component.SingleChoiceDropdown
 import com.financetracker.ui.transaction.DateField
@@ -64,6 +65,7 @@ import java.time.ZoneId
 internal fun RecurringEntryForm(
     existing: RecurringPayment?,
     banks: List<Bank>,
+    categories: List<String>,
     onSave: (RecurringForm) -> Unit,
     onCancel: () -> Unit,
     modifier: Modifier = Modifier
@@ -186,12 +188,12 @@ internal fun RecurringEntryForm(
                 modifier = Modifier.fillMaxWidth()
             )
 
-            OutlinedTextField(
+            CategoryDropdown(
                 value = category,
+                categories = categories,
                 onValueChange = { category = it },
-                label = { Text(stringResource(R.string.common_category)) },
                 modifier = Modifier.fillMaxWidth(),
-                singleLine = true
+                label = { Text(stringResource(R.string.common_category)) }
             )
 
             OutlinedTextField(

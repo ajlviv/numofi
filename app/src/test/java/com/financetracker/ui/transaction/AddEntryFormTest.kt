@@ -91,6 +91,7 @@ class AddEntryFormTest {
         compose.setContent {
             TransactionForm(
                 banks = banks,
+                categories = listOf("Groceries", "Other"),
                 noBankLabel = "No bank",
                 saving = false,
                 onSave = onSave

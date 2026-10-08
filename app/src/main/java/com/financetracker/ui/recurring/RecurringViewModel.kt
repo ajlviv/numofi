@@ -88,11 +88,16 @@ data class RecurringForm(
 class RecurringViewModel @Inject constructor(
     private val authRepository: AuthRepository,
     private val repository: RecurringPaymentRepository,
+    private val settingsRepository: com.financetracker.data.settings.SettingsRepository,
     bankRepository: BankRepository,
     rates: ExchangeRateRepository
 ) : ViewModel() {
 
     val banks: StateFlow<List<Bank>> = bankRepository.activeBanks
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+    /** The user's category list; empty until DataStore emits, so the form waits for it. */
+    val categories: StateFlow<List<String>> = settingsRepository.categories
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
     val schedules: StateFlow<List<RecurringPayment>> = authRepository.currentUid

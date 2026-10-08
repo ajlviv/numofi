@@ -56,6 +56,7 @@ import com.financetracker.model.BondTradeSide
 import com.financetracker.model.RECORDABLE_CURRENCIES
 import com.financetracker.model.TransactionType
 import com.financetracker.ui.MoneyAmount
+import com.financetracker.ui.component.CategoryDropdown
 import com.financetracker.ui.component.RequiredLabel
 import com.financetracker.ui.component.SingleChoiceDropdown
 import com.financetracker.util.AmountInput
@@ -85,6 +86,7 @@ fun AddTransactionScreen(
     viewModel: AddTransactionViewModel = hiltViewModel()
 ) {
     val banks by viewModel.banks.collectAsStateWithLifecycle()
+    val categories by viewModel.categories.collectAsStateWithLifecycle()
     val knownBond by viewModel.bondSearch.collectAsStateWithLifecycle()
     val message by viewModel.message.collectAsStateWithLifecycle()
     val saving by viewModel.saving.collectAsStateWithLifecycle()
@@ -170,6 +172,7 @@ fun AddTransactionScreen(
                 item {
                     TransactionForm(
                         banks = bankRefs,
+                        categories = categories,
                         noBankLabel = noBankLabel,
                         saving = saving,
                         onSave = { form ->
@@ -238,6 +241,7 @@ internal data class TransactionForm(
 @Composable
 internal fun TransactionForm(
     banks: List<BankRef>,
+    categories: List<String>,
     noBankLabel: String,
     saving: Boolean,
     onSave: (TransactionForm) -> Unit
@@ -343,13 +347,12 @@ internal fun TransactionForm(
             )
         }
 
-        OutlinedTextField(
+        CategoryDropdown(
             value = category,
+            categories = categories,
             onValueChange = { category = it },
-            label = { Text(stringResource(R.string.common_category)) },
-            placeholder = { Text(stringResource(R.string.add_placeholder_category)) },
             modifier = Modifier.fillMaxWidth(),
-            singleLine = true
+            label = { Text(stringResource(R.string.common_category)) }
         )
 
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
