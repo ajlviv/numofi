@@ -106,8 +106,8 @@ import com.financetracker.util.CategoryLabel
 private enum class SettingsTab(@StringRes val labelRes: Int) {
     GENERAL(R.string.settings_tab_general),
     DATA(R.string.settings_tab_data),
-    ACCOUNT(R.string.settings_tab_account),
-    CATEGORIES(R.string.settings_tab_categories)
+    CATEGORIES(R.string.settings_tab_categories),
+    ACCOUNT(R.string.settings_tab_account)
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
