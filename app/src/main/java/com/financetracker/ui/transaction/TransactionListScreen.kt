@@ -273,6 +273,19 @@ private fun SummaryPanel(summary: TransactionSummary) {
                 )
             }
 
+            // A holding the rules removed is the same kind of omission as a row, and is named
+            // the same way and in the same place. It is separate because the two live in
+            // different lists — the dashboard removes both too — and a summary that quietly
+            // counts 20 000 less than the dashboard, with no line to say why, is the one thing
+            // this panel exists to prevent.
+            if (converted.excludedHoldings > 0) {
+                Text(
+                    text = stringResource(R.string.dash_net_worth_excluded_holdings, converted.excludedHoldings),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+
             converted.unquoted.forEach { currency ->
                 Text(
                     text = currency

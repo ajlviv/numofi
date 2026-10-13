@@ -1,9 +1,12 @@
 package com.financetracker.ui.transaction
 
+import com.financetracker.model.Bond
+import com.financetracker.model.BondPosition
 import com.financetracker.model.ExchangeRates
 import com.financetracker.model.ExclusionRules
 import com.financetracker.model.Transaction
 import com.financetracker.model.TransactionType
+import com.financetracker.model.TransferDirection
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -30,6 +33,22 @@ class TransactionSummaryTest {
         category = "other",
         timestamp = 0,
         currencyCode = currencyCode
+    )
+
+    /** An ОВДП holding the way the list screen receives one. */
+    private fun position(
+        name: String = "ОВДП 26/Б",
+        nominalCurrency: String = "UAH",
+        nominal: Double = 1_000.0,
+        quantity: Int = 20
+    ) = BondPosition(
+        bond = Bond(isin = "UA0000000001", name = name, nominal = nominal, nominalCurrency = nominalCurrency),
+        quantity = quantity,
+        cost = 0.0,
+        averageCost = null,
+        lastPrice = null,
+        annualCouponIncome = null,
+        heldSince = 0L
     )
 
     private fun of(vararg rows: Transaction) =
@@ -70,11 +89,63 @@ class TransactionSummaryTest {
         // Dropping these because there is nothing to total would blank a line the screen was
         // showing a moment ago, so the empty case has to carry them through.
         val summary = TransactionSummary.of(
-            emptyList(), ExclusionRules(), rates, "UAH", bondNominal = 20_000.0
+            emptyList(), ExclusionRules(), rates, "UAH",
+            positions = listOf(position(nominal = 1_000.0, quantity = 20))
         )
 
         assertEquals("UAH", summary.converted.base)
         assertEquals(20_000.0, summary.converted.balance!!, 0.0)
+    }
+
+    @Test
+    fun `a rule that takes a bond purchase's cash out also takes the holding out`() {
+        // A bond purchase is a cash row and a position. A rule matched against titles can take
+        // the row away and leave the holding, and the printed balance then reports the full
+        // nominal of something whose purchase is no longer in the same figure — it grows by
+        // everything paid. The dashboard already removes both; the list must not disagree.
+        val rows = listOf(
+            Transaction(
+                title = "Зарплата", amount = 1_000.0, type = TransactionType.INCOME,
+                category = "salary", timestamp = 0L, currencyCode = "UAH"
+            ),
+            Transaction(
+                title = "Феодосія", amount = 500.0, type = TransactionType.TRANSFER,
+                category = "investments", timestamp = 1L, currencyCode = "UAH",
+                transferDirection = TransferDirection.OUT
+            )
+        )
+
+        val summary = TransactionSummary.of(
+            rows, ExclusionRules(listOf("Феодосія")), rates, "UAH",
+            positions = listOf(position(name = "Феодосія", nominal = 1_000.0, quantity = 20))
+        )
+
+        // The salary is the whole of what may be counted: the purchase's cash is out, so its
+        // 20 000 of nominal must be too, and the omission is named rather than silent.
+        assertEquals(1_000.0, summary.converted.balance!!, 1e-6)
+        assertEquals(1, summary.converted.excludedHoldings)
+    }
+
+    @Test
+    fun `a bond currency the cache cannot quote is named, not dropped as a zero`() {
+        // The list converts bond nominal to reach the same figure as the dashboard, and the
+        // dashboard names a denomination it cannot quote. A silent 0.0 here would present an
+        // incomplete total with the confidence of a complete one, which is the failure the
+        // whole `unquoted` design exists to stop.
+        val rows = listOf(
+            Transaction(
+                title = "Зарплата", amount = 1_000.0, type = TransactionType.INCOME,
+                category = "salary", timestamp = 0L, currencyCode = "UAH"
+            )
+        )
+
+        val summary = TransactionSummary.of(
+            rows, ExclusionRules(), rates, "UAH",
+            positions = listOf(position(name = "ОВДП USD", nominalCurrency = "GBP", quantity = 5))
+        )
+
+        assertEquals(1_000.0, summary.converted.balance!!, 1e-6)
+        assertTrue(summary.converted.unquoted.contains("GBP"))
     }
 
     @Test

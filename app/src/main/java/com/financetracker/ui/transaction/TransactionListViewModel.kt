@@ -9,6 +9,7 @@ import com.financetracker.data.settings.SettingsRepository
 import com.financetracker.model.Bank
 import com.financetracker.model.BankNames
 import com.financetracker.model.BankRef
+import com.financetracker.model.BondPosition
 import com.financetracker.model.CardRef
 import com.financetracker.model.Transaction
 import com.financetracker.model.TransactionEntity
@@ -282,21 +283,19 @@ class TransactionListViewModel @Inject constructor(
     val banks: StateFlow<List<Bank>> = bankRepository.filterBanks
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
-    val bondNominalTotal: StateFlow<Double> = combine(
-        authRepository.currentUid.filterNotNull()
-            .flatMapLatest { uid -> bondRepository.observePositions(uid) },
-        rates.baseCurrency,
-        rates.rates
-    ) { positions, base, cache ->
-        positions
-            .filter { it.quantity > 0 }
-            .groupBy { it.bond.nominalCurrency }
-            .map { (currency, held) ->
-                val nominal = held.sumOf { it.quantity * it.bond.nominal }
-                cache.convert(nominal, currency, base) ?: 0.0
-            }
-            .sum()
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), 0.0)
+    /**
+     * The ОВДП holdings of the signed-in account, so the summary can add their nominal and,
+     * through [TransactionSummary.of], apply the same exclusion rules the dashboard does.
+     *
+     * The positions are passed through rather than pre-summed to a number: a single number
+     * cannot say which denomination it came from, so it cannot be excluded by name here or
+     * reported as unquotable — the two things that kept this screen's total higher than the
+     * dashboard's once a rule matched a bond.
+     */
+    val positions: StateFlow<List<BondPosition>> = authRepository.currentUid
+        .filterNotNull()
+        .flatMapLatest { uid -> bondRepository.observePositions(uid) }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
     /** The resolved bank for a row, or null when the row has no bank. */
     fun bankOf(code: String?): BankRef? = BankNames.ref(code, bankNames.value)
@@ -374,21 +373,22 @@ class TransactionListViewModel @Inject constructor(
      * The figures are converted into [base] rather than printed per currency, because the dashboard
      * does the same and two screens answering the same question in two different currencies is worse
      * than either choice alone. What was dropped is named in [converted], on the same terms as
-     * everywhere else: a currency the cache cannot quote is left out and named.
+     * everywhere else: a currency the cache cannot quote is left out and named, and a holding the
+     * rules removed is counted so this screen can name it exactly as the dashboard does.
      */
     val summary: StateFlow<TransactionSummary> = combine(
         transactions,
         settingsRepository.exclusionRules,
         rates.baseCurrency,
         rates.rates,
-        bondNominalTotal
-    ) { rows, rules, base, cache, bondNominal ->
+        positions
+    ) { rows, rules, base, cache, positions ->
         TransactionSummary.of(
             transactions = rows,
             rules = rules,
             rates = cache,
             base = base,
-            bondNominal = bondNominal
+            positions = positions
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), TransactionSummary.EMPTY)
 

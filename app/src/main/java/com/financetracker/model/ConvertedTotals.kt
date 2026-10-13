@@ -18,7 +18,13 @@ data class ConvertedTotals(
     val balance: Double?,
     val unquoted: List<String?>,
     /** Nominal of all bond positions, added to the cash balance so the total matches the dashboard. */
-    val bondNominal: Double = 0.0
+    val bondNominal: Double = 0.0,
+    /**
+     * How many holdings the user's rules kept out of [balance], reported so the list screen can
+     * name what it left out rather than quietly showing a smaller figure. Separate from
+     * [com.financetracker.model.NetWorth.excluded] because they are removed in different places.
+     */
+    val excludedHoldings: Int = 0
 )
 
 /**
@@ -31,20 +37,30 @@ data class ConvertedTotals(
  * [CurrencyTotals.balance] is converted rather than `income − expense`, because balance also
  * carries transfers: a bond purchase leaves the account without ever being an expense, and a
  * summary that dropped those would not match the ledger.
+ *
+ * [positions] are folded — and filtered by [rules] — by the same [nominalTotal] the dashboard
+ * uses, so the list and the dashboard can never disagree on the bond part of the total. Passing
+ * the positions rather than a pre-summed number is what lets an unquotable denomination be named
+ * here as it is there.
  */
 fun convertTotals(
     totals: List<CurrencyTotals>,
     rates: ExchangeRates,
     base: String,
-    bondNominal: Double = 0.0
+    positions: List<BondPosition> = emptyList(),
+    rules: ExclusionRules = ExclusionRules()
 ): ConvertedTotals {
     val unquoted = linkedSetOf<String?>()
+    val nominal = nominalTotal(positions, rules, rates, base)
 
     // A base the cache cannot quote yields no figures rather than zeroes. Zero reads as "you
     // spent nothing", which must never be reachable by accident.
     if (rates.convert(1.0, base, base) == null) {
         totals.forEach { unquoted += it.currencyCode }
-        return ConvertedTotals(base, null, null, null, unquoted.toList(), bondNominal)
+        unquoted += nominal.unquoted
+        return ConvertedTotals(
+            base, null, null, null, unquoted.toList(), nominal.amount, nominal.excluded
+        )
     }
 
     var income = 0.0
@@ -62,9 +78,12 @@ fun convertTotals(
         income += rates.convert(group.income, group.currencyCode, base) ?: 0.0
         expense += rates.convert(group.expense, group.currencyCode, base) ?: 0.0
     }
+    unquoted += nominal.unquoted
 
     // Add the bond nominal so the total matches the dashboard (cash + bonds at nominal).
-    balance += bondNominal
+    balance += nominal.amount
 
-    return ConvertedTotals(base, income, expense, balance, unquoted.toList(), bondNominal)
+    return ConvertedTotals(
+        base, income, expense, balance, unquoted.toList(), nominal.amount, nominal.excluded
+    )
 }

@@ -1,6 +1,7 @@
 package com.financetracker.ui.transaction
 
 import com.financetracker.data.settings.DEFAULT_BASE_CURRENCY
+import com.financetracker.model.BondPosition
 import com.financetracker.model.ConvertedTotals
 import com.financetracker.model.CurrencyTotals
 import com.financetracker.model.ExchangeRates
@@ -56,13 +57,17 @@ data class TransactionSummary(
  *
  * Having one function derive all three is what stops a caller passing a pre-filtered list and
  * getting a count that no longer means what the list says.
+ *
+ * [positions] are the ОВДП holdings the account holds, so the printed total includes bonds at
+ * nominal exactly as the dashboard does — and, through the same [convertTotals], so that a
+ * holding the rules removed from the dashboard is removed here too.
  */
 fun of(
     transactions: List<Transaction>,
     rules: ExclusionRules,
     rates: ExchangeRates,
     base: String,
-    bondNominal: Double = 0.0
+    positions: List<BondPosition> = emptyList()
 ): TransactionSummary {
     val selection = rules.select(transactions)
     if (transactions.isEmpty()) {
@@ -72,14 +77,14 @@ fun of(
         // where every other screen says "no rate" — and a zero reads as "you broke even", which
         // is the one claim an empty list cannot support. The bond figure and the base go through
         // with it, so a line the screen was showing a moment ago does not blank out.
-        return EMPTY.copy(converted = convertTotals(emptyList(), rates, base, bondNominal))
+        return EMPTY.copy(converted = convertTotals(emptyList(), rates, base, positions, rules))
     }
 
     val totals = totalsByCurrency(selection.counted)
     return TransactionSummary(
         count = transactions.size,
         totals = totals,
-        converted = convertTotals(totals, rates, base, bondNominal),
+        converted = convertTotals(totals, rates, base, positions, rules),
         excluded = selection.excluded
     )
 }

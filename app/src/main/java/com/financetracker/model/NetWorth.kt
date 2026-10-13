@@ -79,7 +79,9 @@ fun netWorth(
     rules: ExclusionRules = ExclusionRules()
 ): NetWorth {
     val unquoted = linkedSetOf<String?>()
-    val holdings = rules.selectHoldings(positions)
+    // The holdings are folded by the same function the transaction list uses, so the two
+    // screens cannot disagree on which holdings count or on what to name — see [nominalTotal].
+    val nominal = nominalTotal(positions, rules, rates, base)
 
     // Every figure below goes through the same gate, so that one currency being unquotable
     // takes its income and its expenses out of the total *and* out of the two lines beside it.
@@ -103,13 +105,69 @@ fun netWorth(
         income += rates.convert(group.income, group.currencyCode, base) ?: 0.0
         expense += rates.convert(group.expense, group.currencyCode, base) ?: 0.0
     }
+    unquoted += nominal.unquoted
 
-    // Grouped by denomination so that a currency is converted once rather than once per
-    // holding, and so the answer does not depend on the order positions happen to arrive in.
-    // `holdings.counted`, not `positions`: a purchase the user's rules removed from the cash
-    // side must be removed here too, or the total counts the nominal of something whose cost
-    // is no longer in it and grows by everything paid.
-    val bondValue = holdings.counted
+    // A base the cache cannot quote is not a total of zero: it is no total at all. Zero is the
+    // reading "you own nothing", which must never be available by accident.
+    if (rates.convert(1.0, base, base) == null) {
+        return NetWorth(
+            total = null,
+            income = null,
+            expense = null,
+            unquoted = unquoted.toList(),
+            excluded = excluded,
+            excludedHoldings = nominal.excluded,
+            rates = rates
+        )
+    }
+
+    return NetWorth(
+        total = cash + nominal.amount,
+        income = income,
+        expense = expense,
+        unquoted = unquoted.toList(),
+        excluded = excluded,
+        excludedHoldings = nominal.excluded,
+        rates = rates
+    )
+}
+
+/**
+ * The nominal of the holdings a total may count, converted into [base], with what it could not
+ * quote and how many the user's rules removed.
+ *
+ * **One function, two screens.** The dashboard headline ([netWorth]) and the transaction list's
+ * converted summary ([convertTotals]) both build their figure from cash plus bonds at nominal.
+ * If each folded the holdings itself they could disagree on which holdings count or on what to
+ * name — and they did: the list once added every holding regardless of the rules while the
+ * dashboard removed the excluded ones, so a rule matching a bond moved one screen's total and
+ * not the other's. Sharing the step is what keeps them the same number.
+ *
+ * [ExclusionRules.selectHoldings] is the rule here, not an afterthought: a bond purchase is a
+ * cash row and a position, and a rule that takes the row away must take the holding too, or the
+ * total counts the nominal of something whose cost is no longer in it.
+ */
+internal data class NominalTotal(
+    /** The converted nominal of the counted holdings. Zero when none are counted. */
+    val amount: Double,
+    /** Denominations the cache could not quote, each dropped and named. */
+    val unquoted: List<String?>,
+    /** How many holdings [ExclusionRules.selectHoldings] held back. */
+    val excluded: Int
+)
+
+internal fun nominalTotal(
+    positions: List<BondPosition>,
+    rules: ExclusionRules,
+    rates: ExchangeRates,
+    base: String
+): NominalTotal {
+    val holdings = rules.selectHoldings(positions)
+    val unquoted = linkedSetOf<String?>()
+
+    // Grouped by denomination so a currency is converted once rather than once per holding, and
+    // so the answer does not depend on the order the positions arrive in.
+    val amount = holdings.counted
         .filter { it.quantity > 0 }
         .groupBy { it.bond.nominalCurrency }
         .map { (currency, held) ->
@@ -124,27 +182,5 @@ fun netWorth(
         }
         .sum()
 
-    // A base the cache cannot quote is not a total of zero: it is no total at all. Zero is the
-    // reading "you own nothing", which must never be available by accident.
-    if (rates.convert(1.0, base, base) == null) {
-        return NetWorth(
-            total = null,
-            income = null,
-            expense = null,
-            unquoted = unquoted.toList(),
-            excluded = excluded,
-            excludedHoldings = holdings.excluded,
-            rates = rates
-        )
-    }
-
-    return NetWorth(
-        total = cash + bondValue,
-        income = income,
-        expense = expense,
-        unquoted = unquoted.toList(),
-        excluded = excluded,
-        excludedHoldings = holdings.excluded,
-        rates = rates
-    )
+    return NominalTotal(amount = amount, unquoted = unquoted.toList(), excluded = holdings.excluded)
 }
