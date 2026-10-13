@@ -7,6 +7,7 @@ import com.financetracker.data.backup.BackupEncoding
 import com.financetracker.data.backup.BackupRestorer
 import com.financetracker.data.backup.BackupSnapshotCodec
 import com.financetracker.data.backup.BackupSnapshot
+import com.financetracker.data.backup.BondTradeRow
 import com.financetracker.data.backup.RecurringPaymentRow
 import com.financetracker.data.backup.RestoreResult
 import com.financetracker.data.backup.TransactionRow
@@ -68,7 +69,7 @@ class BackupRestorerTest {
         transactions: List<TransactionRow> = emptyList(),
         banks: List<BankEntity> = emptyList(),
         bonds: List<BondEntity> = emptyList(),
-        bondTrades: List<BondTradeEntity> = emptyList(),
+        bondTrades: List<BondTradeRow> = emptyList(),
         recurringPayments: List<RecurringPaymentRow> = emptyList()
     ) = BackupSnapshot(
         format = BackupSnapshot.FORMAT,
@@ -161,7 +162,7 @@ class BackupRestorerTest {
             transactions = listOf(row(id = 141, title = "ranch", type = TransactionType.TRANSFER)),
             bonds = listOf(BondEntity("UA3501234567", "ОвДП 24/Б", 1000.0, "UAH")),
             bondTrades = listOf(
-                BondTradeEntity(
+                BondTradeRow(
                     id = 1,
                     isin = "UA3501234567",
                     side = BondTradeSide.BUY,
@@ -177,7 +178,7 @@ class BackupRestorerTest {
 
         restorer.restore(snapshot, me)
 
-        val trade = db.bondDao().getTrades().single()
+        val trade = db.bondDao().getTrades(me).single()
         val cash = stored().single { it.title == "ranch" }
         // The pairing is the one relationship that cannot be recovered by matching rows, so
         // this is the assertion that matters most in the whole file.
@@ -299,7 +300,7 @@ class BackupRestorerTest {
         val snapshot = snapshot(
             bonds = listOf(BondEntity("UA3501234567", "ОвДП 24/Б", 1000.0, "UAH")),
             bondTrades = listOf(
-                BondTradeEntity(
+                BondTradeRow(
                     isin = "UA3501234567",
                     side = BondTradeSide.BUY,
                     quantity = 1,
@@ -313,7 +314,31 @@ class BackupRestorerTest {
 
         // The trade's foreign key is on the isin, so the bond has to be in place first or the
         // insert is refused and the trade is lost.
-        assertEquals(1, db.bondDao().getTrades().size)
+        assertEquals(1, db.bondDao().getTrades(me).size)
+    }
+
+    @Test
+    fun `a restored trade is filed under the signed-in account, not the one in the file`() = runTest {
+        restorer.restore(
+            snapshot(
+                bonds = listOf(BondEntity("UA3501234567", "ОвДП 24/Б", 1000.0, "UAH")),
+                bondTrades = listOf(
+                    BondTradeRow(
+                        isin = "UA3501234567",
+                        side = BondTradeSide.BUY,
+                        quantity = 1,
+                        price = 1000.0,
+                        tradeDate = 1_700_000_000_000L
+                    )
+                )
+            ),
+            me
+        )
+
+        // A BondTradeRow has nowhere to carry an account, so the restorer has to supply one —
+        // and it is this device's signed-in account, never anything the file could name.
+        assertEquals(me, db.bondDao().getTrades(me).single().userId)
+        assertEquals(emptyList<BondTradeEntity>(), db.bondDao().getTrades(them))
     }
 
     @Test
@@ -336,6 +361,7 @@ class BackupRestorerTest {
         db.bondDao().insertIfAbsent(BondEntity("UA3501234567", "ranch", 1000.0, "UAH"))
         db.bondDao().insertTrade(
             BondTradeEntity(
+                userId = me,
                 isin = "UA3501234567",
                 side = BondTradeSide.BUY,
                 quantity = 10,
@@ -363,7 +389,7 @@ class BackupRestorerTest {
                 ),
                 bonds = listOf(BondEntity("UA3501234567", "ranch", 1000.0, "UAH")),
                 bondTrades = listOf(
-                    BondTradeEntity(
+                    BondTradeRow(
                         isin = "UA3501234567",
                         side = BondTradeSide.BUY,
                         quantity = 10,
@@ -378,7 +404,7 @@ class BackupRestorerTest {
             me
         )
 
-        assertEquals(1, db.bondDao().getTrades().size)
+        assertEquals(1, db.bondDao().getTrades(me).size)
         assertEquals(0, result.done().trades)
     }
 

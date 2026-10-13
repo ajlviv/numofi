@@ -49,6 +49,11 @@ data class BondEntity(
  * Trades are the only record of what happened; a position is folded from them at read time
  * rather than stored. A separate position table would be a second source of truth for the
  * same fact, and the two would disagree the moment a trade was edited or deleted.
+ *
+ * [userId] is carried here even though a bond itself is not account-scoped: positions and
+ * totals are per account, and a held quantity that counted another account's trades would be
+ * a figure for a portfolio nobody holds. It has no default so that a new write cannot forget
+ * it and quietly file a trade against nobody.
  */
 @Entity(
     tableName = "bond_trades",
@@ -71,10 +76,12 @@ data class BondEntity(
             onDelete = ForeignKey.CASCADE
         )
     ],
-    indices = [Index("isin"), Index("transactionId")]
+    indices = [Index("isin"), Index("transactionId"), Index("userId")]
 )
 data class BondTradeEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    /** The account the trade belongs to, see [TransactionEntity.userId]. */
+    val userId: String,
     /** The instrument, see [BondEntity.isin]. */
     val isin: String,
     val side: BondTradeSide,

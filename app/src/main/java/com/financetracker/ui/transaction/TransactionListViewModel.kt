@@ -283,7 +283,8 @@ class TransactionListViewModel @Inject constructor(
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
     val bondNominalTotal: StateFlow<Double> = combine(
-        bondRepository.observePositions(),
+        authRepository.currentUid.filterNotNull()
+            .flatMapLatest { uid -> bondRepository.observePositions(uid) },
         rates.baseCurrency,
         rates.rates
     ) { positions, base, cache ->

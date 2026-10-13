@@ -70,7 +70,8 @@ class TransactionRepositoryTest {
     private fun transaction(
         id: Long = 0,
         type: TransactionType = TransactionType.EXPENSE,
-        direction: TransferDirection? = null
+        direction: TransferDirection? = null,
+        userSet: Boolean = false
     ) = TransactionEntity(
         id = id,
         userId = "uid-1",
@@ -79,7 +80,8 @@ class TransactionRepositoryTest {
         type = type,
         category = "food",
         timestamp = 1_757_000_000_000L,
-        transferDirection = direction
+        transferDirection = direction,
+        typeUserSet = userSet
     )
 
     @Test
@@ -140,6 +142,8 @@ class TransactionRepositoryTest {
         val written = dao.updates.single()
         assertEquals(TransactionType.TRANSFER, written.type)
         assertEquals(TransferDirection.OUT, written.transferDirection)
+        // The correction is marked as a person's, so a later statement import cannot undo it.
+        assertTrue(written.typeUserSet)
     }
 
     @Test
@@ -160,21 +164,26 @@ class TransactionRepositoryTest {
     @Test
     fun `retyping changes nothing else about the row`() = runTest {
         // The amount, the ids and the haystack all survive: the type is a label on a fact the
-        // bank stated, not a replacement for it, and the haystack is baked at write time.
+        // bank stated, not a replacement for it, and the haystack is baked at write time. The
+        // one other column that moves is the user-set flag, which is the point of the write.
         val original = transaction(id = 7, type = TransactionType.INCOME).copy(searchText = "torus food")
         val dao = FakeDao(original)
 
         TransactionRepository(dao, FakeBackupRequests()).setType(7L, TransactionKind.EXPENSE)
 
-        assertEquals(original.copy(type = TransactionType.EXPENSE), dao.updates.single())
+        assertEquals(
+            original.copy(type = TransactionType.EXPENSE, typeUserSet = true),
+            dao.updates.single()
+        )
     }
 
     @Test
-    fun `retyping a row to what it already is writes nothing`() = runTest {
+    fun `retyping a row to a type it already carries and owns writes nothing`() = runTest {
         // The comparison is against the row read back rather than against what the database
         // reports, because SQLite counts a row as updated when it was matched, not when a
-        // column changed — an UPDATE that sets a value to itself returns one row.
-        val dao = FakeDao(transaction(id = 7, type = TransactionType.EXPENSE))
+        // column changed — an UPDATE that sets a value to itself returns one row. The row is
+        // already stamped as user-set, so there is genuinely nothing left to record.
+        val dao = FakeDao(transaction(id = 7, type = TransactionType.EXPENSE, userSet = true))
 
         val changed = TransactionRepository(dao, FakeBackupRequests())
             .setType(7L, TransactionKind.EXPENSE)
@@ -184,11 +193,26 @@ class TransactionRepositoryTest {
     }
 
     @Test
-    fun `retyping a row to what it already is asks for no backup`() = runTest {
+    fun `retyping an imported row to the type it already shows stamps it as chosen`() = runTest {
+        // The value does not move, but the flag does: from here on the statement pairing must
+        // treat this row as one a person stands behind, so the write is a real change.
+        val dao = FakeDao(transaction(id = 7, type = TransactionType.EXPENSE))
+
+        val changed = TransactionRepository(dao, FakeBackupRequests())
+            .setType(7L, TransactionKind.EXPENSE)
+
+        assertEquals(true, changed)
+        assertTrue(dao.updates.single().typeUserSet)
+    }
+
+    @Test
+    fun `retyping a row to a type it already owns asks for no backup`() = runTest {
         val backups = FakeBackupRequests()
 
-        TransactionRepository(FakeDao(transaction(id = 7)), backups)
-            .setType(7L, TransactionKind.EXPENSE)
+        TransactionRepository(
+            FakeDao(transaction(id = 7, userSet = true)),
+            backups
+        ).setType(7L, TransactionKind.EXPENSE)
 
         assertTrue(backups.reasons.isEmpty())
     }

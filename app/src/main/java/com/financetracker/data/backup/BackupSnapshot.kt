@@ -2,7 +2,6 @@ package com.financetracker.data.backup
 
 import com.financetracker.model.BankEntity
 import com.financetracker.model.BondEntity
-import com.financetracker.model.BondTradeEntity
 
 /**
  * One copy of the data, as it goes into the backup file.
@@ -22,16 +21,17 @@ import com.financetracker.model.BondTradeEntity
  * What is *not* here is the `users` table. The profile row is re-fetched at sign-in, so
  * carrying it would put an account identity into a file the user may share for no gain.
  *
- * The account is stated once, at [uid]. Transactions are [TransactionRow] and recurring
- * schedules are [RecurringPaymentRow], so that neither has anywhere to repeat it; banks, bonds
- * and trades have no account column to begin with.
+ * The account is stated once, at [uid]. Transactions are [TransactionRow], bond trades are
+ * [BondTradeRow] and recurring schedules are [RecurringPaymentRow], so that none of them has
+ * anywhere to repeat it; banks and bonds have no account column to begin with.
  *
- * [bondTrades] and [banks] and [bonds] are device-global — the schema gives them no uid — so
- * they cannot be split per account and are carried whole. A snapshot therefore holds every
- * bond position on the device, including any belonging to a second Google account signed in on
- * the same install. A restore has to decide what to do about that, and refusing is the safe
- * answer: see [BackupRestorer]. [recurringPayments], by contrast, is per-account like
- * transactions and is carried for [uid] alone.
+ * [banks] and [bonds] are device-global — the schema gives them no uid — so they cannot be
+ * split per account and are carried whole. A snapshot therefore holds every bank and every
+ * bond's terms on the device, including any belonging to a second Google account signed in on
+ * the same install. Bonds are public instrument terms and banks are the display-name list, so
+ * nothing private travels this way, but a restore still refuses a file from another account
+ * rather than merge them: see [BackupRestorer]. [bondTrades] and [recurringPayments], by
+ * contrast, are per-account like transactions and are carried for [uid] alone.
  */
 data class BackupSnapshot(
     /** See [FORMAT]. Only ever incremented, never reused for different content. */
@@ -40,7 +40,7 @@ data class BackupSnapshot(
     val appVersion: String,
     /** Epoch millis the snapshot was taken. */
     val createdAt: Long,
-    /** The account every transaction in this file belongs to. */
+    /** The account every transaction, trade and schedule in this file belongs to. */
     val uid: String,
     val transactions: List<TransactionRow>,
     val banks: List<BankEntity>,
@@ -49,7 +49,7 @@ data class BackupSnapshot(
      * Oldest first, because that is the order a position is folded in and a restore that
      * reversed it would produce a different cost basis for the same trades.
      */
-    val bondTrades: List<BondTradeEntity>,
+    val bondTrades: List<BondTradeRow>,
 
     /**
      * Recurring payment schedules, or null for a file written before format 3.
@@ -72,12 +72,14 @@ data class BackupSnapshot(
          *     the account the root already carried.
          * 2 — transactions are [TransactionRow] and carry no account of their own.
          * 3 — recurring payment schedules are carried as [RecurringPaymentRow].
+         * 4 — bond trades are [BondTradeRow] and carry no account of their own; the account
+         *     is stated once at the root and put back by the restorer.
          *
          * Only ever raised, and a file whose number is above this one is refused rather than
          * read as far as it happens to match: a newer build may have moved a field, and a
          * half-understood file is worse than a refused one.
          */
-        const val FORMAT = 3
+        const val FORMAT = 4
 
         /** The lowest format this build can read. */
         const val OLDEST_READABLE_FORMAT = 1

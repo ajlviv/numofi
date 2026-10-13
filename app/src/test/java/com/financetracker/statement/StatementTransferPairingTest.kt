@@ -64,6 +64,12 @@ class StatementTransferPairingTest {
 
         fun of(title: String) = stored.first { it.title == title }
 
+        /** Stands in for [com.financetracker.repository.TransactionRepository.setType]. */
+        suspend fun retype(title: String, type: TransactionType) {
+            val row = of(title)
+            update(row.copy(type = type, transferDirection = null, typeUserSet = true))
+        }
+
         override suspend fun insertAll(transactions: List<TransactionEntity>) = error("unused")
         override suspend fun delete(id: Long) = error("unused")
         override suspend fun deleteAllForUser(userId: String) = error("unused")
@@ -475,6 +481,32 @@ class StatementTransferPairingTest {
         // is only ever produced by converting through a rate it holds and can name.
         assertEquals(TransactionType.EXPENSE, dao.of(outgoing).type)
         assertEquals(TransactionType.INCOME, dao.of(incoming).type)
+    }
+
+    @Test
+    fun `a leg the user has retyped is not re-paired by a later import`() = runTest {
+        val dao = FakeDao()
+        val service = StatementImportService(dao, bankRepository(), FakeBackupRequests())
+
+        // A pair is completed the normal way.
+        service.import("uid-1", listOf(line("-20000.00", BankCode.UKRSIBBANK, outgoing, depart)))
+        service.import("uid-1", listOf(line("20000.00", BankCode.MONOBANK, incoming, hoursLater(14))))
+        assertEquals(TransactionType.TRANSFER, dao.of(outgoing).type)
+
+        // The user disagrees and retypes both legs, which is what setType does — including
+        // stamping the row as user-decided. Left as an expense and an income the two rows look
+        // pairable again, which is exactly the trap the next import must not fall into.
+        dao.retype(outgoing, TransactionType.EXPENSE)
+        dao.retype(incoming, TransactionType.INCOME)
+        val updatesBefore = dao.updates.size
+
+        service.import("uid-1", listOf(line("-20000.00", BankCode.UKRSIBBANK, outgoing, depart)))
+
+        // A correction is not the importer's to undo: the same window read again must leave
+        // both rows as the person left them.
+        assertEquals(TransactionType.EXPENSE, dao.of(outgoing).type)
+        assertEquals(TransactionType.INCOME, dao.of(incoming).type)
+        assertEquals(updatesBefore, dao.updates.size)
     }
 }
 

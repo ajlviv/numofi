@@ -10,6 +10,7 @@ import com.financetracker.model.Transaction
 import com.financetracker.model.TransactionEntity
 import com.financetracker.model.TransactionInstant
 import com.financetracker.model.TransactionType
+import com.financetracker.model.TransferDirection
 import com.financetracker.repository.AuthRepository
 import com.financetracker.repository.BankRepository
 import com.financetracker.repository.BondRepository
@@ -164,6 +165,12 @@ class AddTransactionViewModel @Inject constructor(
         title: String,
         amount: Double,
         type: TransactionType,
+        /**
+         * Which way a hand-entered [TransactionType.TRANSFER] moved, or null for income and
+         * expense. A transfer with no direction is offered by neither the form nor the model:
+         * a row that said only "transfer" would say nothing about which way the money went.
+         */
+        transferDirection: TransferDirection?,
         category: String,
         date: LocalDate,
         note: String?,
@@ -184,6 +191,7 @@ class AddTransactionViewModel @Inject constructor(
                     title = title,
                     amount = amount,
                     type = type,
+                    transferDirection = transferDirection,
                     category = category,
                     // A row dated today carries the time it was entered, so it sorts above an
                     // import of the same day stamped at the bank's own hour. Any other day

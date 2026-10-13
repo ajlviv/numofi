@@ -3,7 +3,6 @@ package com.financetracker.data.backup
 import com.financetracker.data.AppDatabase
 import com.financetracker.model.BankEntity
 import com.financetracker.model.BondEntity
-import com.financetracker.model.BondTradeEntity
 import com.financetracker.model.RecurringPaymentEntity
 import com.financetracker.model.TransactionEntity
 import kotlinx.coroutines.flow.first
@@ -25,10 +24,11 @@ import javax.inject.Singleton
  * ## The account
  *
  * A file names the account it was taken for, and it is refused unless that is the account
- * signed in now. It is not a formality: banks, bonds and trades have no account column, so a
- * file taken while a second Google account was signed in carries that account's bond
- * positions inside it. There is no way to tell those apart from this account's, so the whole
- * file is refused rather than partly taken. See [RestoreResult.WrongAccount].
+ * signed in now. Banks and bonds have no account column, so a file carries rows that cannot be
+ * told apart from this account's — the shared instrument catalogue and the bank list — and a
+ * restore writes into them. Refusing the whole file rather than partly taking it is what keeps
+ * one account's file from changing what another account sees. Trades and schedules do carry an
+ * account and are filtered by it, but the rule is kept whole. See [RestoreResult.WrongAccount].
  *
  * ## The ids
  *
@@ -95,7 +95,7 @@ class BackupRestorer @Inject constructor(
 
         val banks = mergeBanks(snapshot.banks)
         val bonds = mergeBonds(snapshot.bonds)
-        val trades = mergeTrades(snapshot.bondTrades, localByFileId, localId)
+        val trades = mergeTrades(snapshot.bondTrades, uid, localByFileId, localId)
         // orEmpty: a v1 or v2 file has no schedules key at all, and Gson leaves the field null.
         val recurring = mergeRecurring(snapshot.recurringPayments.orEmpty(), uid)
 
@@ -167,7 +167,7 @@ class BackupRestorer @Inject constructor(
      * is on the isin.
      *
      * A trade whose cash row cannot be resolved at all — a null
-     * [BondTradeEntity.transactionId], or one naming a row the file does not contain — is
+     * [BondTradeRow.transactionId], or one naming a row the file does not contain — is
      * written anyway, with the link left empty. The file's own writer always writes both
      * halves, so this is a hand-edited or partial file; dropping the trade would silently
      * lose a position, which is the half of the pair that cannot be reconstructed from
@@ -177,9 +177,13 @@ class BackupRestorer @Inject constructor(
      * A trade refused for a missing isin is dropped, not written dangling: the foreign key
      * would take it anyway, and a position whose instrument is missing is one nothing can
      * price.
+     *
+     * The account comes from [uid] and never from the file: a [BondTradeRow] has nowhere to
+     * carry one, which is the same rule transactions already follow.
      */
     private suspend fun mergeTrades(
-        incoming: List<BondTradeEntity>,
+        incoming: List<BondTradeRow>,
+        uid: String,
         localByFileId: Map<Long, String>,
         localId: Map<String, Long>
     ): Int {
@@ -189,7 +193,7 @@ class BackupRestorer @Inject constructor(
             if (cashId != null && db.bondDao().getTradeForTransaction(cashId) != null) continue
             if (db.bondDao().getByIsin(trade.isin) == null) continue
 
-            db.bondDao().insertTrade(trade.copy(id = 0, transactionId = cashId))
+            db.bondDao().insertTrade(trade.toEntity(uid, id = 0).copy(transactionId = cashId))
             added++
         }
         return added

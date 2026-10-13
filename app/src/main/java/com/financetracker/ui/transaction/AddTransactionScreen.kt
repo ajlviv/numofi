@@ -55,6 +55,7 @@ import com.financetracker.model.BondMath
 import com.financetracker.model.BondTradeSide
 import com.financetracker.model.RECORDABLE_CURRENCIES
 import com.financetracker.model.TransactionType
+import com.financetracker.model.TransferDirection
 import com.financetracker.ui.MoneyAmount
 import com.financetracker.ui.component.CategoryDropdown
 import com.financetracker.ui.component.RequiredLabel
@@ -180,6 +181,7 @@ fun AddTransactionScreen(
                                 title = form.title,
                                 amount = form.amount,
                                 type = form.type,
+                                transferDirection = form.transferDirection,
                                 category = form.category,
                                 date = form.date,
                                 note = form.note,
@@ -223,6 +225,8 @@ internal data class TransactionForm(
     val title: String,
     val amount: Double,
     val type: TransactionType,
+    /** Which way a [TransactionType.TRANSFER] moved; null for income and expense. */
+    val transferDirection: TransferDirection?,
     val category: String,
     val date: LocalDate,
     val note: String?,
@@ -250,6 +254,7 @@ internal fun TransactionForm(
     var amount by remember { mutableStateOf("") }
     var currencyCode by remember { mutableStateOf(DEFAULT_RECORDABLE_CURRENCY) }
     var selectedType by remember { mutableStateOf(TransactionType.INCOME) }
+    var transferDirection by remember { mutableStateOf(TransferDirection.IN) }
     var category by remember { mutableStateOf("") }
     var note by remember { mutableStateOf("") }
     var date by remember { mutableStateOf(LocalDate.now()) }
@@ -262,12 +267,19 @@ internal fun TransactionForm(
     val parsedAmount = AmountInput.parse(amount)
 
     Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
-        // Only the two the user can mean by hand. TRANSFER is not offered: every transfer
-        // this app records is a bond trade, and letting someone file a bare transfer would
-        // let cash leave the balance with nothing to say what it became.
+        // The three a person can mean by hand. TRANSFER is the opening balance moving
+        // between the user's own accounts without buying anything, so unlike income and
+        // expense it needs a direction: a row that said only "transfer" would not say which
+        // way the money went. A directionless transfer also refuses to pair as part of a
+        // statement, so a hand transfer stays what it is — it is never re-guessed as a bond
+        // trade's other leg.
         // Same spacing as the mode selector above: separate buttons, not one control.
         SingleChoiceSegmentedButtonRow(space = (-8).dp) {
-            listOf(TransactionType.INCOME, TransactionType.EXPENSE).forEach { type ->
+            listOf(
+                TransactionType.INCOME,
+                TransactionType.EXPENSE,
+                TransactionType.TRANSFER
+            ).forEach { type ->
                 SegmentedButton(
                     selected = selectedType == type,
                     onClick = { selectedType = type },
@@ -275,11 +287,32 @@ internal fun TransactionForm(
                     modifier = Modifier.weight(1f)
                 ) {
                     Text(
-                        text = if (type == TransactionType.INCOME) stringResource(R.string.income) else stringResource(R.string.common_expense),
+                        text = when (type) {
+                            TransactionType.INCOME -> stringResource(R.string.income)
+                            TransactionType.EXPENSE -> stringResource(R.string.common_expense)
+                            TransactionType.TRANSFER -> stringResource(R.string.common_transfer)
+                        },
                         style = MaterialTheme.typography.bodyMedium
                     )
                 }
             }
+        }
+
+        // The direction is a second choice, not a second button row: it only means something
+        // once "Transfer" is picked, and three buttons plus two more would read as five
+        // equal facts. Shown only for a transfer, and defaulting to the one that records cash
+        // arriving, which is the shape an opening balance takes.
+        if (selectedType == TransactionType.TRANSFER) {
+            SingleChoiceDropdown(
+                label = stringResource(R.string.add_transfer_direction),
+                options = listOf(
+                    TransferDirection.IN to stringResource(R.string.detail_type_transfer_in),
+                    TransferDirection.OUT to stringResource(R.string.detail_type_transfer_out)
+                ),
+                selected = transferDirection,
+                onSelect = { transferDirection = it },
+                modifier = Modifier.fillMaxWidth()
+            )
         }
 
         OutlinedTextField(
@@ -389,6 +422,7 @@ internal fun TransactionForm(
                         title = title.trim(),
                         amount = parsed,
                         type = selectedType,
+                        transferDirection = if (selectedType == TransactionType.TRANSFER) transferDirection else null,
                         category = category.ifBlank { "Other" },
                         date = date,
                         note = note.ifBlank { null },

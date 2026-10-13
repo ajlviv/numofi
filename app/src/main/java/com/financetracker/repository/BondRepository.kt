@@ -47,23 +47,27 @@ class BondRepository @Inject constructor(
     private val transactionDao = db.transactionDao()
 
     /**
-     * Holdings, folded from trades, newest bond first.
+     * Holdings for one account, folded from its trades, newest bond first.
      *
      * Both tables are observed, not just the bonds. Bonds are written once and never change
      * again, so watching only those would emit once when the first trade creates the row and
      * then never again — a second purchase of the same bond, which changes the position, would
      * not be noticed by anything watching this. The whole trade list is read here rather than
      * one query per bond: it is small, and it keeps the two reads of the same emit.
+     *
+     * Scoped to the account: the trade list a position is folded from is one account's, so a
+     * second account's purchases do not show up as this account's holdings.
      */
-    fun observePositions(): Flow<List<BondPosition>> =
-        combine(bondDao.observeBonds(), bondDao.observeTrades()) { bonds, trades ->
+    fun observePositions(userId: String): Flow<List<BondPosition>> =
+        combine(bondDao.observeBonds(), bondDao.observeTrades(userId)) { bonds, trades ->
             val byIsin = trades.groupBy { it.isin }
             bonds.mapNotNull { bond ->
                 BondMath.position(bond.toDomain(), byIsin[bond.isin].orEmpty().map { it.toDomain() })
             }
         }
 
-    fun observeTrades(): Flow<List<BondTrade>> = bondDao.observeTrades().map { rows -> rows.map { it.toDomain() } }
+    fun observeTrades(userId: String): Flow<List<BondTrade>> =
+        bondDao.observeTrades(userId).map { rows -> rows.map { it.toDomain() } }
 
     fun observeBonds(): Flow<List<Bond>> = bondDao.observeBonds().map { rows -> rows.map { it.toDomain() } }
 
@@ -77,9 +81,9 @@ class BondRepository @Inject constructor(
         bondDao.getByIsin(BondMath.normaliseIsin(rawIsin))?.toDomain()
 
     /** What the form needs to show while the user is still typing a trade. */
-    suspend fun heldQuantity(isin: String): Int {
+    suspend fun heldQuantity(userId: String, isin: String): Int {
         val bond = bondDao.getByIsin(BondMath.normaliseIsin(isin)) ?: return 0
-        return BondMath.position(bond.toDomain(), bondDao.getTradesFor(bond.isin).map { it.toDomain() })
+        return BondMath.position(bond.toDomain(), bondDao.getTradesFor(userId, bond.isin).map { it.toDomain() })
             ?.quantity
             ?: 0
     }
@@ -136,7 +140,7 @@ class BondRepository @Inject constructor(
             // bonds out of the holding, and a redemption of a position that was already sold
             // would otherwise be accepted.
             if (side != BondTradeSide.BUY) {
-                val held = existing?.let { BondMath.position(it.toDomain(), bondDao.getTradesFor(isin).map { t -> t.toDomain() }) }
+                val held = existing?.let { BondMath.position(it.toDomain(), bondDao.getTradesFor(userId, isin).map { t -> t.toDomain() }) }
                     ?.quantity
                     ?: 0
                 if (quantity > held) {
@@ -211,6 +215,7 @@ class BondRepository @Inject constructor(
 
             val tradeId = bondDao.insertTrade(
                 BondTradeEntity(
+                    userId = userId,
                     isin = isin,
                     side = side,
                     quantity = quantity,

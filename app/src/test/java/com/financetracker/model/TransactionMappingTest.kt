@@ -37,7 +37,9 @@ class TransactionMappingTest {
     fun `provenance survives the trip back to storage`() {
         val stored = TransactionEntity.fromDomain(entity.toDomain(), "uid-1", bank = null)
         // searchText is derived on the way in, so it is compared separately below.
-        assertEquals(entity.copy(searchText = null), stored.copy(searchText = null))
+        // The type is marked user-set because this factory is the form's write path: whoever
+        // saved the row chose the type, and the statement pairing must not override that.
+        assertEquals(entity.copy(searchText = null, typeUserSet = true), stored.copy(searchText = null))
     }
 
     @Test

@@ -34,13 +34,14 @@ class BackupExporter @Inject constructor(
         appVersion = BuildConfig.VERSION_NAME,
         createdAt = now,
         uid = uid,
-        // Scoped to the one account. The other tables have no uid column and are device
-        // -wide, so they are read whole rather than filtered by a column that is not there.
+        // Scoped to the one account. Banks and bonds have no uid column and are device-wide,
+        // so they are read whole rather than filtered by a column that is not there; the
+        // trades, like the schedules, are one person's and are filtered by the same uid.
         transactions = transactionDao.getAllForUser(uid).first().map { TransactionRow.from(it) },
         banks = bankDao.getAllOnce(),
         bonds = bondDao.getBondsOnce(),
-        bondTrades = bondDao.getTrades(),
-        // Per account, unlike the three device-wide lists above: a schedule is one person's
+        bondTrades = bondDao.getTrades(uid).map { BondTradeRow.from(it) },
+        // Per account, unlike the two device-wide lists above: a schedule is one person's
         // commitments, so it is filtered by the same uid as the transactions.
         recurringPayments = recurringPaymentDao.getAllForUserOnce(uid).map(RecurringPaymentRow::from)
     )

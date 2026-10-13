@@ -96,6 +96,7 @@
   <string name="add_mode_bond">ОВДП</string>
   <string name="add_placeholder_title">напр., Зарплата</string>
   <string name="add_currency">Валюта</string>
+  <string name="add_transfer_direction">Напрямок</string>
   <string name="add_placeholder_category">напр., Їжа, Транспорт</string>
   <string name="add_no_bank">Без банку</string>
   <string name="add_note_optional">Нотатка (необовʼязково)</string>
@@ -304,6 +305,9 @@
   <string name="import_skipped_rows">Рядків без придатної дати або суми: %1$d.</string>
   <string name="import_choose_bank">Виберіть банк</string>
   <string name="import_bank_unresolved">Цей файл не розпізнано. Виберіть банк, інакше ці рядки не можна буде фільтрувати за ним.</string>
+  <string name="import_choose_currency">Валюта</string>
+  <string name="import_currency_auto">Як у файлі</string>
+  <string name="import_currency_hint">Деякі рядки не мають валюти. Оберіть ту, під якою їх зберегти; рядки, що мають власну, збережуть її.</string>
   <string name="import_import_n">Імпортувати %1$d</string>
   <string name="import_and_more">…іще %1$d</string>
   <string name="import_error_choose_bank">Виберіть, з якого банку ця виписка.</string>

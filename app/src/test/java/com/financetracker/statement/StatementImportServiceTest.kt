@@ -80,13 +80,14 @@ class StatementImportServiceTest {
         bank: String?,
         card: String? = "535129****5783",
         description: String = "TORUS",
-        day: String = "01.09.2026"
+        day: String = "01.09.2026",
+        currency: String? = "UAH"
     ) = StatementRow(
         timestamp = com.financetracker.data.statement.StatementParser
             .parseDate("$day 12:00:00")!!,
         description = description,
         amount = BigDecimal(amount),
-        currencyCode = "UAH",
+        currencyCode = currency,
         balance = null,
         rowIndex = 0,
         cardLabel = card,
@@ -268,6 +269,42 @@ class StatementImportServiceTest {
     }
 
     @Test
+    fun `a stored row satisfies only one statement line`() = runTest {
+        val dao = FakeDao()
+        val syncedAt = row("+100.00", BankCode.MONOBANK).timestamp
+        dao.stored += TransactionEntity(
+            id = 99,
+            userId = "uid-1",
+            title = "TORUS",
+            amount = 100.0,
+            type = TransactionType.INCOME,
+            category = "mcc_5411",
+            timestamp = syncedAt,
+            externalId = "monobank_77",
+            source = "monobank",
+            currencyCode = "UAH",
+            bankCode = BankCode.MONOBANK
+        )
+
+        // A second payment of the same size to the same payee on the same day, but at a
+        // different time: a genuine row, not a duplicate of the first. The day-and-title
+        // probe on its own cannot tell the two apart, so the stored row has to be claimed
+        // by the first line and refuse the second, or the second silently disappears.
+        val laterThatDay = row("+100.00", BankCode.MONOBANK).copy(
+            timestamp = com.financetracker.data.statement.StatementParser
+                .parseDate("01.09.2026 15:00:00")!!
+        )
+        val result = StatementImportService(dao, bankRepository(), FakeBackupRequests()).import(
+            "uid-1",
+            listOf(row("+100.00", BankCode.MONOBANK), laterThatDay)
+        )
+
+        assertEquals(1, result.imported)
+        assertEquals(1, result.alreadySynced)
+        assertEquals(2, dao.stored.size)
+    }
+
+    @Test
     fun `an identical payment at a different bank is kept, not swallowed as a duplicate`() = runTest {
         val dao = FakeDao()
         val syncedAt = row("-100.00", BankCode.MONOBANK).timestamp
@@ -372,5 +409,30 @@ class StatementImportServiceTest {
         val stored = dao.stored.single()
         assertEquals("Other", stored.category)
         assertTrue(stored.searchText!!.contains("other"))
+    }
+
+    @Test
+    fun `a currency override files rows that carry no currency under the chosen code`() = runTest {
+        val dao = FakeDao()
+        val result = StatementImportService(dao, bankRepository(), FakeBackupRequests()).import(
+            "uid-1",
+            listOf(row("-100.00", BankCode.UKRSIBBANK, currency = null)),
+            currencyOverride = "usd"
+        )
+
+        assertEquals(1, result.imported)
+        assertEquals("USD", dao.stored.single().currencyCode)
+    }
+
+    @Test
+    fun `a currency override never touches a row that carries its own currency`() = runTest {
+        val dao = FakeDao()
+        StatementImportService(dao, bankRepository(), FakeBackupRequests()).import(
+            "uid-1",
+            listOf(row("-100.00", BankCode.UKRSIBBANK, currency = "PLN")),
+            currencyOverride = "USD"
+        )
+
+        assertEquals("PLN", dao.stored.single().currencyCode)
     }
 }

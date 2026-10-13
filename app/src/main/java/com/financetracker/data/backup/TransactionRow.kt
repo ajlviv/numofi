@@ -36,7 +36,13 @@ data class TransactionRow(
     val bankCode: String? = null,
     val cardLabel: String? = null,
     val searchText: String? = null,
-    val transferDirection: TransferDirection? = null
+    val transferDirection: TransferDirection? = null,
+    /**
+     * Whether a person set this row's type, rather than the app inferring it. Carried through
+     * the file so a restored device keeps the statement pairing off a corrected row — losing
+     * the flag would let a later import undo the correction.
+     */
+    val typeUserSet: Boolean = false
 ) {
     fun toEntity(uid: String, id: Long = this.id) = TransactionEntity(
         id = id,
@@ -53,7 +59,8 @@ data class TransactionRow(
         bankCode = bankCode,
         cardLabel = cardLabel,
         searchText = searchText,
-        transferDirection = transferDirection
+        transferDirection = transferDirection,
+        typeUserSet = typeUserSet
     )
 
     companion object {
@@ -71,7 +78,8 @@ data class TransactionRow(
             bankCode = entity.bankCode,
             cardLabel = entity.cardLabel,
             searchText = entity.searchText,
-            transferDirection = entity.transferDirection
+            transferDirection = entity.transferDirection,
+            typeUserSet = entity.typeUserSet
         )
     }
 }

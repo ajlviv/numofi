@@ -97,12 +97,16 @@ class MainViewModel @Inject constructor(
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), ExclusionRules())
 
     /**
-     * Holdings, folded from trades. Not scoped to a user, because the bonds an app knows
-     * about are the same for everyone who signs in on the device — they are public terms,
-     * not anyone's data, and the trades that produce a position are already only ever
-     * written by the person making them.
+     * Holdings for the signed-in account, folded from that account's trades.
+     *
+     * A bond's terms are public and the same for everyone, but a position is not: it is the
+     * trades one account made, and counting another account's purchases would put holdings on
+     * this dashboard that the user does not have. Scoped to the signed-in uid like every other
+     * read here, so signing out yields an empty list rather than the last account's portfolio.
      */
-    val positions: StateFlow<List<BondPosition>> = bondRepository.observePositions()
+    val positions: StateFlow<List<BondPosition>> = authRepository.currentUid
+        .filterNotNull()
+        .flatMapLatest { uid -> bondRepository.observePositions(uid) }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
 

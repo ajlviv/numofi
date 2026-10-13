@@ -2,13 +2,13 @@ package com.financetracker.backup
 
 import com.financetracker.data.backup.BackupSnapshot
 import com.financetracker.data.backup.BackupSnapshotCodec
+import com.financetracker.data.backup.BondTradeRow
 import com.financetracker.data.backup.RecurringPaymentRow
 import com.financetracker.data.backup.TransactionRow
 import com.financetracker.data.backup.UnreadableBackupException
 import com.financetracker.data.backup.UnsupportedFormatException
 import com.financetracker.model.BankEntity
 import com.financetracker.model.BondEntity
-import com.financetracker.model.BondTradeEntity
 import com.financetracker.model.BondTradeSide
 import com.financetracker.model.RepeatFrequency
 import com.financetracker.model.TransactionType
@@ -78,7 +78,7 @@ class BackupSnapshotCodecTest {
             )
         ),
         bondTrades = listOf(
-            BondTradeEntity(
+            BondTradeRow(
                 id = 1,
                 isin = "UA3501234567",
                 side = BondTradeSide.BUY,
@@ -132,6 +132,19 @@ class BackupSnapshotCodecTest {
             .single()
 
         assertEquals(bare, parsed)
+    }
+
+    @Test
+    fun `a user-set type flag survives the round trip`() {
+        val flagged = snapshot().transactions.first().copy(typeUserSet = true)
+
+        val parsed = codec.decode(codec.encode(snapshot().copy(transactions = listOf(flagged))))
+            .transactions
+            .single()
+
+        // The flag is what keeps a later statement import from re-guessing a corrected type;
+        // losing it on the way through a backup would re-open the row to being re-paired.
+        assertTrue(parsed.typeUserSet)
     }
 
     @Test
@@ -248,5 +261,47 @@ class BackupSnapshotCodecTest {
 
         assertEquals(2, parsed.format)
         assertNull(parsed.recurringPayments)
+    }
+
+    @Test
+    fun `a file written when trades still carried their user id still reads`() {
+        // Format 3 carried a trade as the entity, account column and all. The current reader
+        // takes it as a BondTradeRow, which has nowhere to put the account, so Gson drops the
+        // extra key — the same shape of change transactions went through at format 2. The
+        // trade itself must survive it.
+        val v3 = """
+            {
+              "format": 3,
+              "appVersion": "1.0",
+              "createdAt": 0,
+              "uid": "uid-1",
+              "transactions": [],
+              "banks": [],
+              "bonds": [
+                {"isin":"UA3501234567","name":"ОвДП 24/Б","nominal":1000.0,"nominalCurrency":"UAH"}
+              ],
+              "bondTrades": [
+                {
+                  "id": 5,
+                  "userId": "uid-1",
+                  "isin": "UA3501234567",
+                  "side": "BUY",
+                  "quantity": 2,
+                  "price": 1020.0,
+                  "accruedInterest": 0.0,
+                  "commission": 0.0,
+                  "tradeDate": 1700000500000
+                }
+              ]
+            }
+        """.trimIndent()
+
+        val parsed = codec.decode(v3)
+
+        assertEquals(3, parsed.format)
+        val trade = parsed.bondTrades.single()
+        assertEquals(5L, trade.id)
+        assertEquals("UA3501234567", trade.isin)
+        assertEquals(2, trade.quantity)
     }
 }

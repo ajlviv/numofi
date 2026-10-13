@@ -57,21 +57,29 @@ interface BondDao {
     @Insert
     suspend fun insertTrade(trade: BondTradeEntity): Long
 
-    @Query("SELECT * FROM bond_trades ORDER BY tradeDate DESC, id DESC")
-    fun observeTrades(): Flow<List<BondTradeEntity>>
+    @Query("SELECT * FROM bond_trades WHERE userId = :userId ORDER BY tradeDate DESC, id DESC")
+    fun observeTrades(userId: String): Flow<List<BondTradeEntity>>
 
     /**
-     * Every trade, oldest first.
+     * Every trade for one account, oldest first.
      *
      * Oldest first because the position fold is a running total: buys add, sells subtract,
      * and averaging a sale in the wrong order produces a different cost basis for the same
      * set of trades.
+     *
+     * Scoped to the account: a position folded over every trade in the table would count a
+     * second account's holdings, and the dashboard would report money the signed-in user does
+     * not have. Bonds themselves are not account-scoped — an ISIN is an ISIN — but a holding
+     * is.
      */
-    @Query("SELECT * FROM bond_trades ORDER BY tradeDate ASC, id ASC")
-    suspend fun getTrades(): List<BondTradeEntity>
+    @Query("SELECT * FROM bond_trades WHERE userId = :userId ORDER BY tradeDate ASC, id ASC")
+    suspend fun getTrades(userId: String): List<BondTradeEntity>
 
-    @Query("SELECT * FROM bond_trades WHERE isin = :isin ORDER BY tradeDate ASC, id ASC")
-    suspend fun getTradesFor(isin: String): List<BondTradeEntity>
+    @Query(
+        "SELECT * FROM bond_trades WHERE userId = :userId AND isin = :isin " +
+            "ORDER BY tradeDate ASC, id ASC"
+    )
+    suspend fun getTradesFor(userId: String, isin: String): List<BondTradeEntity>
 
     @Query("SELECT * FROM bond_trades WHERE transactionId = :transactionId LIMIT 1")
     suspend fun getTradeForTransaction(transactionId: Long): BondTradeEntity?

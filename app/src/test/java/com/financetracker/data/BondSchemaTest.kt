@@ -55,6 +55,7 @@ class BondSchemaTest {
         )
         return db.bondDao().insertTrade(
             BondTradeEntity(
+                userId = "uid-1",
                 isin = ISIN,
                 side = BondTradeSide.BUY,
                 quantity = 1,

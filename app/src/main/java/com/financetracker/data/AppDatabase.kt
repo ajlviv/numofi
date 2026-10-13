@@ -18,14 +18,19 @@ import com.financetracker.model.UserEntity
  *
  * It is built from the entities below and, once built, is only ever reopened: there is no
  * upgrade path. A file left behind by an older schema is not something this class can repair,
- * and `version` is deliberately still the number the last schema change gave it, so a v8 file
- * already on a device opens exactly as it did before.
+ * and `version` is the number the last schema change gave it, so a file from that version opens
+ * exactly as it did before.
  *
  * A schema change means bumping `version`, which makes Room refuse an existing file with
  * "A migration from N to M was required but not found" instead of quietly rewriting somebody's
  * rows. Clearing the app's data, or reinstalling, produces a fresh file, and that is the
  * intended way to take such a change. Failing loudly is the deliberate choice over a
  * destructive fallback, which would wipe a device's rows without saying so.
+ *
+ * Version 9 gave `bond_trades` a `userId` (with an index) and `transactions` a `typeUserSet`
+ * flag, so a trade belongs to the account that made it and a corrected type is remembered as
+ * one. That was a wipe, taken once and recorded in AGENTS.md; there is no migration because
+ * there is no upgrade path by design.
  *
  * Nothing here rewrites a stored row, which is what leaves `searchText` — folded by [SearchText]
  * and written once, at write time — byte-identical to how it was written.
@@ -39,7 +44,7 @@ import com.financetracker.model.UserEntity
         BondTradeEntity::class,
         RecurringPaymentEntity::class
     ],
-    version = 8,
+    version = 9,
     exportSchema = false
 )
 @TypeConverters(Converters::class)

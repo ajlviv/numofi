@@ -110,6 +110,7 @@ class BackupExporterTest {
         db.bondDao().insertIfAbsent(BondEntity("UA3501234567", "ОвДП 24/Б", 1000.0, "UAH"))
         db.bondDao().insertTrade(
             BondTradeEntity(
+                userId = mine,
                 isin = "UA3501234567",
                 side = BondTradeSide.BUY,
                 quantity = 3,
@@ -122,6 +123,7 @@ class BackupExporterTest {
         // the same two trades.
         db.bondDao().insertTrade(
             BondTradeEntity(
+                userId = mine,
                 isin = "UA3501234567",
                 side = BondTradeSide.SELL,
                 quantity = 1,
@@ -137,6 +139,37 @@ class BackupExporterTest {
             listOf(BondTradeSide.SELL, BondTradeSide.BUY),
             snapshot.bondTrades.map { it.side }
         )
+    }
+
+    @Test
+    fun `only the signed-in account's trades are included`() = runTest {
+        db.bondDao().insertIfAbsent(BondEntity("UA3501234567", "ОвДП 24/Б", 1000.0, "UAH"))
+        db.bondDao().insertTrade(
+            BondTradeEntity(
+                userId = mine,
+                isin = "UA3501234567",
+                side = BondTradeSide.BUY,
+                quantity = 3,
+                price = 1020.0,
+                tradeDate = 1_700_000_000_000L
+            )
+        )
+        db.bondDao().insertTrade(
+            BondTradeEntity(
+                userId = theirs,
+                isin = "UA3501234567",
+                side = BondTradeSide.BUY,
+                quantity = 9,
+                price = 999.0,
+                tradeDate = 1_700_000_000_000L
+            )
+        )
+
+        val snapshot = exporter.snapshot(mine, now = 0L)
+
+        // The bond is shared, the holding is not: exporting another account's trade would put
+        // its position in this account's file.
+        assertEquals(listOf(3), snapshot.bondTrades.map { it.quantity })
     }
 
     @Test

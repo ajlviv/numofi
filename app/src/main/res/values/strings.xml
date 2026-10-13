@@ -111,6 +111,7 @@
   <string name="add_placeholder_title">e.g., Salary</string>
   <string name="add_amount_placeholder">0.00</string>
   <string name="add_currency">Currency</string>
+  <string name="add_transfer_direction">Direction</string>
   <string name="add_placeholder_category">e.g., Food, Transport</string>
   <string name="add_no_bank">No bank</string>
   <string name="add_note_optional">Note (optional)</string>
@@ -325,6 +326,9 @@
   <string name="import_skipped_rows">%1$d row(s) had no usable date or amount.</string>
   <string name="import_choose_bank">Choose a bank</string>
   <string name="import_bank_unresolved">This file was not recognised. Choose the bank, or the rows cannot be filtered by it later.</string>
+  <string name="import_choose_currency">Currency</string>
+  <string name="import_currency_auto">File default</string>
+  <string name="import_currency_hint">Some rows carry no currency. Pick one to file them under; rows that have their own keep it.</string>
   <string name="import_import_n">Import %1$d</string>
   <string name="import_and_more">…and %1$d more</string>
   <string name="import_error_choose_bank">Choose which bank this statement is from.</string>

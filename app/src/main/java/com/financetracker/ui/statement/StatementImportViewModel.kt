@@ -60,7 +60,13 @@ sealed interface StatementImportUiState {
          * same [com.financetracker.util.CategorySuggestion.foldHistory] the service uses at
          * confirm, so the value under each row's dropdown is the value that gets stored.
          */
-        val history: Map<String, String> = emptyMap()
+        val history: Map<String, String> = emptyMap(),
+        /**
+         * The currency to file rows under when their line carries no currency column. Null
+         * means "each row keeps the file's own code, defaulting to UAH where none exists".
+         * Only the preview holds it until [confirm], so it can be corrected freely.
+         */
+        val currencyOverride: String? = null
     ) : StatementImportUiState
 
     data class Done(
@@ -191,6 +197,15 @@ class StatementImportViewModel @Inject constructor(
         )
     }
 
+    /**
+     * Records the currency rows without a currency column should be filed under, for the
+     * confirmation to apply. Changes only the preview; nothing is written until [confirm].
+     */
+    fun onCurrencySelected(code: String?) {
+        val preview = _state.value as? StatementImportUiState.Preview ?: return
+        _state.value = preview.copy(currencyOverride = code)
+    }
+
     fun confirm() {
         val preview = _state.value as? StatementImportUiState.Preview ?: return
         // Refuse rather than filing the file under an unnamed bank: the whole point of the
@@ -209,7 +224,13 @@ class StatementImportViewModel @Inject constructor(
             }
             val categories = settingsRepository.categories.first()
             val result = withContext(Dispatchers.IO) {
-                importService.import(uid, preview.rows, categories, preview.categoryOverrides)
+                importService.import(
+                    uid,
+                    preview.rows,
+                    categories,
+                    preview.categoryOverrides,
+                    preview.currencyOverride
+                )
             }
             _state.value = StatementImportUiState.Done(
                 result.imported,

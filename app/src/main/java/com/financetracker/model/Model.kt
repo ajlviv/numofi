@@ -52,7 +52,17 @@ data class TransactionEntity(
      */
     val searchText: String? = null,
     /** Only a [TransactionType.TRANSFER] has a direction, so this is null for everything else. */
-    val transferDirection: TransferDirection? = null
+    val transferDirection: TransferDirection? = null,
+    /**
+     * True when the type was set by a person rather than inferred from a file.
+     *
+     * Set on any row written through a form, and by
+     * [com.financetracker.repository.TransactionRepository.setType]. It is what stops the
+     * statement re-pairing from relabelling a row the user has already corrected: a re-import
+     * that happens to re-read the same window is not permission to undo a decision somebody
+     * made by hand. An imported row keeps it false, because the app guessed its type.
+     */
+    val typeUserSet: Boolean = false
 ) {
     companion object {
         /**
@@ -84,6 +94,9 @@ data class TransactionEntity(
                 bankCode = bank?.code ?: transaction.bankCode,
                 cardLabel = transaction.cardLabel,
                 transferDirection = transaction.transferDirection,
+                // A row saved through this factory came from a form, so its type is a person's
+                // choice and the statement pairing must not relabel it on a later import.
+                typeUserSet = true,
                 // Derived here rather than at each call site, so no writer can forget it
                 // and leave the row permanently unfindable.
                 searchText = SearchText.of(

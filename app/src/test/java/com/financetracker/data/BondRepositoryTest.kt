@@ -160,7 +160,7 @@ class BondRepositoryTest {
         val result = buy(quantity = 2)
         assertTrue(result is RecordTradeResult.Recorded)
 
-        assertEquals(1, db.bondDao().getTrades().size)
+        assertEquals(1, db.bondDao().getTrades("uid-1").size)
         val cash = cashRows()
         assertEquals(1, cash.size)
         // 2 x 995 = 1990.
@@ -173,7 +173,7 @@ class BondRepositoryTest {
         // an orphan that looks valid until someone reconciles it by hand.
         val result = buy() as RecordTradeResult.Recorded
 
-        val trade = db.bondDao().getTrades().single()
+        val trade = db.bondDao().getTrades("uid-1").single()
         val cash = cashRows().single()
         assertEquals(result.transactionId, trade.transactionId)
         assertEquals(cash.id, trade.transactionId)
@@ -276,7 +276,7 @@ class BondRepositoryTest {
         buy(quantity = 1, price = 1000.0)
 
         assertEquals(1, db.bondDao().getBondsOnce().size)
-        assertEquals(2, db.bondDao().getTrades().size)
+        assertEquals(2, db.bondDao().getTrades("uid-1").size)
     }
 
     @Test
@@ -344,7 +344,7 @@ class BondRepositoryTest {
 
         val stored = db.bondDao().getByIsin("UA9000055555")!!
         assertEquals("USD", stored.nominalCurrency)
-        assertEquals(995.0, db.bondDao().getTrades().single().price, 0.0)
+        assertEquals(995.0, db.bondDao().getTrades("uid-1").single().price, 0.0)
     }
 
     @Test
@@ -392,11 +392,11 @@ class BondRepositoryTest {
 
     @Test
     fun `the held quantity is what has been bought and not sold`() = runTest {
-        assertEquals(0, repo.heldQuantity(bond.isin))
+        assertEquals(0, repo.heldQuantity("uid-1", bond.isin))
         buy(quantity = 5)
-        assertEquals(5, repo.heldQuantity(bond.isin))
+        assertEquals(5, repo.heldQuantity("uid-1", bond.isin))
         sell(quantity = 2)
-        assertEquals(3, repo.heldQuantity(bond.isin))
+        assertEquals(3, repo.heldQuantity("uid-1", bond.isin))
     }
 
     // MARK: - Overselling
@@ -409,7 +409,7 @@ class BondRepositoryTest {
 
         assertEquals(RecordTradeResult.Oversell(2), result)
         // The refusal is the whole point: no trade, and no cash row claiming money arrived.
-        assertEquals(1, db.bondDao().getTrades().size)
+        assertEquals(1, db.bondDao().getTrades("uid-1").size)
         assertEquals(1, cashRows().size)
     }
 
@@ -418,7 +418,7 @@ class BondRepositoryTest {
         buy(quantity = 2)
 
         assertTrue(sell(quantity = 2) is RecordTradeResult.Recorded)
-        assertEquals(0, repo.heldQuantity(bond.isin))
+        assertEquals(0, repo.heldQuantity("uid-1", bond.isin))
     }
 
     @Test
@@ -450,7 +450,7 @@ class BondRepositoryTest {
         val second = sell(quantity = 4)
 
         assertEquals(RecordTradeResult.Oversell(1), second)
-        assertEquals(1, repo.heldQuantity(bond.isin))
+        assertEquals(1, repo.heldQuantity("uid-1", bond.isin))
     }
 
     // MARK: - Redemption
@@ -461,7 +461,7 @@ class BondRepositoryTest {
 
         assertTrue(redeem(quantity = 2) is RecordTradeResult.Recorded)
 
-        assertEquals(0, repo.heldQuantity(bond.isin))
+        assertEquals(0, repo.heldQuantity("uid-1", bond.isin))
         // The mirror of the purchase. A transfer, not income: the nominal coming back is the
         // user's own money, and counting it as earnings would report a matured bond as a gain.
         val inflow = cashRows().single { it.transferDirection == TransferDirection.IN }
@@ -491,7 +491,7 @@ class BondRepositoryTest {
         // that did not happen — nobody bought these bonds back.
         assertEquals(
             listOf(BondTradeSide.BUY, BondTradeSide.REDEMPTION),
-            db.bondDao().getTrades().map { it.side }
+            db.bondDao().getTrades("uid-1").map { it.side }
         )
     }
 
@@ -512,7 +512,7 @@ class BondRepositoryTest {
         val result = redeem(quantity = 5)
 
         assertEquals(RecordTradeResult.Oversell(2), result)
-        assertEquals(1, db.bondDao().getTrades().size)
+        assertEquals(1, db.bondDao().getTrades("uid-1").size)
         assertEquals(1, cashRows().size)
     }
 
@@ -534,7 +534,7 @@ class BondRepositoryTest {
         val result = buy(quantity = 0)
 
         assertTrue(result is RecordTradeResult.Invalid)
-        assertEquals(0, db.bondDao().getTrades().size)
+        assertEquals(0, db.bondDao().getTrades("uid-1").size)
         assertEquals(0, cashRows().size)
     }
 
@@ -550,7 +550,7 @@ class BondRepositoryTest {
     fun `positions fold from the trades`() = runTest {
         buy(quantity = 3, price = 995.0)
 
-        val position = repo.observePositions().first().single()
+        val position = repo.observePositions("uid-1").first().single()
         assertEquals(3, position.quantity)
         // 3 x 995.00 in the bond's own currency.
         assertEquals(2985.0, position.cost, 0.0)
@@ -561,15 +561,15 @@ class BondRepositoryTest {
         buy(quantity = 1, price = 950.0, date = 1_700_000_000_000)
         buy(quantity = 1, price = 1000.0, date = 1_700_200_000_000)
 
-        val trades = repo.observeTrades().first()
+        val trades = repo.observeTrades("uid-1").first()
         assertEquals(listOf(1000.0, 950.0), trades.map { it.price })
         // The position itself is order-independent, and this is the assertion that says so.
-        assertEquals(1950.0, repo.observePositions().first().single().cost, 0.0)
+        assertEquals(1950.0, repo.observePositions("uid-1").first().single().cost, 0.0)
     }
 
     @Test
     fun `a bond with no trades has no position`() = runTest {
-        assertTrue(repo.observePositions().first().isEmpty())
+        assertTrue(repo.observePositions("uid-1").first().isEmpty())
     }
 
     @Test
@@ -584,7 +584,7 @@ class BondRepositoryTest {
         // the wrong reason.
         val seen = CopyOnWriteArrayList<Int>()
         val job = launch(Dispatchers.Default) {
-            repo.observePositions().collect { seen += it.singleOrNull()?.quantity ?: 0 }
+            repo.observePositions("uid-1").collect { seen += it.singleOrNull()?.quantity ?: 0 }
         }
         awaitQuantity(seen, 0)
 
@@ -612,8 +612,8 @@ class BondRepositoryTest {
 
         db.transactionDao().delete(result.transactionId)
 
-        assertEquals(0, db.bondDao().getTrades().size)
-        assertEquals(0, repo.heldQuantity(bond.isin))
+        assertEquals(0, db.bondDao().getTrades("uid-1").size)
+        assertEquals(0, repo.heldQuantity("uid-1", bond.isin))
     }
 
     // MARK: - Users
@@ -639,6 +639,32 @@ class BondRepositoryTest {
 
         assertEquals(1, cashRows().size)
         assertEquals(1, db.transactionDao().getAllForUser("uid-2").first().size)
+    }
+
+    @Test
+    fun `one user's trades do not count toward another user's position`() = runTest {
+        // The bond is app-wide, the holding is not. A position folded over every trade in the
+        // table would report the second account's bonds as the first account's holdings, and
+        // the dashboard would total money the signed-in user does not have.
+        buy(userId = "uid-1", quantity = 3)
+        repo.recordTrade(
+            userId = "uid-2",
+            bond = bond,
+            side = BondTradeSide.BUY,
+            quantity = 5,
+            price = 995.0,
+            accruedInterest = 0.0,
+            commission = 0.0,
+            tradeDate = 1_700_000_000_000,
+            bank = bank,
+            settlementCurrency = "UAH",
+            settlementAmount = null
+        )
+
+        assertEquals(3, repo.observePositions("uid-1").first().single().quantity)
+        assertEquals(5, repo.observePositions("uid-2").first().single().quantity)
+        assertEquals(3, repo.heldQuantity("uid-1", bond.isin))
+        assertEquals(listOf(3), repo.observeTrades("uid-1").first().map { it.quantity })
     }
 
     @Test

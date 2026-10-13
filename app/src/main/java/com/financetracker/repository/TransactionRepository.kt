@@ -46,11 +46,22 @@ class TransactionRepository @Inject constructor(
      * Only the type and its direction move. The amount, the ids and the haystack are copied
      * through untouched: the type is a label on a fact the bank stated, not a replacement
      * for it, and a haystack is built once at write time and never rewritten.
+     *
+     * The row is stamped [TransactionEntity.typeUserSet] as well. This is the whole point of
+     * the correction: a later import of the same window must not re-guess a type somebody has
+     * already put right, and that flag is how the pairing knows to leave it alone.
      */
     suspend fun setType(id: Long, kind: TransactionKind): Boolean {
         val row = dao.getById(id) ?: return false
-        if (row.type == kind.type && row.transferDirection == kind.direction) return false
-        dao.update(row.copy(type = kind.type, transferDirection = kind.direction))
+        if (row.type == kind.type &&
+            row.transferDirection == kind.direction &&
+            row.typeUserSet
+        ) {
+            return false
+        }
+        dao.update(
+            row.copy(type = kind.type, transferDirection = kind.direction, typeUserSet = true)
+        )
         backupRequests.requestUpload(BackupReason.TRANSACTION)
         return true
     }

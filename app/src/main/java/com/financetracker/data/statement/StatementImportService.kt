@@ -54,12 +54,17 @@ class StatementImportService @Inject constructor(
      * title and the stored `imported` key, with the title history of rows already in the
      * ledger as the fallback. Overrides and one-off typed values are stored verbatim and
      * never added to the settings list.
+     * @param currencyOverride a code to file any row that carries no currency column of its
+     * own under, picked in the preview. It only fills the gap — a row whose file states a
+     * currency keeps that one, because the override is about staying able to record the
+     * statement at all, not about correcting the file's numbers.
      */
     suspend fun import(
         userId: String,
         rows: List<StatementRow>,
         categories: List<String> = emptyList(),
-        categoryOverrides: Map<Int, String> = emptyMap()
+        categoryOverrides: Map<Int, String> = emptyMap(),
+        currencyOverride: String? = null
     ): Result {
         val existing = transactionDao.getExternalIdsForUser(userId).toMutableSet()
         val content = ContentIndex.load(transactionDao, userId, rows)
@@ -94,7 +99,7 @@ class StatementImportService @Inject constructor(
 
             val category = categoryOverrides[row.rowIndex]
                 ?: CategorySuggestion.suggest(CATEGORY_IMPORTED, row.description, categories, history)
-            transactionDao.insert(row.toEntity(userId, fingerprint, bankNames, category))
+            transactionDao.insert(row.toEntity(userId, fingerprint, bankNames, category, currencyOverride))
             content.add(row.bankCode, row)
             imported++
         }
@@ -142,7 +147,11 @@ class StatementImportService @Inject constructor(
      * leg stored by an earlier import is in reach without reading the whole history.
      *
      * A leg already relabelled is a [TransactionType.TRANSFER], which [TransferPairing] does
-     * not pair, so a repeated import is a no-op here and cannot re-pair a finished pair.
+     * not pair, so a repeated import leaves a finished pair alone. The rows a person has typed
+     * over are skipped outright: [TransactionEntity.typeUserSet] records that a human corrected
+     * the type, and if both legs were corrected back to something pairable the guess would
+     * otherwise undo both decisions on the next import of the same window. A leg the user has
+     * corrected is not a leg the importer gets to re-read.
      *
      * Returns how many pairs were relabelled, which is what tells the caller whether the
      * ledger changed.
@@ -156,7 +165,8 @@ class StatementImportService @Inject constructor(
             from - TransferPairing.STATEMENT_WINDOW_MILLIS,
             to + TransferPairing.STATEMENT_WINDOW_MILLIS
         )
-        val pairs = TransferPairing.pairsWithin(stored, TransferPairing.STATEMENT_WINDOW_MILLIS)
+        val candidates = stored.filter { !it.typeUserSet }
+        val pairs = TransferPairing.pairsWithin(candidates, TransferPairing.STATEMENT_WINDOW_MILLIS)
         for (pair in pairs) {
             transactionDao.update(pair.inbound.asTransfer(TransferDirection.IN))
             transactionDao.update(pair.outbound.asTransfer(TransferDirection.OUT))
@@ -191,7 +201,8 @@ class StatementImportService @Inject constructor(
         userId: String,
         externalId: String,
         bankNames: Map<String, String>,
-        category: String = CATEGORY_IMPORTED
+        category: String = CATEGORY_IMPORTED,
+        currencyOverride: String? = null
     ) = TransactionEntity(
         userId = userId,
         title = description.ifBlank { "Imported transaction" },
@@ -203,8 +214,11 @@ class StatementImportService @Inject constructor(
         externalId = externalId,
         source = namespace,
         // Statements from a UA bank usually omit the column, so default rather than
-        // leaving the row without a currency to render.
-        currencyCode = currencyCode?.takeIf { it.isNotBlank() }?.uppercase() ?: DEFAULT_CURRENCY,
+        // leaving the row without a currency to render. The override filed in the preview
+        // only replaces a blank column: a row the file itself denominates keeps its code.
+        currencyCode = currencyCode?.takeIf { it.isNotBlank() }?.uppercase()
+            ?: currencyOverride?.takeIf { it.isNotBlank() }?.uppercase()
+            ?: DEFAULT_CURRENCY,
         bankCode = bankCode,
         cardLabel = cardLabel?.trim()?.takeIf { it.isNotEmpty() },
         searchText = SearchText.of(
@@ -230,25 +244,67 @@ class StatementImportService @Inject constructor(
      * institutions, and treating it as one would file a second bank's statement line as
      * "already synced" and drop it. When either side's bank is unknown the comparison
      * stays permissive, so an unrecognised file is still protected from double counting.
+     *
+     * A match is a 1:1 claim, not a membership test. One stored row satisfies exactly one
+     * incoming line, whichever of the two probes reaches it first, and a line that claimed
+     * a row is spent. Without the claim, two statement lines that each look like the same
+     * stored payment would both be counted as its duplicate — a file holding one payment
+     * from bank sync and a second, genuinely separate payment of the same size on the same
+     * day would file the first as "already synced" and silently drop the second. Both
+     * parties get to use the ledger's row once and no more.
      */
     private class ContentIndex {
-        private val byInstant = mutableSetOf<Entry>()
-        private val byDayAndTitle = mutableSetOf<Entry>()
+        private class Source(
+            val bank: String?,
+            val instantKey: Entry,
+            val dayKey: Entry
+        ) {
+            var claimed = false
+        }
+
+        private val sources = mutableListOf<Source>()
+        private val byInstant = mutableMapOf<Entry, MutableList<Source>>()
+        private val byDayAndTitle = mutableMapOf<Entry, MutableList<Source>>()
 
         fun add(bank: String?, row: StatementRow) {
-            byInstant += Entry(bank, key(row.timestamp, row.absoluteAmount, row.isExpense))
-            byDayAndTitle += Entry(
+            val source = Source(
+                bank,
+                Entry(bank, key(row.timestamp, row.absoluteAmount, row.isExpense)),
+                Entry(
+                    bank,
+                    key(
+                        startOfDay(row.timestamp),
+                        row.absoluteAmount,
+                        row.isExpense,
+                        row.description
+                    )
+                )
+            )
+            sources += source
+            byInstant.getOrPut(source.instantKey) { mutableListOf() } += source
+            byDayAndTitle.getOrPut(source.dayKey) { mutableListOf() } += source
+        }
+
+        /**
+         * Whether [row] matches any stored or earlier-inserted row, claiming that row so no
+         * other statement line can point at it.
+         */
+        fun matches(bank: String?, row: StatementRow): Boolean {
+            val instantKey = Entry(bank, key(row.timestamp, row.absoluteAmount, row.isExpense))
+            byInstant[instantKey]?.firstOrNull { !it.claimed }?.let {
+                it.claimed = true
+                return true
+            }
+            val dayKey = Entry(
                 bank,
                 key(startOfDay(row.timestamp), row.absoluteAmount, row.isExpense, row.description)
             )
+            byDayAndTitle[dayKey]?.firstOrNull { !it.claimed }?.let {
+                it.claimed = true
+                return true
+            }
+            return false
         }
-
-        fun matches(bank: String?, row: StatementRow): Boolean =
-            Entry(bank, key(row.timestamp, row.absoluteAmount, row.isExpense)) in byInstant ||
-                Entry(
-                    bank,
-                    key(startOfDay(row.timestamp), row.absoluteAmount, row.isExpense, row.description)
-                ) in byDayAndTitle
 
         private data class Entry(val bank: String?, val key: String) {
             /** Equal when the banks are known and identical, or when either is unknown. */

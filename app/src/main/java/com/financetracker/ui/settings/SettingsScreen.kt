@@ -1545,6 +1545,24 @@ private fun ImportPreview(
             )
         }
 
+        // Only offered when some row actually needs it: a file that names its own currencies
+        // is not the case the override exists for, and showing a third dropdown in front of
+        // every import would just be noise.
+        if (state.rows.any { it.currencyCode.isNullOrBlank() }) {
+            Text(
+                stringResource(R.string.import_currency_hint),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            SingleChoiceDropdown(
+                label = stringResource(R.string.import_choose_currency),
+                options = listOf(null to stringResource(R.string.import_currency_auto)) +
+                    RECORDABLE_CURRENCIES.map { it to it },
+                selected = state.currencyOverride,
+                onSelect = { viewModel.onCurrencySelected(it) }
+            )
+        }
+
         state.rows.take(PREVIEW_ROW_COUNT).forEach { row ->
             Row(
                 modifier = Modifier
