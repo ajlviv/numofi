@@ -71,6 +71,15 @@ class BondMathTest {
     }
 
     @Test
+    fun `a non-positive nominal yields zero rather than Infinity or NaN`() {
+        // Reachable only from a hand-edited database or a malformed restore, but the form's
+        // own guard is the only thing standing between a raw Double and this division. A zero
+        // nominal would otherwise render as Infinity or NaN on the screen.
+        assertEquals(0.0, BondMath.percentOfNominal(1020.0, 0.0), 0.0)
+        assertEquals(0.0, BondMath.percentOfNominal(1020.0, -5.0), 0.0)
+    }
+
+    @Test
     fun `a purchase totals the price, the accrual and the commission`() {
         // 2 bonds at 995.00 is 1990, plus 40 of accrued interest for each of the two bonds
         // (the accrual is a per-bond figure), plus 12 for the commission.

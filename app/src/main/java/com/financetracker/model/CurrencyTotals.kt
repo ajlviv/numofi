@@ -39,7 +39,13 @@ fun totalsByCurrency(transactions: List<Transaction>): List<CurrencyTotals> =
         .map { (currency, rows) ->
             CurrencyTotals(
                 currencyCode = currency,
-                income = rows.filter { it.isIncome() }.sumOf { it.amount },
+                // A directionless transfer is filed as income, because that is what the detail
+                // picker labels it (TransactionKind.of falls back to INCOME). The two layers must
+                // not disagree about the same row: a row the user can see and is told is income
+                // must not vanish from the balance. Unreachable in practice — a directionless
+                // transfer exists in no layer — but a hand-edited database can hold one.
+                income = rows.filter { it.isIncome() || (it.isTransfer() && it.transferDirection == null) }
+                    .sumOf { it.amount },
                 expense = rows.filter { it.isExpense() }.sumOf { it.amount },
                 transferIn = rows.filter { it.isTransfer() && it.transferDirection == TransferDirection.IN }
                     .sumOf { it.amount },

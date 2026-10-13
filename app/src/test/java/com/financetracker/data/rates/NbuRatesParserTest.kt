@@ -101,4 +101,19 @@ class NbuRatesParserTest {
         val rates = NbuRatesParser.parse("""[{"cc":"USD","rate":44.0}]""", now = 0L)
         assertNull(rates.date)
     }
+
+    @Test
+    fun `a leading row with no date does not blank the cached date`() {
+        // The directory carries one date for the whole day, so the first row that has one speaks
+        // for the set. Reading row 0 positionally means a leading blank stores a null date and
+        // the dashboard renders "never" while holding fresh rates — a cosmetic lie about how
+        // current the figure is.
+        val body = """
+            [
+              {"r030":36,"txt":"Австралійський долар","rate":31.1348,"cc":"AUD","exchangedate":"","special":null},
+              {"r030":840,"txt":"Долар США","rate":44.6819,"cc":"USD","exchangedate":"01.10.2026","special":"N"}
+            ]
+        """.trimIndent()
+        assertEquals("01.10.2026", NbuRatesParser.parse(body, now = 0L).date)
+    }
 }

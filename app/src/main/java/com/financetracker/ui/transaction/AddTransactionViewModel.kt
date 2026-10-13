@@ -199,7 +199,11 @@ class AddTransactionViewModel @Inject constructor(
                     // regardless of when it was typed. See [TransactionInstant].
                     timestamp = TransactionInstant.forEnteredDate(date, enteredAt, zone),
                     note = note,
-                    currencyCode = currencyCode
+                    currencyCode = currencyCode,
+                    // The one place a type is chosen by a person rather than inferred from a file,
+                    // so the flag is set here rather than by the factory. The factory carries it
+                    // through, which is what lets an imported row keep its false on a later edit.
+                    typeUserSet = true
                 ),
                 userId = uid,
                 // Passed as a ref rather than a code so the row's search haystack is built

@@ -40,10 +40,10 @@ object NbuRatesParser {
 
         return ExchangeRates(
             toUah = kept.toMap(),
-            // The directory carries one date for the whole day, so the first row speaks for
-            // all of them. Null when nothing was kept: a cache with no rows has no date to
-            // report, and one that claimed a date would read as fresh.
-            date = rows.firstOrNull()?.exchangeDate?.takeIf { it.isNotBlank() },
+            // The directory carries one date for the whole day, so the first row that has one
+            // speaks for all of them. Null when nothing was kept: a cache with no rows has no date
+            // to report, and one that claimed a date would read as fresh.
+            date = rows.firstNotNullOfOrNull { it.exchangeDate?.takeIf { d -> d.isNotBlank() } },
             fetchedAt = now
         )
     }

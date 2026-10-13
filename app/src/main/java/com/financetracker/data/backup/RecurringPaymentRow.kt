@@ -32,7 +32,20 @@ data class RecurringPaymentRow(
     val endDate: Long? = null,
     val archived: Boolean = false
 ) {
-    fun toEntity(uid: String, id: Long = this.id) = RecurringPaymentEntity(
+    /**
+     * The entity this row becomes, or null when the row is one the model cannot represent.
+     *
+     * A [TransactionType.TRANSFER] is refused by the form and cannot be forecast: it is money
+     * between the user's own pockets, not a commitment the income/expense lines can name. A file
+     * can carry one anyway — hand-edited or foreign — and admitting it would put a figure in
+     * neither line while still listing it, which is the exact state
+     * [RecurringPaymentEntity.type] rules out. It is dropped rather than coerced, because a
+     * transfer read as an expense is a lie about spending; the same reason a trade with no ISIN
+     * is dropped rather than guessed.
+     */
+    fun toEntity(uid: String, id: Long = this.id): RecurringPaymentEntity? {
+        if (type != TransactionType.EXPENSE && type != TransactionType.INCOME) return null
+        return RecurringPaymentEntity(
         id = id,
         userId = uid,
         title = title,
@@ -47,7 +60,8 @@ data class RecurringPaymentRow(
         startDate = startDate,
         endDate = endDate,
         archived = archived
-    )
+        )
+    }
 
     companion object {
         fun from(entity: RecurringPaymentEntity) = RecurringPaymentRow(

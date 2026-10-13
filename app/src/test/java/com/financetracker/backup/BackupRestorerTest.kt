@@ -528,12 +528,13 @@ class BackupRestorerTest {
         id: Long = 0,
         title: String = "Оренда",
         amount: Double = 12_000.0,
+        type: TransactionType = TransactionType.EXPENSE,
         frequency: RepeatFrequency = RepeatFrequency.MONTHLY
     ) = RecurringPaymentRow(
         id = id,
         title = title,
         amount = amount,
-        type = TransactionType.EXPENSE,
+        type = type,
         category = "other",
         currencyCode = "UAH",
         frequency = frequency,
@@ -541,7 +542,7 @@ class BackupRestorerTest {
     )
 
     private suspend fun scheduleEntity(id: Long = 0, title: String = "Оренда") =
-        schedule(title = title).toEntity(me, id)
+        schedule(title = title).toEntity(me, id)!!
 
     @Test
     fun `a schedule in the file that is not here is written for the account`() = runTest {
@@ -559,6 +560,31 @@ class BackupRestorerTest {
         assertTrue(result.done().changed)
         assertEquals(
             listOf("Оренда", "Netflix"),
+            db.recurringPaymentDao().getAllForUserOnce(me).map { it.title }
+        )
+    }
+
+    @Test
+    fun `a schedule the model cannot represent is not written`() = runTest {
+        // A TRANSFER is refused by the form and cannot be forecast: it is money between the
+        // user's own pockets, not a commitment the income/expense lines can name. A file can
+        // carry one anyway (hand-edited or foreign), and admitting it would put a figure in
+        // neither line while still listing it — the state the entity's own comment rules out.
+        // Dropped rather than coerced, because a transfer read as an expense is a lie about
+        // spending, and the same reason a trade with no ISIN is dropped rather than guessed.
+        val result = restorer.restore(
+            snapshot(
+                recurringPayments = listOf(
+                    schedule(title = "Оренда"),
+                    schedule(title = "Between accounts", type = TransactionType.TRANSFER)
+                )
+            ),
+            me
+        )
+
+        assertEquals(1, result.done().recurring)
+        assertEquals(
+            listOf("Оренда"),
             db.recurringPaymentDao().getAllForUserOnce(me).map { it.title }
         )
     }

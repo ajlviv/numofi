@@ -37,9 +37,42 @@ class TransactionMappingTest {
     fun `provenance survives the trip back to storage`() {
         val stored = TransactionEntity.fromDomain(entity.toDomain(), "uid-1", bank = null)
         // searchText is derived on the way in, so it is compared separately below.
-        // The type is marked user-set because this factory is the form's write path: whoever
-        // saved the row chose the type, and the statement pairing must not override that.
-        assertEquals(entity.copy(searchText = null, typeUserSet = true), stored.copy(searchText = null))
+        // The type flag is *carried*, not stamped: this factory no longer decides that a row
+        // written through it has a person's type. It reads the flag off the domain object, so a
+        // row that was imported (flag false) and is re-saved without a type change stays false and
+        // remains eligible for transfer pairing. The form's add path is what sets it true.
+        assertEquals(entity.copy(searchText = null), stored.copy(searchText = null))
+    }
+
+    @Test
+    fun `a row round-tripped through the domain keeps its typeUserSet flag`() {
+        // The flag is a property of the row, not an artifact of which factory wrote it. An
+        // imported row (false) that a later edit round-trips must come back false, or the edit
+        // would permanently opt it out of being paired with a counterpart that arrives later.
+        val imported = entity.copy(typeUserSet = false)
+        val storedImported = TransactionEntity.fromDomain(imported.toDomain(), "uid-1", bank = null)
+        assertFalse(storedImported.typeUserSet)
+
+        val corrected = entity.copy(typeUserSet = true)
+        val storedCorrected = TransactionEntity.fromDomain(corrected.toDomain(), "uid-1", bank = null)
+        assertTrue(storedCorrected.typeUserSet)
+    }
+
+    @Test
+    fun `the form's write path marks a new row's type as user set`() {
+        // The add path is the one place a type is chosen by a person rather than inferred, so it
+        // is the one place the flag is set true. `fromDomain` honours it rather than forcing it,
+        // which is what lets the same factory preserve an imported row's false on the way back.
+        val manual = Transaction(
+            title = "Lunch",
+            amount = 5.0,
+            type = TransactionType.EXPENSE,
+            category = "food",
+            timestamp = 0,
+            typeUserSet = true
+        )
+        val stored = TransactionEntity.fromDomain(manual, "uid-1", bank = null)
+        assertTrue(stored.typeUserSet)
     }
 
     @Test

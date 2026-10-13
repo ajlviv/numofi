@@ -108,9 +108,13 @@ object BondMath {
      * The one division by 100 worth doing. The stored figure is the money price, and this is
      * the exchange-quote convention it corresponds to, so the two never have to be reasoned
      * into agreement.
+     *
+     * A non-positive nominal yields 0.0 rather than Infinity or NaN. The form guards its own
+     * input, so this is a hand-edited database or a malformed restore — but a raw Double
+     * reaching a division is not a place to let a screen render "Infinity%".
      */
     fun percentOfNominal(price: Double, nominal: Double): Double =
-        price / nominal * 100.0
+        if (nominal > 0.0) price / nominal * 100.0 else 0.0
 
     /**
      * What a trade costs, valued in the currency the account actually holds.

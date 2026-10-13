@@ -56,11 +56,13 @@ data class TransactionEntity(
     /**
      * True when the type was set by a person rather than inferred from a file.
      *
-     * Set on any row written through a form, and by
-     * [com.financetracker.repository.TransactionRepository.setType]. It is what stops the
-     * statement re-pairing from relabelling a row the user has already corrected: a re-import
-     * that happens to re-read the same window is not permission to undo a decision somebody
-     * made by hand. An imported row keeps it false, because the app guessed its type.
+     * Set by the form's add path and by
+     * [com.financetracker.repository.TransactionRepository.setType], and carried through the
+     * domain type so a row keeps its own answer across an edit. It is what stops the statement
+     * re-pairing from relabelling a row the user has already corrected: a re-import that happens
+     * to re-read the same window is not permission to undo a decision somebody made by hand. An
+     * imported row keeps it false, because the app guessed its type — and keeps it false through
+     * an edit that does not touch the type, so a not-yet-paired leg can still be paired.
      */
     val typeUserSet: Boolean = false
 ) {
@@ -94,9 +96,12 @@ data class TransactionEntity(
                 bankCode = bank?.code ?: transaction.bankCode,
                 cardLabel = transaction.cardLabel,
                 transferDirection = transaction.transferDirection,
-                // A row saved through this factory came from a form, so its type is a person's
-                // choice and the statement pairing must not relabel it on a later import.
-                typeUserSet = true,
+                // Carried rather than forced, so the flag stays a property of the row: a row
+                // imported (false) that a later edit round-trips without a type change comes back
+                // false and remains eligible for transfer pairing. Forcing it here would make
+                // "written through a form" mean "type set by a person", and an edit of a note
+                // would silently opt the row out forever.
+                typeUserSet = transaction.typeUserSet,
                 // Derived here rather than at each call site, so no writer can forget it
                 // and leave the row permanently unfindable.
                 searchText = SearchText.of(
@@ -124,7 +129,8 @@ data class TransactionEntity(
             source = source,
             bankCode = bankCode,
             cardLabel = cardLabel,
-            transferDirection = transferDirection
+            transferDirection = transferDirection,
+            typeUserSet = typeUserSet
         )
     }
 }
@@ -175,7 +181,16 @@ data class Transaction(
      * transfer whose direction was not recorded — counted as neither an inflow nor an
      * outflow rather than guessed at.
      */
-    val transferDirection: TransferDirection? = null
+    val transferDirection: TransferDirection? = null,
+    /**
+     * True when the type was set by a person rather than inferred from a file.
+     *
+     * Carried through the domain type so a row keeps its own answer: the form's add path sets it
+     * true (a type chosen by hand), [com.financetracker.repository.TransactionRepository.setType]
+     * sets it true (a correction), and an imported row keeps it false so a later edit that does
+     * not touch the type leaves it pairable. See [TransactionEntity.typeUserSet].
+     */
+    val typeUserSet: Boolean = false
 ) {
     fun isIncome(): Boolean = type == TransactionType.INCOME
     fun isExpense(): Boolean = type == TransactionType.EXPENSE

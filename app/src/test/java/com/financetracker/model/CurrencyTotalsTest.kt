@@ -100,4 +100,24 @@ class CurrencyTotalsTest {
 
         assertEquals(0.0, totals.single().balance, 0.0)
     }
+
+    @Test
+    fun `a directionless transfer is counted as income, matching the label it is shown under`() {
+        // A directionless transfer exists in no layer — the form and the model both refuse it —
+        // so this is reachable only from a hand-edited database or an old file. The detail picker
+        // labels such a row as income (TransactionKind.of falls back to INCOME), so the totals
+        // must count it as income too: a row the user can see and is told is income must not
+        // vanish from the balance while still being drawn on the screen.
+        val totals = totalsByCurrency(
+            listOf(
+                tx(1000.0, TransactionType.INCOME, "UAH"),
+                tx(300.0, TransactionType.TRANSFER, "UAH")
+            )
+        ).single()
+
+        assertEquals(1300.0, totals.income, 0.0)
+        assertEquals(1300.0, totals.balance, 0.0)
+        assertEquals(0.0, totals.transferIn, 0.0)
+        assertEquals(0.0, totals.transferOut, 0.0)
+    }
 }

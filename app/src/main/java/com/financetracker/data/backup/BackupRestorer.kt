@@ -220,8 +220,11 @@ class BackupRestorer @Inject constructor(
 
         var added = 0
         for (row in incoming) {
-            if (!seen.add(scheduleIdentity(row.toEntity(uid)))) continue
-            db.recurringPaymentDao().insert(row.toEntity(uid, id = 0))
+            // A row the model cannot represent (a TRANSFER schedule) becomes null and is skipped,
+            // so a foreign file cannot put this device into a state the entity rules out.
+            val entity = row.toEntity(uid) ?: continue
+            if (!seen.add(scheduleIdentity(entity))) continue
+            db.recurringPaymentDao().insert(entity.copy(id = 0))
             added++
         }
         return added

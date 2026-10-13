@@ -86,12 +86,19 @@ object TransferPairing {
         pairsWithin(rows, WINDOW_MILLIS)
 
     /**
-     * The transfers visible among [rows], one per movement, nearest partner first, where two
-     * legs may be [windowMillis] apart.
+     * The transfers visible among [rows], one per movement, where two legs may be
+     * [windowMillis] apart.
      *
      * Each row is used by at most one pair. Arrivals are taken in time order and each takes
      * the closest unclaimed departure that satisfies every rule, so two equal amounts in the
      * same window become two transfers rather than four.
+     *
+     * This is greedy in arrival order, not a globally nearest assignment. When two equal
+     * in/out movements land in the same window, the arrival order decides which departure each
+     * arrival takes, and a globally nearest pairing might match them differently. Both
+     * candidates satisfy every rule, so the ledger still nets to zero and no total is wrong —
+     * only *which* rows end up labelled as the pair. The type is editable by hand afterwards,
+     * which is the mitigation for a mis-assignment.
      */
     fun pairsWithin(rows: List<TransactionEntity>, windowMillis: Long): List<TransferPair> {
         val arrivals = rows.filter { it.type == TransactionType.INCOME && eligible(it) }
