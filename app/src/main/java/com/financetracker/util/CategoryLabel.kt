@@ -130,6 +130,15 @@ object CategoryLabel {
         return RESOURCE_BY_LABEL[label(category)] ?: 0
     }
 
+    /**
+     * Every label the tables can produce, for parity checks against display mappings
+     * that must cover the same set — the category icon table is the current one. Not the
+     * exact and range tables directly: [RESOURCE_BY_LABEL] is the closed set of labels
+     * that reach a translation, which is precisely the set an icon must exist for.
+     */
+    val canonicalLabels: Set<String>
+        get() = RESOURCE_BY_LABEL.keys
+
     private val RESOURCE_BY_LABEL: Map<String, Int> = mapOf(
         "Phone & data" to R.string.cat_phone_data,
         "Digital services" to R.string.cat_digital_services,

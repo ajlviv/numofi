@@ -55,11 +55,31 @@ fun MoneyAmount(
     Text(
         text = annotated,
         modifier = modifier,
-        style = style,
+        style = withTabularFigures(style),
         color = color,
         fontWeight = fontWeight
     )
 }
+
+/**
+ * Figures rather than proportions: `tnum` gives every digit the same advance, so a column
+ * of amounts lines up on the decimal and a recomposition — a rate refresh, a filter
+ * change — cannot shuffle the digits under a reader who is mid-comparison.
+ *
+ * Merged rather than set, so a style carrying its own features keeps them; this is the
+ * only place money acquires a font feature, and it applies to every [MoneyAmount] in the
+ * app rather than to each screen that has to remember it.
+ */
+fun withTabularFigures(style: TextStyle): TextStyle {
+    val existing = style.fontFeatureSettings
+    return when {
+        existing.isNullOrBlank() -> style.copy(fontFeatureSettings = TABULAR_FIGURES)
+        TABULAR_FIGURES in existing -> style
+        else -> style.copy(fontFeatureSettings = "$existing, $TABULAR_FIGURES")
+    }
+}
+
+private const val TABULAR_FIGURES = "tnum"
 
 /**
  * Mustard, darkened for a light surface and brightened for a dark one.

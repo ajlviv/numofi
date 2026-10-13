@@ -1,7 +1,6 @@
 package com.financetracker.ui.dashboard
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -16,6 +15,9 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ArrowDownward
+import androidx.compose.material.icons.filled.ArrowUpward
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
@@ -34,9 +36,11 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.financetracker.R
 import com.financetracker.data.settings.DEFAULT_BASE_CURRENCY
+import com.financetracker.model.BankNames
 import com.financetracker.model.BondPosition
 import com.financetracker.model.CountedTransactions
 import com.financetracker.model.ExchangeRates
@@ -49,9 +53,11 @@ import com.financetracker.model.totalsByCurrency
 import com.financetracker.ui.MoneyAmount
 import com.financetracker.ui.TransactionAppearance
 import com.financetracker.ui.component.SingleChoiceDropdown
-import com.financetracker.util.CategoryLabel
+import com.financetracker.ui.transaction.TransactionRow
+import com.financetracker.util.DateFormats
 import com.financetracker.util.MoneyFormat
 import java.time.LocalDate
+import java.time.format.DateTimeFormatter
 
 
 @Composable
@@ -69,6 +75,14 @@ fun DashboardScreen(
     baseCurrency: String = DEFAULT_BASE_CURRENCY,
     rates: ExchangeRates = ExchangeRates(emptyMap(), null, 0L),
     onRefreshRates: () -> Unit = {},
+    /**
+     * Code to display name, for the recent rows' `bank • card` subtitle segment. The rows
+     * need it the same way the Transactions tab does; defaulted so a caller that has not
+     * wired the settings flow up shows rows without an account segment rather than none.
+     */
+    bankNames: Map<String, String> = emptyMap(),
+    /** The date format for the recent rows; the list reads the same one. */
+    dateFormat: DateTimeFormatter = DateFormats.date(),
     /**
      * Opens a row. Required rather than defaulted to a no-op, for the reason the type badge
      * 's callback is: a row that looks tappable and is not is worse than no row, because
@@ -168,7 +182,16 @@ fun DashboardScreen(
         } else {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 transactions.take(5).forEach { transaction ->
-                    TransactionRow(transaction, onTransactionClick)
+                    TransactionRow(
+                        transaction = transaction,
+                        bank = BankNames.ref(transaction.bankCode, bankNames),
+                        dateFormat = dateFormat,
+                        // Denser than the list: 40dp against 48, and no card surface — the
+                        // dashboard's recent rows sit directly on the screen background.
+                        modifier = Modifier.padding(vertical = 4.dp),
+                        iconSize = 40.dp,
+                        onClick = { onTransactionClick(transaction) }
+                    )
                 }
             }
         }
@@ -275,12 +298,14 @@ private fun NetWorthCard(
                     FlowFigure(
                         label = stringResource(R.string.dash_net_worth_income),
                         amount = income,
-                        currencyCode = baseCurrency
+                        currencyCode = baseCurrency,
+                        outgoing = false
                     )
                     FlowFigure(
                         label = stringResource(R.string.dash_net_worth_expense),
                         amount = expense,
-                        currencyCode = baseCurrency
+                        currencyCode = baseCurrency,
+                        outgoing = true
                     )
                 }
             }
@@ -351,16 +376,86 @@ private fun NetWorthCard(
     }
 }
 
-/** One of the two converted flow figures, sharing a line with its counterpart. */
+/**
+ * One of the two converted flow figures, sharing a line with its counterpart.
+ *
+ * Direction first — a tinted box with an arrow in the flow's accent, the same language as
+ * a transaction row's icon box — then the amount below it in the matching colour. The
+ * expense is a positive magnitude on purpose: the arrow and the colour already say which
+ * way the money went, and a minus sign on top would be the second signal for the same
+ * fact.
+ */
 @Composable
-private fun RowScope.FlowFigure(label: String, amount: Double, currencyCode: String) {
-    Column(modifier = Modifier.weight(1f)) {
-        Text(text = label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+private fun RowScope.FlowFigure(
+    label: String,
+    amount: Double,
+    currencyCode: String,
+    outgoing: Boolean
+) {
+    FlowColumn(
+        label = label,
+        amount = amount,
+        currencyCode = currencyCode,
+        outgoing = outgoing,
+        modifier = Modifier.weight(1f)
+    )
+}
+
+/** The flow figure's shape, used by the net-worth card and the scheduled plans card alike. */
+@Composable
+private fun FlowColumn(
+    label: String,
+    amount: Double,
+    currencyCode: String,
+    outgoing: Boolean,
+    modifier: Modifier = Modifier
+) {
+    val accent = if (outgoing) TransactionAppearance.Expense else TransactionAppearance.Income
+    Column(modifier = modifier) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            FlowArrow(outgoing = outgoing)
+            Spacer(modifier = Modifier.width(6.dp))
+            Text(
+                text = label,
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
         MoneyAmount(
             amount = amount,
             currencyCode = currencyCode,
             style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.SemiBold
+            fontWeight = FontWeight.SemiBold,
+            color = accent
+        )
+    }
+}
+
+/**
+ * The direction marker: a small tinted box with ↑ or ↓ in the flow's accent.
+ *
+ * Tint and accent come from [TransactionAppearance] rather than being restated here, so a
+ * palette change still reaches this card — and so the green and red on the dashboard are
+ * by construction the same green and red on a row.
+ */
+@Composable
+private fun FlowArrow(outgoing: Boolean) {
+    val tint = if (outgoing) TransactionAppearance.ExpenseTint else TransactionAppearance.IncomeTint
+    val accent = if (outgoing) TransactionAppearance.Expense else TransactionAppearance.Income
+    Box(
+        modifier = Modifier
+            .size(22.dp)
+            .clip(MaterialTheme.shapes.small)
+            .background(tint),
+        contentAlignment = Alignment.Center
+    ) {
+        Icon(
+            imageVector = if (outgoing) Icons.Default.ArrowDownward else Icons.Default.ArrowUpward,
+            contentDescription = null,
+            tint = accent,
+            modifier = Modifier.size(16.dp)
         )
     }
 }
@@ -449,54 +544,6 @@ private fun withSign(value: Double, currency: String): String =
     (if (value > 0) "+" else "") + MoneyFormat.format(value, currency)
 
 @Composable
-private fun TransactionRow(transaction: Transaction, onClick: (Transaction) -> Unit) {
-    val categoryRes = CategoryLabel.resource(transaction.category)
-    Row(
-        modifier = Modifier.fillMaxWidth().clickable { onClick(transaction) }.padding(vertical = 8.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Box(
-            modifier = Modifier
-                .size(40.dp)
-                .clip(MaterialTheme.shapes.small)
-                .background(TransactionAppearance.tint(transaction)),
-            contentAlignment = Alignment.Center
-        ) {
-            Icon(
-                imageVector = TransactionAppearance.icon(transaction),
-                contentDescription = null,
-                tint = TransactionAppearance.accent(transaction),
-                modifier = Modifier.size(20.dp)
-            )
-        }
-
-        Spacer(modifier = Modifier.width(12.dp))
-
-        Column(modifier = Modifier.weight(1f)) {
-            Text(
-                text = transaction.title,
-                style = MaterialTheme.typography.bodyLarge,
-                fontWeight = FontWeight.Medium
-            )
-            Text(
-                text = if (categoryRes != 0) stringResource(categoryRes) else CategoryLabel.label(transaction.category),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-        }
-
-        MoneyAmount(
-            amount = transaction.amount,
-            currencyCode = transaction.currencyCode,
-            style = MaterialTheme.typography.bodyLarge,
-            fontWeight = FontWeight.Bold,
-            color = TransactionAppearance.accent(transaction),
-            prefix = TransactionAppearance.signPrefix(transaction)
-        )
-    }
-}
-
-@Composable
 private fun EmptyState() {
     Column(
         modifier = Modifier.fillMaxWidth(),
@@ -556,13 +603,17 @@ private fun ScheduledPlansCard(
                 )
             } else {
                 Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                    Figure(
-                        stringResource(R.string.recurring_upcoming_expense),
-                        MoneyFormat.format(expense ?: 0.0, baseCurrency)
+                    FlowColumn(
+                        label = stringResource(R.string.recurring_upcoming_expense),
+                        amount = expense ?: 0.0,
+                        currencyCode = baseCurrency,
+                        outgoing = true
                     )
-                    Figure(
-                        stringResource(R.string.recurring_upcoming_income),
-                        MoneyFormat.format(income ?: 0.0, baseCurrency)
+                    FlowColumn(
+                        label = stringResource(R.string.recurring_upcoming_income),
+                        amount = income ?: 0.0,
+                        currencyCode = baseCurrency,
+                        outgoing = false
                     )
                 }
             }

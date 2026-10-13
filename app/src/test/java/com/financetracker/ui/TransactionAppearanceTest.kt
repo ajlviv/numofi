@@ -58,7 +58,9 @@ class TransactionAppearanceTest {
 
         assertEquals(TransactionAppearance.accent(out), TransactionAppearance.accent(`in`))
         assertEquals(TransactionAppearance.tint(out), TransactionAppearance.tint(`in`))
-        assertEquals(TransactionAppearance.icon(out), TransactionAppearance.icon(`in`))
+        // The icon moved to CategoryIcon when rows started wearing their category; the
+        // invariant it asserts is unchanged — both directions wear the same arrow.
+        assertEquals(CategoryIcon.icon(out), CategoryIcon.icon(`in`))
     }
 
     @Test

@@ -215,6 +215,7 @@ fun MainScreen(
                         baseCurrency = baseCurrency,
                         rates = exchangeRates,
                         upcoming = upcomingPlans,
+                        bankNames = bankNames,
                         onRefreshRates = viewModel::refreshRates,
                         // Same destination as the list below, so a row on the dashboard opens the
                         // same detail screen the Transactions tab would open it in.

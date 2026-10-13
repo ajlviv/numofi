@@ -1,8 +1,6 @@
 package com.financetracker.ui.transaction
 
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -17,13 +15,11 @@ import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -31,15 +27,12 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.financetracker.R
 import com.financetracker.model.BankRef
 import com.financetracker.model.Transaction
-import com.financetracker.model.TransactionType
 import com.financetracker.ui.MoneyAmount
 import com.financetracker.ui.TransactionAppearance
 import com.financetracker.ui.component.MultiSelectDropdown
-import com.financetracker.util.CategoryLabel
 import com.financetracker.util.DateFormats
 import java.time.Instant
 import java.time.LocalDate
-import java.time.ZoneId
 import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
 
@@ -542,92 +535,19 @@ private fun TransactionListItem(
     bank: BankRef?,
     onClick: () -> Unit
 ) {
-    // A mapped category translates through its cat_* resource; anything else is the
-    // user's own typed wording and stays exactly as written.
-    val categoryRes = CategoryLabel.resource(transaction.category)
-    val categoryText =
-        if (categoryRes != 0) stringResource(categoryRes) else CategoryLabel.label(transaction.category)
+    // The card is only the surface here: the row inside it carries the click, the text and
+    // the icon, and is shared with the dashboard so the two lists cannot drift apart.
     Card(
-        modifier = Modifier.fillMaxWidth().clickable { onClick() },
+        modifier = Modifier.fillMaxWidth(),
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
     ) {
-        Row(
-            // IntrinsicSize.Min lets the trailing column stretch to the row height, and
-            // the note below always occupies a line, so rows with a comment are not
-            // taller than rows without one.
-            modifier = Modifier.padding(16.dp).height(IntrinsicSize.Min),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            // Icon representing transaction type
-            Box(
-                modifier = Modifier
-                    .size(48.dp)
-                    .clip(MaterialTheme.shapes.small)
-                    .background(TransactionAppearance.tint(transaction)),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    imageVector = TransactionAppearance.icon(transaction),
-                    contentDescription = null,
-                    tint = TransactionAppearance.accent(transaction),
-                    modifier = Modifier.size(24.dp)
-                )
-            }
-
-            Spacer(modifier = Modifier.width(12.dp))
-
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = transaction.title,
-                    // Two lines at a smaller size. Imported descriptions run long, and a
-                    // single ellipsised line hid exactly the part that identifies the
-                    // payment, which is the part the user is scanning the list for.
-                    style = MaterialTheme.typography.bodyLarge,
-                    fontWeight = FontWeight.SemiBold,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis
-                )
-                Text(
-                    text = "$categoryText • ${Instant.ofEpochMilli(transaction.timestamp).atZone(ZoneId.systemDefault()).toLocalDateTime().format(dateFormat)}",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-                transaction.provenance(bank)?.let { provenance ->
-                    Text(
-                        text = provenance,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                }
-            }
-
-            Column(
-                horizontalAlignment = Alignment.End,
-                modifier = Modifier.fillMaxHeight()
-            ) {
-                MoneyAmount(
-                    amount = transaction.amount,
-                    currencyCode = transaction.currencyCode,
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = TransactionAppearance.accent(transaction),
-                    prefix = TransactionAppearance.signPrefix(transaction)
-                )
-                // minLines keeps the slot reserved when there is no note, so every row
-                // in the list has the same height.
-                Text(
-                    text = transaction.note.orEmpty(),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    minLines = 1,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-            }
-        }
+        TransactionRow(
+            transaction = transaction,
+            bank = bank,
+            dateFormat = dateFormat,
+            modifier = Modifier.padding(16.dp),
+            iconSize = 48.dp,
+            onClick = onClick
+        )
     }
 }

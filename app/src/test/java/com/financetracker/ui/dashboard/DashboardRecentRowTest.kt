@@ -4,10 +4,12 @@ import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.hasAnyDescendant
 import androidx.compose.ui.test.hasClickAction
+import androidx.compose.ui.test.hasScrollAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.onNodeWithText
-import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performSemanticsAction
+import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.test.swipeUp
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.financetracker.model.ExchangeRates
 import com.financetracker.model.ExclusionRules
@@ -103,6 +105,12 @@ class DashboardRecentRowTest {
     fun recentRowsAreListedWhenThereAreTransactions() {
         show(listOf(transaction("Salary")))
 
+        // The dashboard scrolls, and the scheduled-plans card sits between the totals and
+        // this heading — on the short viewport the rules render in, the heading starts below
+        // the fold. Scrolling to it is a claim about the list; asserting the initial frame
+        // would be a claim about screen size.
+        compose.onNode(hasScrollAction() and hasAnyDescendant(hasText("Recent")))
+            .performTouchInput { swipeUp() }
         compose.onNodeWithText("Recent").assertIsDisplayed()
         compose.onNodeWithText("Salary").assertIsDisplayed()
     }

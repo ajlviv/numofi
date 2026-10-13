@@ -1,15 +1,14 @@
 package com.financetracker.ui
 
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowDownward
-import androidx.compose.material.icons.filled.ArrowUpward
-import androidx.compose.material.icons.filled.SwapVert
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.vector.ImageVector
 import com.financetracker.model.Transaction
 
 /**
- * How a transaction is dressed on screen: accent colour, row tint, icon and sign.
+ * How a transaction is dressed on screen: accent colour, row tint and sign.
+ *
+ * The *icon* is deliberately not here: a row's shape is its category, and that mapping
+ * lives in [CategoryIcon] — colour says which way the money went, the icon says what it
+ * was for.
  *
  * One place, because this decision is made in four places — the list row, the dashboard row,
  * the detail header and the list summary. Left as a chain of `if (isIncome()) … else …` it
@@ -44,18 +43,6 @@ object TransactionAppearance {
         transaction.isIncome() -> IncomeTint
         transaction.isExpense() -> ExpenseTint
         else -> TransferTint
-    }
-
-    /**
-     * A transfer gets its own icon rather than an arrow.
-     *
-     * The arrows say "earned" and "spent", which is precisely the claim a transfer declines
-     * to make; the direction is carried by the sign instead.
-     */
-    fun icon(transaction: Transaction): ImageVector = when {
-        transaction.isIncome() -> Icons.Default.ArrowUpward
-        transaction.isExpense() -> Icons.Default.ArrowDownward
-        else -> Icons.Default.SwapVert
     }
 
     /**
