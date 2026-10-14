@@ -245,8 +245,12 @@ class BankSyncService @Inject constructor(
         // The masked number is what the user recognises on a statement; the account name is
         // the fallback when the provider withholds it. Both are stored as disclosed, never
         // assembled from anything the bank did not publish.
-        val card = account.maskedPan.filter { it.isNotBlank() }.joinToString(" ")
-            .ifBlank { account.name }
+        //
+        // One number, not all of them: `maskedPan` is a list because a premium account carries
+        // several cards (Monobank's own docs say so), but a row records the card the account
+        // was read as, and joining them would put two card numbers in one label. The account
+        // name is taken from the first entry for the same reason, so the two agree.
+        val card = account.maskedPan.firstOrNull { it.isNotBlank() } ?: account.name
         val title = bankTx.description.ifBlank { bankTx.counterName.orEmpty() }
         val category = bankTx.mcc?.let { "mcc_$it" } ?: CATEGORY_OTHER
         return TransactionEntity(

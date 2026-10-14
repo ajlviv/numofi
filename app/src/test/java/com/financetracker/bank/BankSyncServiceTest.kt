@@ -189,7 +189,7 @@ class BankSyncServiceTest {
     }
 
     @Test
-    fun `blank masked pan entries are ignored rather than joined into a label`() = runTest {
+    fun `blank masked pan entries are skipped, leaving the name as the fallback`() = runTest {
         val dao = FakeDao()
         BankSyncService(dao, bankRepository(), FakeBackupRequests()).sync(
             provider(listOf(account(maskedPan = listOf("", "  ")))),
@@ -200,6 +200,27 @@ class BankSyncServiceTest {
         )
 
         assertEquals("MBUA5390134", dao.stored.single().cardLabel)
+    }
+
+    @Test
+    fun `a premium account's several masked numbers record only the first`() = runTest {
+        // Monobank's docs say maskedPan holds more than one number for premium cards. A row
+        // records the card the account was read as, so the label must stay one number rather
+        // than becoming two — which is what rendered as two cards on every page.
+        val dao = FakeDao()
+        BankSyncService(dao, bankRepository(), FakeBackupRequests()).sync(
+            provider(
+                listOf(
+                    account(maskedPan = listOf("537541******1234", "537541******5678"))
+                )
+            ),
+            auth,
+            "uid-1",
+            0,
+            1_757_000_000_000
+        )
+
+        assertEquals("537541******1234", dao.stored.single().cardLabel)
     }
 
     @Test
