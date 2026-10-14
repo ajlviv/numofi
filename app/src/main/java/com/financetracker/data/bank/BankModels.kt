@@ -56,7 +56,7 @@ object Iso4217 {
         980 to 2, // UAH
         840 to 2, // USD
         978 to 2, // EUR
-        643 to 2, // RUB
+        985 to 2, // PLN
         756 to 2, // CHF
         826 to 2, // GBP
         392 to 0, // JPY
@@ -71,7 +71,7 @@ object Iso4217 {
         980 to "UAH",
         840 to "USD",
         978 to "EUR",
-        643 to "RUB",
+        985 to "PLN",
         756 to "CHF",
         826 to "GBP",
         392 to "JPY"

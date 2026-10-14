@@ -277,11 +277,7 @@ private fun NetWorthCard(
             // reader who picks "This month" sees a month of flows under an all-time total. That
             // is the right behaviour — a windowed total with no bonds in it would not be a net
             // worth — but it is only right if the headline says which it is.
-            Text(
-                text = stringResource(R.string.dash_net_worth_all_time),
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
+
 
             // Flows, converted on the same terms as the total above and inside the same
             // unquoted gate, so the two lines always add up to the figure they explain. Kept
@@ -626,13 +622,7 @@ private fun ScheduledPlansCard(
                     color = MaterialTheme.colorScheme.error
                 )
             }
-            upcoming.rates.date?.let { date ->
-                Text(
-                    text = stringResource(R.string.dash_net_worth_stale, date),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
+
         }
     }
 }
