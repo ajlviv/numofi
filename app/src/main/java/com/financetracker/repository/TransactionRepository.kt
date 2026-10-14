@@ -1,10 +1,12 @@
 package com.financetracker.repository
 
 import com.financetracker.data.TransactionDao
+import com.financetracker.data.TitleCategoryCount
 import com.financetracker.data.backup.BackupReason
 import com.financetracker.data.backup.BackupRequests
 import com.financetracker.model.TransactionEntity
 import com.financetracker.model.TransactionKind
+import com.financetracker.util.CategoryRemap
 import kotlinx.coroutines.flow.Flow
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -64,6 +66,37 @@ class TransactionRepository @Inject constructor(
         )
         backupRequests.requestUpload(BackupReason.TRANSACTION)
         return true
+    }
+
+    /** The distinct (title, category) pairs the account has, driving the bulk-remap section. */
+    fun observeTitleCounts(userId: String): Flow<List<TitleCategoryCount>> =
+        dao.getTitleCategoryCounts(userId)
+
+    /**
+     * Remaps every row whose title matches [title] — folded, exact — to [category], in one
+     * batch, and reports how many rows moved.
+     *
+     * A correction on the model of [setType]: only the category column moves. `searchText`,
+     * `typeUserSet`, the type and the ids are carried through untouched. `searchText` bakes in
+     * the category it was written with and is never rebuilt, so a remapped row's haystack keeps
+     * the old word — the same staleness a renamed bank leaves behind. The category *filter*
+     * reads the column, so filtering by the new category is correct regardless.
+     *
+     * A row already in [category] is skipped, and a call that changes nothing writes nothing and
+     * asks for no backup: SQLite reports rows matched, not rows changed, so the comparison is
+     * made here. The one backup this asks for covers the whole batch.
+     */
+    suspend fun remapCategoryByTitle(userId: String, title: String, category: String): Int {
+        val typed = title.trim()
+        val target = category.trim()
+        if (typed.isEmpty() || target.isEmpty()) return 0
+        val changed = dao.getAllForUserOnce(userId)
+            .filter { CategoryRemap.matches(it.title, typed) && it.category != target }
+            .map { it.copy(category = target) }
+        if (changed.isEmpty()) return 0
+        dao.updateAll(changed)
+        backupRequests.requestUpload(BackupReason.TRANSACTION)
+        return changed.size
     }
 
     /**

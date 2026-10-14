@@ -52,6 +52,11 @@ class StatementImportServiceTest {
         // Unused by the import path.
         override suspend fun insertAll(transactions: List<TransactionEntity>) = error("unused")
         override suspend fun update(transaction: TransactionEntity) = error("unused")
+        override suspend fun getAllForUserOnce(userId: String) = error("unused")
+        override suspend fun updateAll(transactions: List<TransactionEntity>) = error("unused")
+        override fun getTitleCategoryCounts(
+            userId: String
+        ): Flow<List<com.financetracker.data.TitleCategoryCount>> = error("unused")
         override suspend fun delete(id: Long) = error("unused")
         override suspend fun deleteAllForUser(userId: String) = error("unused")
         override fun getAllForUser(userId: String): Flow<List<TransactionEntity>> = error("unused")

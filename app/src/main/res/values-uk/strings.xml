@@ -233,6 +233,16 @@
   <string name="settings_category_use_typed">Використати «%1$s»</string>
   <string name="settings_category_one_off_hint">Разове значення — збережеться лише в цьому рядку, до списку не додається.</string>
   <string name="settings_category_suggested">Запропоновано: %1$s</string>
+  <string name="settings_category_remap_title">Перекласифікувати за назвою</string>
+  <string name="settings_category_remap_blurb">Змінити категорію всіх транзакцій із заданою назвою одразу. Назва збігається точно, без урахування регістру.</string>
+  <string name="settings_category_remap_name_label">Назва транзакції</string>
+  <string name="settings_category_remap_target_label">Нова категорія</string>
+  <string name="settings_category_remap_count">Зміниться транзакцій: %1$d</string>
+  <string name="settings_category_remap_apply">Перекласифікувати</string>
+  <string name="settings_category_remap_confirm_title">Перекласифікувати транзакції</string>
+  <string name="settings_category_remap_confirm">Змінити категорію транзакцій: %1$d?</string>
+  <string name="settings_category_remap_done">Перекласифіковано транзакцій: %1$d</string>
+  <string name="settings_category_remap_none">Немає транзакцій із такою назвою</string>
   <string name="settings_base_currency_pick">Валюта підсумку</string>
   <string name="settings_rates_as_of">Курси НБУ станом на %1$s</string>
   <string name="settings_rates_never">Курси ще не завантажено</string>

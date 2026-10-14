@@ -22,14 +22,17 @@ import com.financetracker.data.rates.ExchangeRateRepository
 import com.financetracker.data.settings.DEFAULT_BASE_CURRENCY
 import com.financetracker.data.settings.SettingsRepository
 import com.financetracker.data.settings.ThemeMode
+import com.financetracker.data.TitleCategoryCount
 import com.financetracker.model.Bank
 import com.financetracker.model.DEFAULT_RECORDABLE_CURRENCY
 import com.financetracker.model.ExchangeRates
 import com.financetracker.repository.AddBankResult
 import com.financetracker.repository.AuthRepository
 import com.financetracker.repository.BankRepository
+import com.financetracker.repository.TransactionRepository
 import com.financetracker.security.LockCapability
 import com.financetracker.security.lockCapability
+import com.financetracker.util.CategoryRemap
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -76,6 +79,7 @@ class SettingsViewModel @Inject constructor(
     private val authRepository: AuthRepository,
     private val bankSyncService: BankSyncService,
     private val bankRepository: BankRepository,
+    private val transactionRepository: TransactionRepository,
     private val uploader: BackupUploader,
     private val backupStore: BackupStore,
     private val restorer: BackupRestorer,
@@ -420,6 +424,79 @@ class SettingsViewModel @Inject constructor(
             settingsRepository.resetCategories()
             _categoryInput.value = ""
             _categoryMessage.value = null
+        }
+    }
+
+    // Bulk remap by transaction name
+
+    private val _remapTitle = MutableStateFlow("")
+    val remapTitle: StateFlow<String> = _remapTitle.asStateFlow()
+
+    private val _remapTarget = MutableStateFlow("")
+    val remapTarget: StateFlow<String> = _remapTarget.asStateFlow()
+
+    private val _remapMessage = MutableStateFlow<SettingsMessage?>(null)
+    val remapMessage: StateFlow<SettingsMessage?> = _remapMessage.asStateFlow()
+
+    /**
+     * The account's (title, category) counts, kept live so the suggestion list and the pending
+     * figure follow a write rather than a screen refresh. Follows the signed-in uid like every
+     * other read here.
+     */
+    private val titleCounts: StateFlow<List<TitleCategoryCount>> = authRepository.currentUid
+        .flatMapLatest { uid ->
+            if (uid == null) flowOf(emptyList()) else transactionRepository.observeTitleCounts(uid)
+        }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+    /** Existing titles matching what has been typed, busiest first, capped for the menu. */
+    val remapSuggestions: StateFlow<List<String>> =
+        combine(titleCounts, _remapTitle) { counts, typed ->
+            val trimmed = typed.trim()
+            if (trimmed.isEmpty()) {
+                emptyList()
+            } else {
+                CategoryRemap.suggestions(counts)
+                    .filter { it.contains(trimmed, ignoreCase = true) }
+                    .filterNot { it.equals(trimmed, ignoreCase = true) }
+                    .take(8)
+            }
+        }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+    /** How many transactions the pending remap would change. */
+    val remapCount: StateFlow<Int> =
+        combine(titleCounts, _remapTitle, _remapTarget) { counts, typed, target ->
+            CategoryRemap.plannedCount(counts, typed, target)
+        }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), 0)
+
+    fun onRemapTitleChange(value: String) {
+        _remapTitle.value = value
+        if (_remapMessage.value != null) _remapMessage.value = null
+    }
+
+    fun onRemapTargetChange(value: String) {
+        _remapTarget.value = value
+        if (_remapMessage.value != null) _remapMessage.value = null
+    }
+
+    /**
+     * Applies the pending remap and reports what happened.
+     *
+     * The count the confirmation showed is the same rule the repository's write reads, so the
+     * figure the user agreed to is the number of rows that move.
+     */
+    fun applyRemap() {
+        val title = _remapTitle.value.trim()
+        val target = _remapTarget.value.trim()
+        if (title.isEmpty() || target.isEmpty()) return
+        viewModelScope.launch {
+            val uid = authRepository.currentUid.first() ?: return@launch
+            val changed = transactionRepository.remapCategoryByTitle(uid, title, target)
+            _remapMessage.value = if (changed > 0) {
+                SettingsMessage.Res(R.string.settings_category_remap_done, listOf(changed))
+            } else {
+                SettingsMessage.Res(R.string.settings_category_remap_none)
+            }
         }
     }
 
