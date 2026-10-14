@@ -142,6 +142,20 @@ interface TransactionDao {
     )
     fun getCategoryRefs(userId: String): Flow<List<String>>
 
+    /**
+     * Every (title, category) pair the user has, with how many rows carry it.
+     *
+     * Drives the bulk remap: the distinct titles become the suggestions and the counts make the
+     * pending-change figure exact without loading every row. Not folded here — SQLite's `lower()`
+     * folds ASCII only and these titles are largely Cyrillic; the caller folds and merges in
+     * Kotlin via [com.financetracker.util.CategoryRemap].
+     */
+    @Query(
+        "SELECT title, category, COUNT(*) AS count FROM transactions " +
+            "WHERE userId = :userId GROUP BY title, category"
+    )
+    fun getTitleCategoryCounts(userId: String): Flow<List<TitleCategoryCount>>
+
     @Query("SELECT * FROM transactions WHERE userId = :userId AND type = :type ORDER BY timestamp DESC, id DESC")
     fun getByType(userId: String, type: String): Flow<List<TransactionEntity>>
 
@@ -176,6 +190,25 @@ interface TransactionDao {
      */
     @Query("SELECT * FROM transactions WHERE id = :id")
     suspend fun getById(id: Long): TransactionEntity?
+
+    /**
+     * Every row for one account, read once rather than observed.
+     *
+     * The bulk remap is a write, not a screen: it needs the rows it will change, not a stream
+     * that keeps them current. Named after
+     * [com.financetracker.data.RecurringPaymentDao.getAllForUserOnce].
+     */
+    @Query("SELECT * FROM transactions WHERE userId = :userId")
+    suspend fun getAllForUserOnce(userId: String): List<TransactionEntity>
+
+    /**
+     * Writes a batch of rows in one statement.
+     *
+     * The bulk remap changes many rows from one decision, so a batched write keeps the single
+     * backup request that follows it honest. Only rows that actually need to move are passed in.
+     */
+    @Update
+    suspend fun updateAll(transactions: List<TransactionEntity>): Int
 
     /**
      * Rows in a time range, for matching statement lines against transactions that

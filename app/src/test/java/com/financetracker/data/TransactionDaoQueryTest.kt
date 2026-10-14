@@ -378,6 +378,38 @@ class TransactionDaoQueryTest {
     }
 
     @Test
+    fun `title category counts group rows and count them`() = runTest {
+        dao.insertAll(
+            listOf(
+                row("Сільпо", 1.0, TransactionType.EXPENSE, BankCode.MONOBANK, "c", category = "mcc_5411"),
+                row("Сільпо", 2.0, TransactionType.EXPENSE, BankCode.MONOBANK, "c", category = "mcc_5411"),
+                row("Сільпо", 3.0, TransactionType.EXPENSE, BankCode.MONOBANK, "c", category = "grocery")
+            )
+        )
+
+        val counts = dao.getTitleCategoryCounts("uid-1").first().filter { it.title == "Сільпо" }
+
+        assertEquals(
+            setOf(
+                TitleCategoryCount("Сільпо", "mcc_5411", 2),
+                TitleCategoryCount("Сільпо", "grocery", 1)
+            ),
+            counts.toSet()
+        )
+    }
+
+    @Test
+    fun `title category counts are scoped to the user`() = runTest {
+        assertEquals(emptyList<TitleCategoryCount>(), dao.getTitleCategoryCounts("uid-2").first())
+    }
+
+    @Test
+    fun `a one-shot read returns every row for the user and no other account's`() = runTest {
+        assertEquals(4, dao.getAllForUserOnce("uid-1").size)
+        assertEquals(emptyList<TransactionEntity>(), dao.getAllForUserOnce("uid-2"))
+    }
+
+    @Test
     fun `results stay newest first`() = runTest {
         val rows = dao.getFiltered("uid-1").first()
         val timestamps = rows.map { it.timestamp }

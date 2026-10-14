@@ -3,6 +3,7 @@ package com.financetracker.ui.settings
 import androidx.annotation.StringRes
 import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -83,6 +84,7 @@ import android.content.Context
 import android.content.ContextWrapper
 import android.text.format.DateUtils
 import com.financetracker.ui.component.SingleChoiceDropdown
+import com.financetracker.ui.component.CategoryDropdown
 import com.financetracker.ui.statement.StatementImportUiState
 import com.financetracker.ui.statement.StatementImportViewModel
 import com.financetracker.ui.statement.formatPreviewDate
@@ -357,6 +359,11 @@ private fun CategoriesTab(
     val categories by viewModel.categories.collectAsStateWithLifecycle()
     val categoryInput by viewModel.categoryInput.collectAsStateWithLifecycle()
     val categoryMessage by viewModel.categoryMessage.collectAsStateWithLifecycle()
+    val remapTitle by viewModel.remapTitle.collectAsStateWithLifecycle()
+    val remapTarget by viewModel.remapTarget.collectAsStateWithLifecycle()
+    val remapSuggestions by viewModel.remapSuggestions.collectAsStateWithLifecycle()
+    val remapCount by viewModel.remapCount.collectAsStateWithLifecycle()
+    val remapMessage by viewModel.remapMessage.collectAsStateWithLifecycle()
 
     SettingsTabContent(scrollState = scrollState, modifier = modifier) {
         SettingsSection(title = stringResource(R.string.settings_categories)) {
@@ -373,6 +380,20 @@ private fun CategoriesTab(
                 onAdd = viewModel::addCategory,
                 onRemove = viewModel::removeCategory,
                 onReset = viewModel::resetCategories
+            )
+        }
+
+        SettingsSection(title = stringResource(R.string.settings_category_remap_title)) {
+            RemapByTitleSection(
+                categories = categories,
+                title = remapTitle,
+                target = remapTarget,
+                suggestions = remapSuggestions,
+                count = remapCount,
+                message = remapMessage,
+                onTitleChange = viewModel::onRemapTitleChange,
+                onTargetChange = viewModel::onRemapTargetChange,
+                onApply = viewModel::applyRemap
             )
         }
     }
@@ -812,6 +833,116 @@ private fun CategoriesSection(
         TextButton(onClick = onReset) {
             Text(stringResource(R.string.settings_categories_reset))
         }
+    }
+}
+
+/**
+ * The bulk remap: a transaction name, a target category, and a count of what would change.
+ *
+ * The name field suggests titles the account already has, so an exact match can be picked
+ * rather than typed; the target reuses [CategoryDropdown] so a one-off value behaves as it does
+ * everywhere else. Applying is gated on the count being non-zero and on a confirmation, because
+ * the write changes many rows and has no undo.
+ */
+@Composable
+private fun RemapByTitleSection(
+    categories: List<String>,
+    title: String,
+    target: String,
+    suggestions: List<String>,
+    count: Int,
+    message: SettingsMessage?,
+    onTitleChange: (String) -> Unit,
+    onTargetChange: (String) -> Unit,
+    onApply: () -> Unit
+) {
+    var confirmOpen by remember { mutableStateOf(false) }
+    var expanded by remember { mutableStateOf(false) }
+
+    Text(
+        text = stringResource(R.string.settings_category_remap_blurb),
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant
+    )
+
+    Box {
+        OutlinedTextField(
+            value = title,
+            onValueChange = {
+                onTitleChange(it)
+                expanded = true
+            },
+            label = { Text(stringResource(R.string.settings_category_remap_name_label)) },
+            modifier = Modifier.fillMaxWidth(),
+            singleLine = true
+        )
+        DropdownMenu(
+            expanded = expanded && suggestions.isNotEmpty(),
+            onDismissRequest = { expanded = false }
+        ) {
+            suggestions.forEach { option ->
+                DropdownMenuItem(
+                    text = { Text(option) },
+                    onClick = {
+                        onTitleChange(option)
+                        expanded = false
+                    }
+                )
+            }
+        }
+    }
+
+    CategoryDropdown(
+        value = target,
+        categories = categories,
+        onValueChange = onTargetChange,
+        label = { Text(stringResource(R.string.settings_category_remap_target_label)) }
+    )
+
+    if (title.isNotBlank() && target.isNotBlank()) {
+        Text(
+            text = stringResource(R.string.settings_category_remap_count, count),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+    }
+
+    message?.let {
+        Text(
+            text = it.resolve(),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.primary
+        )
+    }
+
+    // Disabled on blank inputs or a zero count rather than refusing after the tap, matching
+    // ExclusionRulesSection and CategoriesSection.
+    Button(
+        onClick = { confirmOpen = true },
+        enabled = title.isNotBlank() && target.isNotBlank() && count > 0
+    ) {
+        Text(stringResource(R.string.settings_category_remap_apply))
+    }
+
+    if (confirmOpen) {
+        AlertDialog(
+            onDismissRequest = { confirmOpen = false },
+            title = { Text(stringResource(R.string.settings_category_remap_confirm_title)) },
+            text = { Text(stringResource(R.string.settings_category_remap_confirm, count)) },
+            confirmButton = {
+                Button(onClick = {
+                    confirmOpen = false
+                    onApply()
+                }) {
+                    Text(stringResource(R.string.settings_category_remap_apply))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { confirmOpen = false }) {
+                    Text(stringResource(R.string.cancel))
+                }
+            }
+        )
     }
 }
 

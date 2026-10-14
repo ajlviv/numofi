@@ -253,6 +253,16 @@
   <string name="settings_category_use_typed">Use “%1$s”</string>
   <string name="settings_category_one_off_hint">One-off value — saved on this row only, not added to the list.</string>
   <string name="settings_category_suggested">Suggested: %1$s</string>
+  <string name="settings_category_remap_title">Remap transactions by name</string>
+  <string name="settings_category_remap_blurb">Change the category of every transaction with a given name at once. The name is matched exactly, ignoring case.</string>
+  <string name="settings_category_remap_name_label">Transaction name</string>
+  <string name="settings_category_remap_target_label">New category</string>
+  <string name="settings_category_remap_count">%1$d transactions will change</string>
+  <string name="settings_category_remap_apply">Remap</string>
+  <string name="settings_category_remap_confirm_title">Remap transactions</string>
+  <string name="settings_category_remap_confirm">Change the category of %1$d transactions?</string>
+  <string name="settings_category_remap_done">Remapped %1$d transactions</string>
+  <string name="settings_category_remap_none">No transactions have that name</string>
   <string name="settings_base_currency_pick">Currency to total in</string>
   <string name="settings_rates_as_of">NBU rates as of %1$s</string>
   <string name="settings_rates_never">No rates fetched yet</string>

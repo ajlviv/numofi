@@ -27,6 +27,7 @@ class TransactionRepositoryTest {
     ) : TransactionDao {
         var row = stored
         val updates = mutableListOf<TransactionEntity>()
+        val all = mutableListOf<TransactionEntity>()
 
         override suspend fun insert(transaction: TransactionEntity): Long = 1L
         override suspend fun insertAll(transactions: List<TransactionEntity>): List<Long> =
@@ -37,6 +38,14 @@ class TransactionRepositoryTest {
         }
 
         override suspend fun getById(id: Long): TransactionEntity? = row?.takeIf { it.id == id }
+        override suspend fun getAllForUserOnce(userId: String): List<TransactionEntity> = all
+        override suspend fun updateAll(transactions: List<TransactionEntity>): Int {
+            updates += transactions
+            return transactions.size
+        }
+        override fun getTitleCategoryCounts(
+            userId: String
+        ): Flow<List<com.financetracker.data.TitleCategoryCount>> = error("unused")
         override suspend fun delete(id: Long): Int = 1
         override suspend fun deleteAllForUser(userId: String): Int = 3
         override suspend fun getExternalIdsForUser(userId: String): List<String> = error("unused")
@@ -250,6 +259,97 @@ class TransactionRepositoryTest {
 
         TransactionRepository(FakeDao(transaction(id = 7)), backups)
             .setType(7L, TransactionKind.TRANSFER_IN)
+
+        assertEquals(listOf(BackupReason.TRANSACTION), backups.reasons)
+    }
+
+    // MARK: - Bulk remap
+
+    private fun stored(
+        id: Long,
+        title: String,
+        category: String,
+        searchText: String? = "x",
+        typeUserSet: Boolean = false
+    ) = TransactionEntity(
+        id = id,
+        userId = "uid-1",
+        title = title,
+        amount = -100.0,
+        type = TransactionType.EXPENSE,
+        category = category,
+        timestamp = 1_757_000_000_000L,
+        searchText = searchText,
+        typeUserSet = typeUserSet
+    )
+
+    @Test
+    fun `remapping changes the category of every matching row and nothing else`() = runTest {
+        val dao = FakeDao()
+        dao.all += stored(1, "Сільпо", "mcc_5411", searchText = "сільпо mcc_5411")
+        dao.all += stored(2, "Сільпо", "mcc_5411", searchText = "сільпо mcc_5411", typeUserSet = true)
+        dao.all += stored(3, "АТБ", "mcc_5412")
+
+        val changed = TransactionRepository(dao, FakeBackupRequests())
+            .remapCategoryByTitle("uid-1", "сільпо", "Groceries")
+
+        assertEquals(2, changed)
+        assertEquals(setOf(1L, 2L), dao.updates.map { it.id }.toSet())
+        // Only the category moves; the haystack and the user-set flag survive, as in setType.
+        dao.updates.forEach { row ->
+            assertEquals("Groceries", row.category)
+            assertEquals("сільпо mcc_5411", row.searchText)
+        }
+        assertTrue(dao.updates.single { it.id == 2L }.typeUserSet)
+    }
+
+    @Test
+    fun `remapping a row already in the target writes nothing and asks for no backup`() = runTest {
+        val backups = FakeBackupRequests()
+        val dao = FakeDao()
+        dao.all += stored(1, "Сільпо", "Groceries")
+
+        val changed = TransactionRepository(dao, backups)
+            .remapCategoryByTitle("uid-1", "Сільпо", "Groceries")
+
+        assertEquals(0, changed)
+        assertTrue(dao.updates.isEmpty())
+        assertTrue(backups.reasons.isEmpty())
+    }
+
+    @Test
+    fun `remapping a name nobody has writes nothing and asks for no backup`() = runTest {
+        val backups = FakeBackupRequests()
+        val dao = FakeDao()
+        dao.all += stored(1, "Сільпо", "Groceries")
+
+        val changed = TransactionRepository(dao, backups)
+            .remapCategoryByTitle("uid-1", "Нема такого", "Fuel")
+
+        assertEquals(0, changed)
+        assertTrue(dao.updates.isEmpty())
+        assertTrue(backups.reasons.isEmpty())
+    }
+
+    @Test
+    fun `a blank name or target changes nothing`() = runTest {
+        val dao = FakeDao()
+        dao.all += stored(1, "Сільпо", "mcc_5411")
+
+        val repository = TransactionRepository(dao, FakeBackupRequests())
+        assertEquals(0, repository.remapCategoryByTitle("uid-1", "  ", "Groceries"))
+        assertEquals(0, repository.remapCategoryByTitle("uid-1", "Сільпо", "  "))
+        assertTrue(dao.updates.isEmpty())
+    }
+
+    @Test
+    fun `a remap that changes a row asks for exactly one backup`() = runTest {
+        val backups = FakeBackupRequests()
+        val dao = FakeDao()
+        dao.all += stored(1, "Сільпо", "mcc_5411")
+        dao.all += stored(2, "Сільпо", "mcc_5411")
+
+        TransactionRepository(dao, backups).remapCategoryByTitle("uid-1", "Сільпо", "Groceries")
 
         assertEquals(listOf(BackupReason.TRANSACTION), backups.reasons)
     }
