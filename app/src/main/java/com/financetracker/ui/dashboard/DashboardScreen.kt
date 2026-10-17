@@ -42,18 +42,21 @@ import com.financetracker.R
 import com.financetracker.data.settings.DEFAULT_BASE_CURRENCY
 import com.financetracker.model.BankNames
 import com.financetracker.model.BondPosition
+import com.financetracker.model.CategoryTotals
 import com.financetracker.model.CountedTransactions
 import com.financetracker.model.ExchangeRates
 import com.financetracker.model.ExclusionRules
 import com.financetracker.model.NetWorth
 import com.financetracker.model.Transaction
 import com.financetracker.model.UpcomingTotals
+import com.financetracker.model.categoryTotals
 import com.financetracker.model.netWorth
 import com.financetracker.model.totalsByCurrency
 import com.financetracker.ui.MoneyAmount
 import com.financetracker.ui.TransactionAppearance
 import com.financetracker.ui.component.SingleChoiceDropdown
 import com.financetracker.ui.transaction.TransactionRow
+import com.financetracker.util.CategoryLabel
 import com.financetracker.util.DateFormats
 import com.financetracker.util.MoneyFormat
 import java.time.LocalDate
@@ -119,6 +122,15 @@ fun DashboardScreen(
         rules = rules ?: ExclusionRules()
     )
 
+    // The income and expense figures NetWorthCard shows above it are flows through the same
+    // rate gate; this breakdown says what those flows were spent on, using the very same rows.
+    val breakdown = categoryTotals(
+        rows.filter { period.contains(it.timestamp) },
+        rates,
+        baseCurrency,
+        labelOf = { CategoryLabel.label(it) }
+    )
+
     Column(
         modifier = modifier
             .fillMaxSize()
@@ -148,6 +160,11 @@ fun DashboardScreen(
             baseCurrency = baseCurrency,
             rates = rates,
             onRefresh = onRefreshRates
+        )
+
+        CategoryBreakdownCard(
+            breakdown = breakdown,
+            periodLabel = stringResource(period.labelRes)
         )
 
         // A separate card per holding, not folded into the total above. The total is money at
@@ -290,18 +307,23 @@ private fun NetWorthCard(
                 // The headline is a stock; these are flows, so the selector at the top of the
                 // card windows them and leaves the total above alone. The two share a rate gate
                 // (see netWorth), so the figures always reconcile.
-                Row(modifier = Modifier.fillMaxWidth()) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
                     FlowFigure(
                         label = stringResource(R.string.dash_net_worth_income),
                         amount = income,
                         currencyCode = baseCurrency,
-                        outgoing = false
+                        outgoing = false,
+                        showLabel = false
                     )
                     FlowFigure(
                         label = stringResource(R.string.dash_net_worth_expense),
                         amount = expense,
                         currencyCode = baseCurrency,
-                        outgoing = true
+                        outgoing = true,
+                        showLabel = false
                     )
                 }
             }
@@ -386,13 +408,15 @@ private fun RowScope.FlowFigure(
     label: String,
     amount: Double,
     currencyCode: String,
-    outgoing: Boolean
+    outgoing: Boolean,
+    showLabel: Boolean = true
 ) {
     FlowColumn(
         label = label,
         amount = amount,
         currencyCode = currencyCode,
         outgoing = outgoing,
+        showLabel = showLabel,
         modifier = Modifier.weight(1f)
     )
 }
@@ -404,28 +428,46 @@ private fun FlowColumn(
     amount: Double,
     currencyCode: String,
     outgoing: Boolean,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    showLabel: Boolean = true
 ) {
     val accent = if (outgoing) TransactionAppearance.Expense else TransactionAppearance.Income
-    Column(modifier = modifier) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            FlowArrow(outgoing = outgoing)
-            Spacer(modifier = Modifier.width(6.dp))
-            Text(
-                text = label,
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
+    if (showLabel) {
+        Column(modifier = modifier) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                FlowArrow(outgoing = outgoing)
+                Spacer(modifier = Modifier.width(6.dp))
+                Text(
+                    text = label,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+            MoneyAmount(
+                amount = amount,
+                currencyCode = currencyCode,
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold,
+                color = accent
             )
         }
-        MoneyAmount(
-            amount = amount,
-            currencyCode = currencyCode,
-            style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.SemiBold,
-            color = accent
-        )
+    } else {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = modifier
+        ) {
+            FlowArrow(outgoing = outgoing)
+            Spacer(modifier = Modifier.width(6.dp))
+            MoneyAmount(
+                amount = amount,
+                currencyCode = currencyCode,
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold,
+                color = accent
+            )
+        }
     }
 }
 
@@ -603,13 +645,15 @@ private fun ScheduledPlansCard(
                         label = stringResource(R.string.recurring_upcoming_expense),
                         amount = expense ?: 0.0,
                         currencyCode = baseCurrency,
-                        outgoing = true
+                        outgoing = true,
+                        showLabel = true
                     )
                     FlowColumn(
                         label = stringResource(R.string.recurring_upcoming_income),
                         amount = income ?: 0.0,
                         currencyCode = baseCurrency,
-                        outgoing = false
+                        outgoing = false,
+                        showLabel = true
                     )
                 }
             }
