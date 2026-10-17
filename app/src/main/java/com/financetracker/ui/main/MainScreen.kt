@@ -37,6 +37,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.financetracker.R
+import com.financetracker.ui.bond.BondEditScreen
 import com.financetracker.ui.bond.BondListScreen
 import com.financetracker.ui.dashboard.DashboardScreen
 import com.financetracker.ui.recurring.RecurringScreen
@@ -74,6 +75,12 @@ fun MainScreen(
     // against the live flow means the detail always shows the current row, and it disappears
     // by itself if the row is deleted from anywhere.
     var selectedTransactionId by rememberSaveable { mutableStateOf<Long?>(null) }
+    // The ISIN, not the row, for the same reason as the transaction id above: a row held as a
+    // value is a snapshot of the moment it was tapped, so an edit made here would leave the
+    // screen showing what the terms used to say. Resolving the ISIN against the live positions
+    // means the form always shows the current terms, and it closes by itself if the bond
+    // disappears — its trades deleted elsewhere, taking the row with them.
+    var editingBondIsin by rememberSaveable { mutableStateOf<String?>(null) }
 
     // Back has to be answered by hand, because nothing here is a destination: the Scaffold is
     // swapped rather than pushed, so the dispatcher would otherwise hand the gesture to the
@@ -83,11 +90,12 @@ fun MainScreen(
     // their own handler later in composition, so the innermost one wins and the add form still
     // tells its own ViewModel that it was dismissed.
     BackHandler(
-        enabled = addEntryMode != null || selectedTransactionId != null || selectedTab != 0
+        enabled = addEntryMode != null || selectedTransactionId != null || editingBondIsin != null || selectedTab != 0
     ) {
         when {
             addEntryMode != null -> addEntryMode = null
             selectedTransactionId != null -> selectedTransactionId = null
+            editingBondIsin != null -> editingBondIsin = null
             else -> selectedTab = 0
         }
     }
@@ -167,6 +175,29 @@ fun MainScreen(
         return
     }
 
+    val editingBond = editingBondIsin?.let { isin ->
+        positions.firstOrNull { it.bond.isin == isin }?.bond
+    }
+
+    // The same vanishing-row rule as the transaction above: a bond whose last trade's cash row
+    // was deleted elsewhere is gone from the positions flow, and the form must close rather than
+    // sit on an instrument that no longer exists.
+    LaunchedEffect(editingBondIsin, editingBond) {
+        if (editingBondIsin != null && editingBond == null) {
+            editingBondIsin = null
+        }
+    }
+
+    editingBond?.let { bond ->
+        BondEditScreen(
+            bond = bond,
+            onSaved = { editingBondIsin = null },
+            onCancel = { editingBondIsin = null },
+            modifier = Modifier.fillMaxSize()
+        )
+        return
+    }
+
     val items = MainBottomNavDestination.entries
 
     Scaffold(
@@ -229,7 +260,11 @@ fun MainScreen(
                     )
 
                 MainBottomNavDestination.BONDS ->
-                    BondListScreen(positions = positions, onAddTrade = { addEntryMode = AddEntryMode.BOND })
+                    BondListScreen(
+                        positions = positions,
+                        onAddTrade = { addEntryMode = AddEntryMode.BOND },
+                        onEdit = { bond -> editingBondIsin = bond.isin }
+                    )
 
                 MainBottomNavDestination.SCHEDULED ->
                     RecurringScreen()

@@ -83,4 +83,15 @@ interface BondDao {
 
     @Query("SELECT * FROM bond_trades WHERE transactionId = :transactionId LIMIT 1")
     suspend fun getTradeForTransaction(transactionId: Long): BondTradeEntity?
+
+    /**
+     * How many trades exist for an instrument, across every account.
+     *
+     * Deliberately not scoped to a uid: a bond's denomination is shared, and every account's
+     * trade prices are quoted in it, so changing it would reinterpret another account's rows
+     * too. A count rather than the holding, because a fully-sold bond still has trades whose
+     * money figures are denominated in the currency being changed.
+     */
+    @Query("SELECT COUNT(*) FROM bond_trades WHERE isin = :isin")
+    suspend fun tradeCount(isin: String): Int
 }

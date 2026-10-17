@@ -89,6 +89,59 @@ class BondRepository @Inject constructor(
     }
 
     /**
+     * Whether an instrument has any trade at all, across every account.
+     *
+     * The edit form's currency field is locked on this. Not [heldQuantity]'s zero: a fully-sold
+     * bond holds nothing but its trades' prices are still money in the bond's own currency, so
+     * the denomination is just as fixed for it.
+     */
+    suspend fun hasTrades(isin: String): Boolean =
+        bondDao.tradeCount(BondMath.normaliseIsin(isin)) > 0
+
+    /**
+     * Corrects a bond's descriptive terms, or reports that there was nothing to correct.
+     *
+     * The ISIN is not among them: it is the primary key and what every trade refers to, so a
+     * corrected one is a different instrument and belongs in as a new row. This is the only
+     * writer of a stored bond's terms — [recordTrade] re-reads them rather than restating them —
+     * so an edit here is what every position, payout and dashboard card is folded against.
+     *
+     * Two refusals matter more than the write:
+     *
+     * - **Nothing changed is not a write.** The row is compared field by field first, and an
+     *   identical form neither touches the DAO nor asks for a backup, because a write that
+     *   changes nothing must not put an upload on the wire.
+     * - **The denomination is fixed once a trade exists.** Every trade's price and НКД are money
+     *   in the bond's currency, so changing it would silently re-read those figures against a
+     *   different one. The whole edit is refused rather than half-applied, and the count is a
+     *   count rather than the holding so a fully-sold bond is covered too.
+     */
+    suspend fun updateTerms(bond: Bond): UpdateTermsResult {
+        val isin = BondMath.normaliseIsin(bond.isin)
+        val stored = bondDao.getByIsin(isin) ?: return UpdateTermsResult.Unchanged
+
+        if (stored.nominalCurrency != bond.nominalCurrency && bondDao.tradeCount(isin) > 0) {
+            return UpdateTermsResult.CurrencyLocked
+        }
+
+        val updated = stored.copy(
+            name = bond.name.trim(),
+            nominal = bond.nominal,
+            nominalCurrency = bond.nominalCurrency,
+            couponPercent = bond.couponPercent,
+            couponPeriodMonths = bond.couponPeriodMonths,
+            maturityDate = bond.maturityDate
+        )
+        if (updated == stored) return UpdateTermsResult.Unchanged
+
+        bondDao.update(updated)
+        // Asked for outside any transaction, and only after a real change: the upload runs on
+        // its own scope and could otherwise read the database before this commit landed.
+        backupRequests.requestUpload(BackupReason.BOND)
+        return UpdateTermsResult.Updated
+    }
+
+    /**
      * Records a trade and the cash that moved with it, or nothing at all.
      *
      * Every read and every write happens inside one database transaction, including the
@@ -314,4 +367,24 @@ sealed interface RecordTradeResult {
      * just refusing.
      */
     data class Oversell(val held: Int) : RecordTradeResult
+}
+
+/** The outcome of [BondRepository.updateTerms]. */
+sealed interface UpdateTermsResult {
+
+    /** The stored terms now read as the form did, and a backup was asked for. */
+    data object Updated : UpdateTermsResult
+
+    /**
+     * There was nothing to write: either every field already matched, or no such bond is
+     * stored. Deliberately not a failure — a form saved without a change is not an error, and
+     * there is nothing to upload.
+     */
+    data object Unchanged : UpdateTermsResult
+
+    /**
+     * The nominal currency would have changed on a bond that already has trades, which would
+     * reinterpret every stored price and НКД against a different currency. Nothing was written.
+     */
+    data object CurrencyLocked : UpdateTermsResult
 }

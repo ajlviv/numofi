@@ -138,6 +138,7 @@
   <string name="add_error_price_large">Ця ціна виглядає неправильно — облігація не торгується вище за подвійний номінал</string>
   <string name="add_error_nominal">Номінал має бути вище нуля</string>
   <string name="add_error_coupon_negative">Купон не може бути від’ємним</string>
+  <string name="add_error_coupon_unreadable">Не вдалося прочитати купон</string>
   <string name="add_error_bond_not_saved">Не вдалося зберегти операцію</string>
   <string name="add_error_accrued_unreadable">Не вдалося прочитати накопичений відсоток</string>
   <string name="add_error_commission_unreadable">Не вдалося прочитати комісію</string>
@@ -157,6 +158,9 @@
   <string name="bond_coupon_period">Купон %1$.2f%% кожні %2$d міс.</string>
   <string name="bond_coupon_only">Купон %1$.2f%%</string>
   <string name="bond_matures">погашення %1$s</string>
+  <string name="bond_edit_title">Редагувати облігацію</string>
+  <string name="bond_edit_currency_locked">Заблоковано: в облігації вже є угоди у %1$s</string>
+  <string name="bond_edit_currency_locked_message">Валюту не можна змінити, поки в облігації є угоди</string>
   <string name="drop_n_selected">%1$s · %2$d</string>
   <string name="auth_error_no_account_id">Обліковий запис Google не має ідентифікатора</string>
   <string name="auth_error_no_result">Вхід Google не повернув жодного результату</string>
