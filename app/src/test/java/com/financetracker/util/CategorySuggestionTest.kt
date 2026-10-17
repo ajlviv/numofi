@@ -23,10 +23,12 @@ class CategorySuggestionTest {
     }
 
     @Test
-    fun `an mcc key with no list match falls back to Other`() {
+    fun `an mcc key with no list match keeps the label it maps to`() {
+        // The label is a bucket the app can show, so dropping it to "Other" hides what the
+        // bank actually reported. "Other" is only a suggestion when the label is blank.
         assertEquals(
-            "Other",
-            CategorySuggestion.suggest("mcc_9999", "TORUS", categories)
+            "Restaurant",
+            CategorySuggestion.suggest("mcc_5812", "SOME CAFE", categories)
         )
     }
 
@@ -49,9 +51,11 @@ class CategorySuggestionTest {
     }
 
     @Test
-    fun `an unknown title falls back through the label to Other`() {
+    fun `an unknown title keeps the Imported label rather than collapsing to Other`() {
+        // A statement line carries no MCC, so its honest bucket is "Imported"; filing it as
+        // "Other" would claim the user classified it and pile every import into one slice.
         assertEquals(
-            "Other",
+            "Imported",
             CategorySuggestion.suggest("imported", "SOMETHING NEW", categories)
         )
     }

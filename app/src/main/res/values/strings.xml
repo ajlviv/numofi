@@ -420,4 +420,9 @@
   <string name="settings_app_lock_unlock">Unlock</string>
   <string name="dash_scheduled_plans">Scheduled plans</string>
   <string name="dash_scheduled_none">Nothing scheduled in the next 14 days.</string>
+  <!-- Category breakdown donut on the dashboard. -->
+  <string name="dash_categories_title">By category</string>
+  <string name="dash_categories_period">Period: %1$s</string>
+  <string name="dash_categories_empty_income">No income in this period</string>
+  <string name="dash_categories_empty_expense">No spending in this period</string>
 </resources>

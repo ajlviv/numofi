@@ -2,6 +2,7 @@ package com.financetracker.statement
 
 import com.financetracker.util.CategoryLabel
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
@@ -66,5 +67,28 @@ class CategoryLabelTest {
     @Test
     fun `is case insensitive about the prefix`() {
         assertEquals("Groceries", CategoryLabel.label("MCC_5499"))
+    }
+
+    @Test
+    fun `keeps a canonical label unchanged so a second pass is a no-op`() {
+        // Rows are stored under the canonical English label. Running one back through label()
+        // must return it byte-identically: prettify would otherwise produce "Fast Food" and
+        // "Home & Furniture", which match neither the resource table nor the icon table.
+        val canonical = listOf(
+            "Fast food", "Home & furniture", "Travel & transport", "Groceries",
+            "Bar & nightlife", "Toys & games", "Phone & data", "Accounting & legal",
+            "Imported", "Other", "Investments"
+        )
+        canonical.forEach { label ->
+            assertEquals(label, CategoryLabel.label(label))
+        }
+    }
+
+    @Test
+    fun `a canonical label still resolves to its translation`() {
+        // Idempotence is not just cosmetic: the resolved label is what resource() and the icon
+        // table are keyed by, so returning the canonical form is what makes both hit.
+        assertTrue(CategoryLabel.resource("Fast food") != 0)
+        assertTrue(CategoryLabel.resource("Home & furniture") != 0)
     }
 }
