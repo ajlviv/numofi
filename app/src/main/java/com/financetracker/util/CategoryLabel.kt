@@ -85,6 +85,15 @@ object CategoryLabel {
             return forMcc(code)
         }
 
+        // A label this object already produces must come back unchanged. Rows are stored under
+        // the canonical English label (`"Fast food"`, `"Home & furniture"`), and a caller that
+        // runs a stored label back through [label] — the dashboard groups on it before resolving
+        // it, an icon resolves it too — would otherwise get `"Fast Food"`/`"Home & Furniture"`
+        // from [prettify], which is in neither the resource table nor the icon table. That is
+        // the bug this lookup closes: it makes [label] idempotent, so a canonical label is
+        // translated and given its icon on every path rather than only the first.
+        CANONICAL_BY_FOLDED[key.lowercase(Locale.ROOT)]?.let { return it }
+
         return when (key.lowercase(Locale.ROOT)) {
             "imported" -> "Imported"
             "other" -> "Other"
@@ -179,6 +188,16 @@ object CategoryLabel {
         "Investments" to R.string.cat_investments,
         "Uncategorised" to R.string.cat_uncategorised
     )
+
+    /**
+     * The canonical label, keyed by its [Locale.ROOT]-folded form, so a stored label can be
+     * recognised and returned unchanged by [label]. Built from [RESOURCE_BY_LABEL] — the closed
+     * set of labels that reach a translation — because that is exactly the set an idempotent
+     * round trip has to preserve. Folded rather than matched exactly so a label the user typed
+     * in a different case still resolves to the one the tables know.
+     */
+    private val CANONICAL_BY_FOLDED: Map<String, String> =
+        RESOURCE_BY_LABEL.keys.associateBy { it.lowercase(Locale.ROOT) }
 
     private fun prettify(key: String): String =
         key.split('_', '-', ' ')

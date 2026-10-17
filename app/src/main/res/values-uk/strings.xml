@@ -397,4 +397,9 @@
   <string name="settings_app_lock_locked_title">Finance Tracker заблоковано</string>
   <string name="settings_app_lock_locked_body">Ваші баланси приховані, доки ви не розблокуєте застосунок.</string>
   <string name="settings_app_lock_unlock">Розблокувати</string>
+  <!-- Розподіл витрат і надходжень за категорією на інструменті. -->
+  <string name="dash_categories_title">За категорією</string>
+  <string name="dash_categories_period">Період: %1$s</string>
+  <string name="dash_categories_empty_income">Немає надходжень за цей період</string>
+  <string name="dash_categories_empty_expense">Немає витрат за цей період</string>
 </resources>

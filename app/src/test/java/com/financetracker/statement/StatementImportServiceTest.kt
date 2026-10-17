@@ -403,7 +403,7 @@ class StatementImportServiceTest {
     }
 
     @Test
-    fun `an unknown title falls back to Other and stays searchable by it`() = runTest {
+    fun `an unknown title keeps the Imported label and stays searchable by it`() = runTest {
         val dao = FakeDao()
         StatementImportService(dao, bankRepository(), FakeBackupRequests()).import(
             "uid-1",
@@ -412,8 +412,8 @@ class StatementImportServiceTest {
         )
 
         val stored = dao.stored.single()
-        assertEquals("Other", stored.category)
-        assertTrue(stored.searchText!!.contains("other"))
+        assertEquals("Imported", stored.category)
+        assertTrue(stored.searchText!!.contains("imported"))
     }
 
     @Test

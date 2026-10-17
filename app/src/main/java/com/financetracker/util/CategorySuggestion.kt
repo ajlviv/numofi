@@ -17,8 +17,8 @@ import java.util.Locale
  * - anything else keeps the history value for an identical title (folded with
  *   [Locale.ROOT]) when that value is still usable, i.e. it is in the list or is a custom
  *   one-off the user typed before;
- * - otherwise the first list entry that the label matches, else "Other" when present, else
- *   the list head, else the label itself.
+ * - otherwise the label itself, so the row keeps the bucket it actually belongs to — the MCC's
+ *   name, or "Imported" for a statement line — rather than being collapsed into "Other".
  *
  * Pure and JVM-testable: no Android, no database. History is a caller-supplied map of
  * folded title to stored category, so the database query stays at the call site.
@@ -81,8 +81,17 @@ object CategorySuggestion {
     private fun findOption(options: List<String>, label: String): String? =
         options.firstOrNull { it.equals(label, ignoreCase = true) }
 
+    /**
+     * What a row is filed under when nothing in the user's list matches.
+     *
+     * The label itself, not "Other". The label is a real bucket the app can show — `mcc_5912`
+     * is "Pharmacy", a statement line is "Imported" — so keeping it tells the reader what the
+     * row is and lets the donut break it out as a slice. Collapsing it to the literal "Other"
+     * was how every unmatched import ended up in one undifferentiated pile while the row still
+     * knew better: it made the dashboard claim the user had chosen "Other" for spending the
+     * app simply could not classify. "Other" stays in the list for the user to pick by hand.
+     */
     private fun fallback(options: List<String>, label: String): String {
-        findOption(options, "Other")?.let { return it }
         if (label.isNotBlank()) return label
         return options.firstOrNull() ?: "Other"
     }
