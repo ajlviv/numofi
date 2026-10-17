@@ -160,6 +160,7 @@
   <string name="add_error_price_large">That price looks wrong — a bond does not trade at more than twice its nominal</string>
   <string name="add_error_nominal">Nominal must be above zero</string>
   <string name="add_error_coupon_negative">Coupon cannot be negative</string>
+  <string name="add_error_coupon_unreadable">Could not read the coupon</string>
   <string name="add_error_bond_not_saved">The trade could not be saved</string>
   <string name="add_error_accrued_unreadable">Could not read the accrued interest</string>
   <string name="add_error_commission_unreadable">Could not read the commission</string>
@@ -178,6 +179,9 @@
   <string name="bond_coupon_period">Coupon %1$.2f%% every %2$d months</string>
   <string name="bond_coupon_only">Coupon %1$.2f%%</string>
   <string name="bond_matures">matures %1$s</string>
+  <string name="bond_edit_title">Edit bond</string>
+  <string name="bond_edit_currency_locked">Locked: this bond already has trades in %1$s</string>
+  <string name="bond_edit_currency_locked_message">The currency cannot change while the bond has trades</string>
   <string name="drop_n_selected">%1$s · %2$d</string>
   <string name="auth_error_no_account_id">Google account has no id</string>
   <string name="auth_error_no_result">Google sign-in returned no result</string>

@@ -32,7 +32,10 @@ enum class BackupReason {
     BANK,
 
     /** A recurring payment schedule was added, changed, archived or removed. */
-    RECURRING
+    RECURRING,
+
+    /** A bond's descriptive terms were edited. */
+    BOND
 }
 
 /**

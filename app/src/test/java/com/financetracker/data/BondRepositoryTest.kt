@@ -11,6 +11,7 @@ import com.financetracker.model.totalsByCurrency
 import com.financetracker.model.TransferDirection
 import com.financetracker.repository.BondRepository
 import com.financetracker.repository.RecordTradeResult
+import com.financetracker.repository.UpdateTermsResult
 import java.util.concurrent.CopyOnWriteArrayList
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -380,6 +381,97 @@ class BondRepositoryTest {
         buy(quantity = 1, price = 1000.0)
 
         assertEquals(9.5, db.bondDao().getBondsOnce().single().couponPercent!!, 0.0)
+    }
+
+    // MARK: - Editing terms
+
+    @Test
+    fun `editing the terms writes them and leaves the isin alone`() = runTest {
+        buy()
+
+        val result = repo.updateTerms(
+            bond.copy(name = "ОвДП 25/А", nominal = 1080.0, couponPercent = 11.0, maturityDate = 1_800_000_000_000)
+        )
+
+        assertEquals(UpdateTermsResult.Updated, result)
+        val stored = db.bondDao().getBondsOnce().single()
+        assertEquals("UA9000012345", stored.isin)
+        assertEquals("ОвДП 25/А", stored.name)
+        assertEquals(1080.0, stored.nominal, 0.0)
+        assertEquals(11.0, stored.couponPercent!!, 0.0)
+        assertEquals(1_800_000_000_000, stored.maturityDate)
+    }
+
+    @Test
+    fun `saving the terms unchanged asks for no backup`() = runTest {
+        // The no-op invariant: a save that changed nothing is not a write, and must not put an
+        // upload on the wire. `bond` above is exactly what the first trade stored.
+        buy()
+        backups.reasons.clear()
+
+        val result = repo.updateTerms(bond)
+
+        assertEquals(UpdateTermsResult.Unchanged, result)
+        assertEquals(emptyList<BackupReason>(), backups.reasons)
+    }
+
+    @Test
+    fun `a real terms edit asks for exactly one bond backup`() = runTest {
+        buy()
+        backups.reasons.clear()
+
+        repo.updateTerms(bond.copy(couponPercent = 10.0))
+
+        assertEquals(listOf(BackupReason.BOND), backups.reasons)
+    }
+
+    @Test
+    fun `changing the currency of a bond with trades is refused and writes nothing`() = runTest {
+        buy(quantity = 1)
+        backups.reasons.clear()
+
+        val result = repo.updateTerms(bond.copy(nominalCurrency = "USD", name = "Renamed"))
+
+        assertEquals(UpdateTermsResult.CurrencyLocked, result)
+        val stored = db.bondDao().getBondsOnce().single()
+        assertEquals("UAH", stored.nominalCurrency)
+        // The whole edit is refused, not just the currency: a half-applied change is worse than
+        // none, and the name is part of the same saved form.
+        assertEquals("ОвДП 24/Б", stored.name)
+        assertEquals(emptyList<BackupReason>(), backups.reasons)
+    }
+
+    @Test
+    fun `changing the currency of a fully sold bond is still refused`() = runTest {
+        // A count, not the holding: the trades are gone from the position but their prices are
+        // still money in the old currency.
+        buy(quantity = 2)
+        sell(quantity = 2)
+        assertEquals(0, repo.heldQuantity("uid-1", bond.isin))
+
+        val result = repo.updateTerms(bond.copy(nominalCurrency = "USD"))
+
+        assertEquals(UpdateTermsResult.CurrencyLocked, result)
+        assertEquals("UAH", db.bondDao().getBondsOnce().single().nominalCurrency)
+    }
+
+    @Test
+    fun `a later trade still does not overwrite an edited term`() = runTest {
+        // The edit path is a second writer of terms; the trade path must still refuse to be one.
+        buy()
+        repo.updateTerms(bond.copy(couponPercent = 12.0))
+        buy(quantity = 1, price = 1000.0)
+
+        assertEquals(12.0, db.bondDao().getBondsOnce().single().couponPercent!!, 0.0)
+    }
+
+    @Test
+    fun `editing a bond that is not stored is a no-op`() = runTest {
+        val result = repo.updateTerms(bond.copy(name = "Николи не купувалась"))
+
+        assertEquals(UpdateTermsResult.Unchanged, result)
+        assertTrue(db.bondDao().getBondsOnce().isEmpty())
+        assertEquals(emptyList<BackupReason>(), backups.reasons)
     }
 
     @Test

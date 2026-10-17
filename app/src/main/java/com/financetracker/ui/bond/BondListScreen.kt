@@ -1,5 +1,6 @@
 package com.financetracker.ui.bond
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -32,6 +33,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.financetracker.R
+import com.financetracker.model.Bond
 import com.financetracker.model.BondPosition
 import com.financetracker.ui.MoneyAmount
 import com.financetracker.util.DateFormats
@@ -43,15 +45,17 @@ import java.time.format.DateTimeFormatter
 /**
  * Holdings, one card per instrument.
  *
- * Deliberately not editable. A position is folded from trades and is not a thing that can be
- * corrected in place; the only way to change one is to record the trade that changes it, so
- * there is no edit affordance here to imply otherwise.
+ * A position is folded from trades and is not a thing that can be corrected in place: the only
+ * way to change one is to record the trade that changes it. Its terms are a different matter —
+ * a name typo or a coupon read wrong off a broker's screen is the user's to fix — so a card
+ * opens the terms-edit screen. The card's figures stay read-only either way.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun BondListScreen(
     positions: List<BondPosition>,
     onAddTrade: () -> Unit,
+    onEdit: (Bond) -> Unit,
     modifier: Modifier = Modifier
 ) {
     Scaffold(
@@ -104,7 +108,7 @@ fun BondListScreen(
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 items(items = positions, key = { it.bond.isin }) { position ->
-                    PositionCard(position = position)
+                    PositionCard(position = position, onClick = { onEdit(position.bond) })
                 }
             }
         }
@@ -112,16 +116,23 @@ fun BondListScreen(
 }
 
 @Composable
-private fun PositionCard(position: BondPosition) {
+private fun PositionCard(position: BondPosition, onClick: () -> Unit) {
     // Remembered rather than a top-level val: the locale is read once per composition instead
     // of once per class load, so a user who changes it in system settings sees the change.
     val dateFormat = remember { DateFormats.date() }
     val currency = position.bond.nominalCurrency
     val gain = position.unrealised >= 0
     val gainColor = if (gain) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error
+    val editLabel = stringResource(R.string.bond_edit_title)
 
     Card(
-        modifier = Modifier.fillMaxWidth(),
+        // The whole card opens the edit screen. A trailing pencil would be a smaller tap target
+        // to say the same thing, and the card has nothing else to do when tapped. `clickable`
+        // rather than the Card's own onClick overload because only this one carries the
+        // accessibility label.
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClickLabel = editLabel, onClick = onClick),
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
