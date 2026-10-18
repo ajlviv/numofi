@@ -8,12 +8,12 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.withStyle
+import com.financetracker.ui.theme.isDark
 import com.financetracker.util.MoneyFormat
 
 /**
@@ -92,10 +92,12 @@ private const val TABULAR_FIGURES = "tnum"
  * setting the user picks, so a phone left in system light mode with the app forced to Dark was
  * getting the light-surface mustard on a dark card — the two answers disagree exactly when the
  * setting is not the system's, and the setting is the one that describes what is on screen.
+ * The test itself is [isDark], shared with the amount accents and the chart palette so the
+ * three cannot drift apart on where "dark" starts.
  */
 @Composable
 private fun defaultSymbolColor(): Color =
-    if (MaterialTheme.colorScheme.surface.luminance() < 0.5f) {
+    if (MaterialTheme.colorScheme.surface.isDark()) {
         Color(0xFFF2C744)
     } else {
         Color(0xFF8A6D00)

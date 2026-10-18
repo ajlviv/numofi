@@ -428,7 +428,7 @@ private fun FlowColumn(
     modifier: Modifier = Modifier,
     showLabel: Boolean = true
 ) {
-    val accent = if (outgoing) TransactionAppearance.Expense else TransactionAppearance.Income
+    val accent = TransactionAppearance.accentOn(outgoing = outgoing)
     if (showLabel) {
         Column(modifier = modifier) {
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -543,7 +543,7 @@ private fun InvestmentCard(
                 InvestmentFigure(
                     label = stringResource(R.string.dash_unrealised),
                     value = withSign(unrealised, currencyCode),
-                    color = if (gain) TransactionAppearance.Income else TransactionAppearance.Expense
+                    color = TransactionAppearance.accentOn(outgoing = !gain)
                 )
                 if (annualCoupon > 0.0) {
                     InvestmentFigure(

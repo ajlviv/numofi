@@ -112,7 +112,7 @@ fun TransactionDetailScreen(
                 currencyCode = transaction.currencyCode,
                 style = MaterialTheme.typography.headlineLarge,
                 fontWeight = FontWeight.Bold,
-                color = TransactionAppearance.accent(transaction),
+                color = TransactionAppearance.accentOn(transaction),
                 prefix = TransactionAppearance.signPrefix(transaction)
             )
 

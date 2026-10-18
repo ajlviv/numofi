@@ -247,15 +247,25 @@ private fun SummaryPanel(summary: TransactionSummary) {
                     color = MaterialTheme.colorScheme.error
                 )
             } else {
-                SummaryAmount(stringResource(R.string.income), income, converted.base, TransactionAppearance.Income)
-                SummaryAmount(stringResource(R.string.expenses), expense, converted.base, TransactionAppearance.Expense)
+                SummaryAmount(
+                    stringResource(R.string.income),
+                    income,
+                    converted.base,
+                    TransactionAppearance.accentOn(outgoing = false)
+                )
+                SummaryAmount(
+                    stringResource(R.string.expenses),
+                    expense,
+                    converted.base,
+                    TransactionAppearance.accentOn(outgoing = true)
+                )
                 // A negative net is the number that matters, so it is the one that changes
                 // colour; the other two are coloured by what they always mean.
                 SummaryAmount(
                     label = stringResource(R.string.list_net),
                     amount = balance,
                     currencyCode = converted.base,
-                    color = if (balance < 0) TransactionAppearance.Expense else TransactionAppearance.Income
+                    color = TransactionAppearance.accentOn(outgoing = balance < 0)
                 )
             }
 
