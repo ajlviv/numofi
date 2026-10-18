@@ -54,6 +54,7 @@ import com.financetracker.model.UpcomingTotals
 import com.financetracker.ui.MoneyAmount
 import com.financetracker.util.DateFormats
 import com.financetracker.util.MoneyFormat
+import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
 
@@ -367,6 +368,15 @@ private fun ScheduleCard(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = stringResource(
+                            R.string.recurring_start_date,
+                            Instant.ofEpochMilli(schedule.startDate)
+                                .atZone(zone).toLocalDate().format(dateFormat)
+                        ),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
                     nextDue(schedule, zone)?.let { next ->
                         Text(
                             text = stringResource(

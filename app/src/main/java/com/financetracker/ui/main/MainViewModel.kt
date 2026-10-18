@@ -189,6 +189,6 @@ class MainViewModel @Inject constructor(
     }
 
     private companion object {
-        const val DASHBOARD_UPCOMING_DAYS = 14L
+        const val DASHBOARD_UPCOMING_DAYS = 30L
     }
 }

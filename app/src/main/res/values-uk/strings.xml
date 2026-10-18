@@ -382,6 +382,7 @@
   <string name="recurring_unarchive_cd">Повернути з архіву %1$s</string>
   <string name="recurring_delete_cd">Видалити %1$s</string>
   <string name="recurring_next_due">Далі: %1$s</string>
+  <string name="recurring_start_date">Початок: %1$s</string>
   <string name="recurring_upcoming_title">Заплановано</string>
   <string name="recurring_period_range">%1$s – %2$s</string>
   <string name="recurring_period_30_days">30 днів</string>
