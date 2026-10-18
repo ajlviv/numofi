@@ -231,6 +231,26 @@ data class BondPosition(
     val averageCost: Double?,
     /** The price of the most recent trade, which is the only price this app knows. */
     val lastPrice: Double?,
+    /**
+     * The account the most recent trade settled through, or null when it had none.
+     *
+     * Carried so the record-redemption button can settle where the bonds were held: a
+     * redemption lands in the same account, and the most recent trade is the only bank this
+     * app knows. Null when the most recent trade had no bank, which is a state the trade
+     * form already handles.
+     */
+    val lastBankCode: String? = null,
+    /**
+     * What the bonds already sold or redeemed brought in over what they cost, in the bond's
+     * currency. Zero while nothing has left the holding.
+     *
+     * Realised, not projected: proceeds of the bonds actually taken (commission and НКД
+     * settled inside them, as [BondMath.tradeTotal] settles them) less the share of the cost
+     * basis they carried away. The one figure answering "what did this position finally
+     * leave me with" — the answer is not in net worth, which counted the nominal all along,
+     * and not in income, which counts coupons only, because a return of capital is neither.
+     */
+    val realised: Double = 0.0,
     /** Null when the bond has no recorded coupon, see [BondMath.annualCouponIncome]. */
     val annualCouponIncome: Double?,
     /**

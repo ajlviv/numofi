@@ -286,7 +286,9 @@ object BondMath {
 
         var quantity = 0
         var cost = 0.0
+        var realised = 0.0
         var lastPrice: Double? = null
+        var lastBankCode: String? = null
 
         for (trade in trades) {
             val total = tradeTotal(trade)
@@ -301,11 +303,21 @@ object BondMath {
                 BondTradeSide.SELL, BondTradeSide.REDEMPTION -> {
                     val gone = minOf(trade.quantity, quantity)
                     val proportion = if (quantity == 0) 0.0 else gone.toDouble() / quantity
-                    cost -= cost * proportion
+                    val removedCost = cost * proportion
+                    // Proceeds of the bonds actually taken, so a clamped sale — more sold
+                    // than held, which only a hand-edited database reaches — gains nothing
+                    // on bonds that were never held. Otherwise the whole trade's proceeds:
+                    // commission and НКД are settled inside [tradeTotal], exactly as they
+                    // are in the cost basis this is measured against.
+                    val removedProceeds =
+                        if (trade.quantity == 0) 0.0 else total * gone / trade.quantity
+                    realised += removedProceeds - removedCost
+                    cost -= removedCost
                     quantity -= gone
                 }
             }
             lastPrice = trade.price
+            lastBankCode = trade.bankCode
         }
 
         // A fully closed position is left in place with a quantity of zero rather than
@@ -319,12 +331,26 @@ object BondMath {
             cost = cost,
             averageCost = average,
             lastPrice = lastPrice,
+            lastBankCode = lastBankCode,
+            realised = realised,
             annualCouponIncome = annualCouponIncome(quantity, bond.nominal, bond.couponPercent),
             // The first trade, not the most recent one: a projected payout is earned over the
             // whole time the bonds were held, so it starts where the holding did.
             heldSince = trades.minOf { it.tradeDate }
         )
     }
+
+    /**
+     * True once the maturity day has arrived, for showing the record-redemption affordance.
+     *
+     * The maturity date is stored at the start of its day (see how the trade form writes it),
+     * so a bond maturing today is already past its maturity at any hour of that day. The
+     * credit often lands on the day itself, and a button that appears that morning costs
+     * nothing: the user taps it when the money arrives. A null date is never past — the user
+     * has not recorded a maturity, so there is nothing to wait for or to notice.
+     */
+    fun isPastMaturity(maturityMillis: Long?, nowMillis: Long): Boolean =
+        maturityMillis != null && maturityMillis <= nowMillis
 
     /**
      * Upper-cases and trims an ISIN.

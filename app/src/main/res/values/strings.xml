@@ -172,13 +172,15 @@
   <string name="bond_figure_held">Held</string>
   <string name="bond_figure_cost_per">Cost/bond</string>
   <string name="bond_figure_unrealised">Unrealised</string>
-  <string name="bond_fully_sold">No longer held. Kept here because the trades are.</string>
   <string name="bond_expected_at_maturity">Principal %1$s + coupon %2$s × %3$d = %4$s at maturity</string>
   <string name="bond_expected_at_maturity_prorated">Principal %1$s + coupon %2$s = %3$s at maturity</string>
   <string name="bond_coupon_full">Coupon %1$.2f%% every %2$d months — %3$s a year</string>
   <string name="bond_coupon_period">Coupon %1$.2f%% every %2$d months</string>
   <string name="bond_coupon_only">Coupon %1$.2f%%</string>
   <string name="bond_matures">matures %1$s</string>
+  <string name="bond_matured">matured %1$s</string>
+  <string name="bond_record_redemption">Record redemption</string>
+  <string name="bond_realised">Realised %1$s</string>
   <string name="bond_edit_title">Edit bond</string>
   <string name="bond_edit_currency_locked">Locked: this bond already has trades in %1$s</string>
   <string name="bond_edit_currency_locked_message">The currency cannot change while the bond has trades</string>

@@ -44,6 +44,7 @@ import com.financetracker.ui.recurring.RecurringScreen
 import com.financetracker.ui.settings.SettingsScreen
 import com.financetracker.ui.transaction.AddEntryMode
 import com.financetracker.ui.transaction.AddTransactionScreen
+import com.financetracker.ui.transaction.RedemptionPrefill
 import com.financetracker.ui.transaction.TransactionDetailScreen
 import com.financetracker.ui.transaction.TransactionListScreen
 
@@ -69,6 +70,13 @@ fun MainScreen(
     // lines below already was, which made the inconsistency easier to miss than it looks.
     var selectedTab by rememberSaveable { mutableStateOf(0) }
     var addEntryMode by rememberSaveable { mutableStateOf<AddEntryMode?>(null) }
+    // What the bond form is prefilled with when it is opened by the record-redemption button,
+    // and null for every other way in. Cleared with addEntryMode on both exit paths: it is
+    // the second half of "the form is open for this", and a prefill left behind would seed
+    // the next plain bond entry with a redemption the user never asked for.
+    var redeemingBond by rememberSaveable(stateSaver = RedemptionPrefill.Saver) {
+        mutableStateOf<RedemptionPrefill?>(null)
+    }
     // The id, not the row. A row held as a value is a snapshot of the moment it was tapped,
     // so anything written to it afterwards — a type the user corrects, a title edited
     // elsewhere — leaves this screen showing what the row used to say. Resolving the id
@@ -93,7 +101,10 @@ fun MainScreen(
         enabled = addEntryMode != null || selectedTransactionId != null || editingBondIsin != null || selectedTab != 0
     ) {
         when {
-            addEntryMode != null -> addEntryMode = null
+            addEntryMode != null -> {
+                addEntryMode = null
+                redeemingBond = null
+            }
             selectedTransactionId != null -> selectedTransactionId = null
             editingBondIsin != null -> editingBondIsin = null
             else -> selectedTab = 0
@@ -135,10 +146,17 @@ fun MainScreen(
     addEntryMode?.let { initialMode ->
         AddTransactionScreen(
             initialMode = initialMode,
+            redemptionPrefill = redeemingBond,
             // The screen saves for itself: it owns its own ViewModel and writes the row
             // against the signed-in uid, so there is no transaction to hand back here.
-            onSaved = { addEntryMode = null },
-            onCancel = { addEntryMode = null },
+            onSaved = {
+                addEntryMode = null
+                redeemingBond = null
+            },
+            onCancel = {
+                addEntryMode = null
+                redeemingBond = null
+            },
             modifier = Modifier.fillMaxSize()
         )
         return
@@ -263,7 +281,11 @@ fun MainScreen(
                     BondListScreen(
                         positions = positions,
                         onAddTrade = { addEntryMode = AddEntryMode.BOND },
-                        onEdit = { bond -> editingBondIsin = bond.isin }
+                        onEdit = { bond -> editingBondIsin = bond.isin },
+                        onRecordRedemption = { position ->
+                            redeemingBond = RedemptionPrefill.from(position)
+                            addEntryMode = AddEntryMode.BOND
+                        }
                     )
 
                 MainBottomNavDestination.SCHEDULED ->

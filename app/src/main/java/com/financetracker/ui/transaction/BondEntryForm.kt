@@ -65,6 +65,11 @@ internal fun BondEntryForm(
     saving: Boolean,
     onLookup: (String) -> Unit,
     knownBond: Bond?,
+    /**
+     * Seeds the form for a redemption opened from the bonds tab's record-redemption button,
+     * and is null — seeds nothing — for every plain opening of this form.
+     */
+    redemptionPrefill: RedemptionPrefill? = null,
     onSave: (BondForm) -> Unit
 ) {
     var side by remember { mutableStateOf(BondTradeSide.BUY) }
@@ -109,6 +114,36 @@ internal fun BondEntryForm(
         }
     }
     LaunchedEffect(isin) { onLookup(isin) }
+
+    // The record-redemption button's prefill, applied once per opening. Every field stays
+    // editable afterwards: these figures are the app's reading of a maturity, not a payment
+    // anyone has seen, and only the user knows whether the credit landed — and on which day.
+    // The ISIN seeded here fires the lookup above, so the terms arrive exactly as if it had
+    // been typed.
+    LaunchedEffect(redemptionPrefill) {
+        redemptionPrefill?.let { prefill ->
+            side = BondTradeSide.REDEMPTION
+            isin = prefill.isin
+            quantity = prefill.quantity.toString()
+            // The whole credit at nominal, as a value and not merely the placeholder this
+            // field already shows for a redemption: the form saves with zero typing, and the
+            // per-bond read-back below the field shows the nominal back, so a total that
+            // disagrees with the bank is visible before the save rather than after.
+            price = (prefill.nominal * prefill.quantity).toPlainString()
+            date = prefill.maturityDate
+            currency = prefill.currency
+        }
+    }
+    // The bank resolved against the list as it loads — banks come from DataStore and arrive
+    // after this composition — so both are keyed. No match (a code nothing here recognises)
+    // leaves the dropdown on "no bank", which is a state the form already handles.
+    LaunchedEffect(redemptionPrefill, banks) {
+        redemptionPrefill?.bankCode?.let { code ->
+            if (bank == null) {
+                bank = banks.firstOrNull { it.code == code }
+            }
+        }
+    }
 
     val quantityValue = quantity.toIntOrNull() ?: 0
     val priceValue = AmountInput.parse(price) ?: 0.0

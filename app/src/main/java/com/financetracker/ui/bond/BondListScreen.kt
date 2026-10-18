@@ -23,6 +23,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
@@ -34,6 +35,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.financetracker.R
 import com.financetracker.model.Bond
+import com.financetracker.model.BondMath
 import com.financetracker.model.BondPosition
 import com.financetracker.ui.MoneyAmount
 import com.financetracker.util.DateFormats
@@ -49,6 +51,11 @@ import java.time.format.DateTimeFormatter
  * way to change one is to record the trade that changes it. Its terms are a different matter —
  * a name typo or a coupon read wrong off a broker's screen is the user's to fix — so a card
  * opens the terms-edit screen. The card's figures stay read-only either way.
+ *
+ * The one exception is a maturity that has passed: the card offers [onRecordRedemption], which
+ * opens the trade form prefilled for the redemption the state has already paid. Prefilled and
+ * never saved on its own — a maturity is a date, not a payment, and only the user knows the
+ * credit actually landed.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -56,6 +63,7 @@ fun BondListScreen(
     positions: List<BondPosition>,
     onAddTrade: () -> Unit,
     onEdit: (Bond) -> Unit,
+    onRecordRedemption: (BondPosition) -> Unit,
     modifier: Modifier = Modifier
 ) {
     Scaffold(
@@ -108,7 +116,11 @@ fun BondListScreen(
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 items(items = positions, key = { it.bond.isin }) { position ->
-                    PositionCard(position = position, onClick = { onEdit(position.bond) })
+                    PositionCard(
+                        position = position,
+                        onClick = { onEdit(position.bond) },
+                        onRecordRedemption = { onRecordRedemption(position) }
+                    )
                 }
             }
         }
@@ -116,7 +128,7 @@ fun BondListScreen(
 }
 
 @Composable
-private fun PositionCard(position: BondPosition, onClick: () -> Unit) {
+private fun PositionCard(position: BondPosition, onClick: () -> Unit, onRecordRedemption: () -> Unit) {
     // Remembered rather than a top-level val: the locale is read once per composition instead
     // of once per class load, so a user who changes it in system settings sees the change.
     val dateFormat = remember { DateFormats.date() }
@@ -175,13 +187,29 @@ private fun PositionCard(position: BondPosition, onClick: () -> Unit) {
                 Figure(stringResource(R.string.bond_figure_unrealised), withSign(position.unrealised, currency), gainColor)
             }
 
+            // What the bonds that already left actually left behind — proceeds minus their
+            // cost. Shown on the card because this is where the question is asked; it is in
+            // neither net worth (which counted the nominal all along) nor income (which counts
+            // coupons only), so a closed position that says nothing would look like it
+            // produced nothing. Nothing shown while nothing has been sold or redeemed.
+            if (position.realised != 0.0) {
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    text = stringResource(R.string.bond_realised, withSign(position.realised, currency)),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+
             val terms = bondTerms(
                 position = position,
                 dateFormat = dateFormat,
                 couponFull = stringResource(R.string.bond_coupon_full),
                 couponPeriod = stringResource(R.string.bond_coupon_period),
                 couponOnly = stringResource(R.string.bond_coupon_only),
-                matures = stringResource(R.string.bond_matures)
+                matures = stringResource(R.string.bond_matures),
+                matured = stringResource(R.string.bond_matured),
+                nowMillis = System.currentTimeMillis()
             )
             if (terms != null) {
                 Spacer(modifier = Modifier.height(8.dp))
@@ -225,13 +253,15 @@ private fun PositionCard(position: BondPosition, onClick: () -> Unit) {
                 )
             }
 
-            if (position.quantity == 0) {
-                Spacer(modifier = Modifier.height(8.dp))
-                Text(
-                    text = stringResource(R.string.bond_fully_sold),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
+            // A maturity that has passed and a holding still open means one thing the user
+            // has to do: record the redemption the state paid. Prefilled, never saved on its
+            // own — the maturity is a date, not a payment, and only the user knows the credit
+            // actually landed (and on which day). No maturity date recorded means nothing to
+            // notice, so no button.
+            if (position.quantity > 0 && BondMath.isPastMaturity(position.bond.maturityDate, System.currentTimeMillis())) {
+                TextButton(onClick = onRecordRedemption) {
+                    Text(stringResource(R.string.bond_record_redemption))
+                }
             }
         }
     }
@@ -241,10 +271,12 @@ private fun PositionCard(position: BondPosition, onClick: () -> Unit) {
  * The coupon and maturity line, or null when there is nothing to say.
  *
  * Each part stands on its own: a bond with a coupon but no recorded period still has one, and
- * a period with no coupon has nothing to multiply, so nothing is printed for it. The format
- * templates arrive already resolved through stringResource, because this helper is not a
- * composable; each holds a whole phrase so a translation can reorder the words around the
- * arguments.
+ * a period with no coupon has nothing to multiply, so nothing is printed for it. The maturity
+ * reads as a future until it is not: once the date has passed the line says so, because
+ * "matures 15.10.2026" printed on the 16th is a lie, and the past tense is also what the
+ * record-redemption button beside it acts on. The format templates arrive already resolved
+ * through stringResource, because this helper is not a composable; each holds a whole phrase
+ * so a translation can reorder the words around the arguments.
  */
 private fun bondTerms(
     position: BondPosition,
@@ -252,7 +284,9 @@ private fun bondTerms(
     couponFull: String,
     couponPeriod: String,
     couponOnly: String,
-    matures: String
+    matures: String,
+    matured: String,
+    nowMillis: Long
 ): String? {
     val parts = mutableListOf<String>()
     val coupon = position.bond.couponPercent
@@ -261,7 +295,11 @@ private fun bondTerms(
         val annual = position.annualCouponIncome
         val currency = position.bond.nominalCurrency
         parts += when {
-            period != null && annual != null -> couponFull.format(
+            // An annual figure that multiplies nothing is not printed: on a closed position
+            // it reads "— 0.00 ₴ a year", which is the absence of a holding dressed up as a
+            // fact about the bond. The rate and the period still are such facts, so the
+            // shorter phrase carries them.
+            period != null && annual != null && annual > 0 -> couponFull.format(
                 coupon, period, MoneyFormat.format(annual, currency)
             )
 
@@ -271,7 +309,8 @@ private fun bondTerms(
     }
     position.bond.maturityDate?.let { millis ->
         val date = Instant.ofEpochMilli(millis).atZone(ZoneId.systemDefault()).toLocalDate()
-        parts += matures.format(date.format(dateFormat))
+        val template = if (BondMath.isPastMaturity(millis, nowMillis)) matured else matures
+        parts += template.format(date.format(dateFormat))
     }
     return parts.takeIf { it.isNotEmpty() }?.joinToString(" · ")
 }
