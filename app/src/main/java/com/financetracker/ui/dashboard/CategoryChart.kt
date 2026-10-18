@@ -45,6 +45,8 @@ import com.financetracker.model.displaySlices
 import com.financetracker.ui.CategoryIcon
 import com.financetracker.ui.MoneyAmount
 import com.financetracker.ui.TransactionAppearance
+import com.financetracker.ui.theme.displayColors
+import com.financetracker.ui.theme.isDark
 import com.financetracker.util.CategoryLabel
 import com.financetracker.util.MoneyFormat
 
@@ -75,12 +77,19 @@ fun CategoryBreakdownCard(
     var highlighted by remember(showIncome) { mutableStateOf<Int?>(null) }
     val side = if (showIncome) breakdown.income else breakdown.expense
     val total = if (showIncome) breakdown.totalIncome else breakdown.totalExpense
-    val accent = if (showIncome) TransactionAppearance.Income else TransactionAppearance.Expense
+    // The centre figure is printed on the card's surface, so it wears the accent that
+    // surface can carry — the dark-mode green and red rather than the light-theme pair.
+    val accent = TransactionAppearance.accentOn(outgoing = !showIncome)
     // Canonical label matching what CategoryLabel produces for real "Other" categories —
     // not the localized string, so the synthetic Other can merge with a real one that exists.
     val otherLabel = CategoryLabel.label("other")
     val displayed = remember(side, otherLabel) { displaySlices(side, otherLabel) }
-    val colors = remember(displayed) { displayed.mapIndexed { index, _ -> sliceColor(index) } }
+    // Six hues for the named categories and one neutral for whatever was folded into "Other",
+    // picked from the surface so the ring is high-contrast in whichever theme is showing.
+    val onDark = MaterialTheme.colorScheme.surface.isDark()
+    val colors = remember(displayed, otherLabel, onDark) {
+        displayColors(displayed, otherLabel, onDark)
+    }
     // What the ring's hole shows when a slice is picked: the picked category, its amount and
     // its share, so a tap answers the question it was made to ask. Null puts the side total
     // back, which is the resting state.
@@ -162,13 +171,7 @@ fun CategoryBreakdownCard(
     }
 }
 
-/** A palette of distinct hues; colour is only an aid, the legend carries the meaning. */
-private val CATEGORY_COLORS = listOf(
-    Color(0xFFE57373), Color(0xFFF06292), Color(0xFFBA68C8), Color(0xFF9575CD),
-    Color(0xFF7986CB), Color(0xFF64B5F6), Color(0xFF4DD0E1), Color(0xFF4DB6AC),
-    Color(0xFF81C784), Color(0xFFAED581), Color(0xFFFFD54F), Color(0xFFFF8A65)
-)
-
+/** The gap left between adjacent wedges, in degrees. */
 private const val GAP_DEGREES = 1.5f
 
 /**
@@ -371,7 +374,5 @@ private fun resolveCategoryLabel(label: String): String {
     val res = CategoryLabel.resource(label)
     return if (res != 0) stringResource(res) else label
 }
-
-private fun sliceColor(index: Int): Color = CATEGORY_COLORS[index % CATEGORY_COLORS.size]
 
 

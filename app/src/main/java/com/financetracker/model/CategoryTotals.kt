@@ -74,11 +74,16 @@ data class CategorySlice(
 /**
  * Prepares a side's slices for the donut.
  *
- * Only the count is bounded: when a side has more than [maxSlices] categories the largest
+ * Only the count is bounded: when a side has [maxSlices] categories or more the largest
  * [maxSlices] - 1 are kept and the rest fold into one "Other" (merging with a real one when it
  * is among the kept). A ring is read by shape, and past a handful of wedges the eye can no
  * longer match a colour to a legend row; the same cap keeps the legend from growing to a
  * screenful of percentages. The cap never fires when it would leave only "Other".
+ *
+ * The fold fires at [maxSlices] rather than past it so the named rows never outnumber the
+ * palette: with the default of 7 the ring shows six named categories, each with its own hue,
+ * plus a neutral "Other" when there is one. A seventh named row would need a seventh colour,
+ * and a repeated one would say two categories are the same.
  *
  * There is deliberately no percentage threshold. A threshold reads well until one bucket — the
  * unclassified "Other"/"Imported" most imports carry, or a run of large transfers — dominates
@@ -108,7 +113,7 @@ fun displaySlices(
 }
 
 /**
- * Keeps the largest [maxSlices] slices, folding the rest into [otherLabel].
+ * Keeps the largest [maxSlices] - 1 slices, folding the rest into [otherLabel].
  *
  * Sorted largest first before the cut so "the largest are kept" is a property of the amounts
  * rather than of the order the caller happened to pass. When [otherLabel] is already among the
@@ -120,8 +125,10 @@ private fun capToOther(
     otherLabel: String
 ): List<CategorySlice> {
     // The guard keeps the cap from ever producing a lone "Other": with two rows or fewer to
-    // spare there is nothing worth folding, so the set is left whole.
-    if (slices.size <= maxSlices || maxSlices < 2) return slices
+    // spare there is nothing worth folding, so the set is left whole. `>=` rather than `>`
+    // because the rows on screen are [maxSlices] *including* the "Other" row, so a set of
+    // exactly [maxSlices] named categories already fills the ring on its own.
+    if (slices.size < maxSlices || maxSlices < 2) return slices
 
     val sorted = slices.sortedByDescending { it.amount }
     val top = sorted.take(maxSlices - 1)

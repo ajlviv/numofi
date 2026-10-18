@@ -290,6 +290,29 @@ class CategoryTotalsTest {
     }
 
     @Test
+    fun `displaySlices folds the seventh category so the ring never needs a seventh colour`() {
+        // Six named rows fill the palette; a seventh would have to wear a hue that is already
+        // taken, so the smallest one folds into Other instead. The row count is unchanged —
+        // seven — only the number of *named* rows drops by one.
+        val slices = listOf(
+            CategorySlice("A", 70.0, 0.0),
+            CategorySlice("B", 60.0, 0.0),
+            CategorySlice("C", 50.0, 0.0),
+            CategorySlice("D", 40.0, 0.0),
+            CategorySlice("E", 30.0, 0.0),
+            CategorySlice("F", 20.0, 0.0),
+            CategorySlice("G", 10.0, 0.0)
+        )
+
+        val displayed = displaySlices(slices, otherLabel = "Other")
+
+        assertEquals(7, displayed.size)
+        assertEquals(listOf("A", "B", "C", "D", "E", "F", "Other"), displayed.map { it.label })
+        assertEquals(10.0, displayed.last().amount, 0.0)
+        assertEquals(100, displayed.sumOf { it.percent.toInt() })
+    }
+
+    @Test
     fun `displaySlices keeps small real categories beside Other when the set fits the cap`() {
         // A dominant real Other plus two small categories: under the cap nothing is folded, so
         // the small ones stay visible beside Other instead of disappearing into it.

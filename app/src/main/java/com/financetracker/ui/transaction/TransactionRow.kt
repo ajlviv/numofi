@@ -135,7 +135,7 @@ fun TransactionRow(
                 currencyCode = transaction.currencyCode,
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.Bold,
-                color = TransactionAppearance.accent(transaction),
+                color = TransactionAppearance.accentOn(transaction),
                 prefix = TransactionAppearance.signPrefix(transaction)
             )
             // minLines keeps the slot reserved when the date would otherwise be the only
