@@ -84,6 +84,13 @@ fun AddTransactionScreen(
     onCancel: () -> Unit,
     modifier: Modifier = Modifier,
     initialMode: AddEntryMode = AddEntryMode.TRANSACTION,
+    /**
+     * Seeds the bond form for a redemption when non-null, and nothing else when null — the
+     * plain "+" path opens the same form empty. Held by MainScreen rather than here, because
+     * this composable leaves composition the moment a save lands and the prefill must outlive
+     * the trip to the form and back through a rotation.
+     */
+    redemptionPrefill: RedemptionPrefill? = null,
     viewModel: AddTransactionViewModel = hiltViewModel()
 ) {
     val banks by viewModel.banks.collectAsStateWithLifecycle()
@@ -199,6 +206,7 @@ fun AddTransactionScreen(
                         saving = saving,
                         onLookup = viewModel::findBond,
                         knownBond = knownBond,
+                        redemptionPrefill = redemptionPrefill,
                         onSave = { form ->
                             viewModel.saveBondTrade(
                                 bond = form.bond,

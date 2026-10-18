@@ -1,6 +1,7 @@
 package com.financetracker.model
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -38,7 +39,8 @@ class BondMathTest {
         price: Double = parPrice,
         accrued: Double = 0.0,
         commission: Double = 0.0,
-        date: Long = 0
+        date: Long = 0,
+        bankCode: String? = null
     ) = BondTrade(
         id = 0,
         isin = "UA9000012345",
@@ -48,7 +50,7 @@ class BondMathTest {
         accruedInterest = accrued,
         commission = commission,
         tradeDate = date,
-        bankCode = null,
+        bankCode = bankCode,
         transactionId = null
     )
 
@@ -322,6 +324,79 @@ class BondMathTest {
 
         assertEquals(3, position.quantity)
         assertTrue(position.cost >= 0.0)
+    }
+
+    // MARK: - Realised
+
+    @Test
+    fun `a discount redeemed at par is a realised gain of the difference`() {
+        // The reported shape: 2 bonds bought at 950.00 — 1900 — on a 1000 nominal, paid back
+        // at par. Net worth counted the 2000 nominal from the day of purchase, so this is the
+        // same money counted once more nowhere: the card says what the position left behind.
+        val position = BondMath.position(
+            bond,
+            listOf(
+                trade(quantity = 2, price = 950.0),
+                trade(side = BondTradeSide.REDEMPTION, quantity = 2, price = nominal)
+            )
+        )!!
+
+        assertEquals(0, position.quantity)
+        assertEquals(100.0, position.realised, 0.0)
+    }
+
+    @Test
+    fun `a partial redemption realises only the share it took`() {
+        // 10 at 995.00 — 9950 — then 4 redeemed at par. The 4 bring 4000 and carry 40% of the
+        // cost with them: 3980. The remaining 6 keep their cost and contribute nothing here.
+        val position = BondMath.position(
+            bond,
+            listOf(
+                trade(quantity = 10),
+                trade(side = BondTradeSide.REDEMPTION, quantity = 4, price = nominal)
+            )
+        )!!
+
+        assertEquals(6, position.quantity)
+        assertEquals(20.0, position.realised, 0.0)
+    }
+
+    @Test
+    fun `a sale's realised gain is net of its commission and includes the accrual`() {
+        // Bought at 995.00; sold at 1010.00 with 30 of accrued interest paid by the buyer and
+        // 5 of commission kept by the broker: 1035 lands, so the gain is 40. Both settle
+        // inside tradeTotal, exactly as they settle inside the cost this is measured against.
+        val position = BondMath.position(
+            bond,
+            listOf(
+                trade(quantity = 1),
+                trade(side = BondTradeSide.SELL, quantity = 1, price = 1010.0, accrued = 30.0, commission = 5.0)
+            )
+        )!!
+
+        assertEquals(0, position.quantity)
+        assertEquals(40.0, position.realised, 0.0)
+    }
+
+    @Test
+    fun `a clamped sale of bonds never held realises nothing`() {
+        // Selling with nothing bought first cannot happen through the UI, but stored data can
+        // hold it. There is no cost basis to measure against and no bonds that were ever
+        // held, so the proceeds of such a "sale" are not a gain.
+        val position = BondMath.position(
+            bond,
+            listOf(trade(side = BondTradeSide.SELL, quantity = 2, price = 1010.0))
+        )!!
+
+        assertEquals(0, position.quantity)
+        assertEquals(0.0, position.realised, 0.0)
+    }
+
+    @Test
+    fun `a position nothing has left realises nothing`() {
+        val position = BondMath.position(bond, listOf(trade(quantity = 3)))!!
+
+        assertEquals(0.0, position.realised, 0.0)
     }
 
     // MARK: - Projected payout
@@ -607,6 +682,58 @@ class BondMathTest {
         // is +15 at the mark.
         assertEquals(4985.0, position.cost, 0.0)
         assertEquals(15.0, position.unrealised, 0.0)
+    }
+
+    @Test
+    fun `the position carries the bank of the most recent trade`() {
+        // A redemption settles where the bonds were held, so the record-redemption button
+        // pre-fills the account the last trade used. The most recent one, not the first: a
+        // transfer between brokers does not exist here, so the latest trade is where the
+        // holding lives now.
+        val position = BondMath.position(
+            bond,
+            listOf(
+                trade(quantity = 3, bankCode = "mono"),
+                trade(quantity = 2, bankCode = "pb")
+            )
+        )!!
+
+        assertEquals("pb", position.lastBankCode)
+    }
+
+    @Test
+    fun `a most recent trade without a bank leaves the position's bank null`() {
+        // Not the previous trade's bank: the most recent trade settled without one, and
+        // guessing the older account would pre-fill a bank the redemption may not land in.
+        val position = BondMath.position(
+            bond,
+            listOf(
+                trade(quantity = 3, bankCode = "mono"),
+                trade(quantity = 2)
+            )
+        )!!
+
+        assertNull(position.lastBankCode)
+    }
+
+    // MARK: - Maturity
+
+    @Test
+    fun `a maturity of yesterday or today is past, of tomorrow it is not`() {
+        // The date is stored at the start of its day, so a bond maturing today is past its
+        // maturity at any hour of that day — the credit often lands on the day itself, and
+        // the record-redemption button appearing that morning costs nothing.
+        val now = millis(2026, 10, 18)
+
+        assertTrue(BondMath.isPastMaturity(millis(2026, 10, 17), now))
+        assertTrue(BondMath.isPastMaturity(millis(2026, 10, 18), now))
+        assertFalse(BondMath.isPastMaturity(millis(2026, 10, 19), now))
+    }
+
+    @Test
+    fun `a bond with no recorded maturity is never past it`() {
+        // Nothing was recorded, so there is nothing to notice and no button to offer.
+        assertFalse(BondMath.isPastMaturity(null, millis(2026, 10, 18)))
     }
 
     // MARK: - Settlement

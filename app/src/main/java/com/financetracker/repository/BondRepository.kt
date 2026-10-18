@@ -62,7 +62,16 @@ class BondRepository @Inject constructor(
         combine(bondDao.observeBonds(), bondDao.observeTrades(userId)) { bonds, trades ->
             val byIsin = trades.groupBy { it.isin }
             bonds.mapNotNull { bond ->
-                BondMath.position(bond.toDomain(), byIsin[bond.isin].orEmpty().map { it.toDomain() })
+                // Reversed, because observeTrades answers newest-first and the fold is a
+                // running total that must see the trades in the order they happened: a
+                // redemption processed before the buy it redeems is clamped to nothing, and
+                // the position then reports the redeemed bonds as still held. Reversing the
+                // newest-first list yields oldest-first, ties broken by id ascending — the
+                // same order getTrades answers in, which is the order the fold is built for.
+                BondMath.position(
+                    bond.toDomain(),
+                    byIsin[bond.isin].orEmpty().asReversed().map { it.toDomain() }
+                )
             }
         }
 

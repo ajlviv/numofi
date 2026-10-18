@@ -660,6 +660,24 @@ class BondRepositoryTest {
     }
 
     @Test
+    fun `a redeemed position folds to closed even though the trade list reads newest first`() = runTest {
+        // The observed trade list answers newest-first, and the fold is a running total that
+        // only means anything in the order the trades happened. Fed newest-first, the
+        // redemption lands before the buy it redeems, is clamped to nothing, and the position
+        // then reports bonds the state has already paid back as still held — which is how a
+        // device came to show 18 held on a bond redeemed in full. Buys alone cannot expose
+        // the order, which is why the test above passed while this was broken.
+        buy(quantity = 18, price = 1009.56)
+        redeem(quantity = 18, price = 1081.75)
+
+        val position = repo.observePositions("uid-1").first().single()
+
+        assertEquals(0, position.quantity)
+        // 18 x (1081.75 - 1009.56) = 1299.42 — the redemption's proceeds over their cost.
+        assertEquals(1299.42, position.realised, 0.01)
+    }
+
+    @Test
     fun `a bond with no trades has no position`() = runTest {
         assertTrue(repo.observePositions("uid-1").first().isEmpty())
     }

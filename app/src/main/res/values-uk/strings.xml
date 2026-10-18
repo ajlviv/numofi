@@ -151,13 +151,15 @@
   <string name="bond_figure_held">У портфелі</string>
   <string name="bond_figure_cost_per">Ціна за облігацію</string>
   <string name="bond_figure_unrealised">Нереалізований результат</string>
-  <string name="bond_fully_sold">Більше не в портфелі. Залишено тут, бо тут збережені угоди.</string>
   <string name="bond_expected_at_maturity">Номінал %1$s + купон %2$s × %3$d = %4$s до погашення</string>
   <string name="bond_expected_at_maturity_prorated">Номінал %1$s + купон %2$s = %3$s до погашення</string>
   <string name="bond_coupon_full">Купон %1$.2f%% кожні %2$d міс. — %3$s на рік</string>
   <string name="bond_coupon_period">Купон %1$.2f%% кожні %2$d міс.</string>
   <string name="bond_coupon_only">Купон %1$.2f%%</string>
   <string name="bond_matures">погашення %1$s</string>
+  <string name="bond_matured">погашено %1$s</string>
+  <string name="bond_record_redemption">Зафіксувати погашення</string>
+  <string name="bond_realised">Реалізовано %1$s</string>
   <string name="bond_edit_title">Редагувати облігацію</string>
   <string name="bond_edit_currency_locked">Заблоковано: в облігації вже є угоди у %1$s</string>
   <string name="bond_edit_currency_locked_message">Валюту не можна змінити, поки в облігації є угоди</string>
