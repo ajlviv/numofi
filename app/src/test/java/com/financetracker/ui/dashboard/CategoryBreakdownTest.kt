@@ -40,9 +40,8 @@ class CategoryBreakdownTest {
     }
 
     @Test
-    fun titlesTheCardAndOffersBothSides() {
+    fun offersBothSides() {
         show()
-        compose.onNodeWithText("By category").assertIsDisplayed()
         compose.onNodeWithText("Spent").assertIsDisplayed()
         compose.onNodeWithText("Income").assertIsDisplayed()
     }
@@ -102,14 +101,7 @@ class CategoryBreakdownTest {
         // The card delegates to the net-worth card for the explanation; it renders nothing here.
         show(CategoryTotals.unquotable("PLN"))
 
-        compose.onNodeWithText("By category").assertDoesNotExist()
         compose.onNodeWithText("Spent").assertDoesNotExist()
-    }
-
-    @Test
-    fun theCardNamesTheWindowItCovers() {
-        compose.setContent { CategoryBreakdownCard(breakdown, periodLabel = "This month") }
-        compose.onNodeWithText("This month", substring = true).assertIsDisplayed()
     }
 
     @Test

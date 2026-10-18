@@ -375,11 +375,17 @@
   <string name="recurring_start">Початок</string>
   <string name="recurring_end">Кінець</string>
   <string name="recurring_end_none">Без дати кінця</string>
-  <string name="recurring_archive">Архівувати</string>
-  <string name="recurring_unarchive">Повернути з архіву</string>
   <string name="recurring_archived">В архіві</string>
+  <string name="recurring_archive_cd">Заархівувати %1$s</string>
+  <string name="recurring_unarchive_cd">Повернути з архіву %1$s</string>
+  <string name="recurring_delete_cd">Видалити %1$s</string>
   <string name="recurring_next_due">Далі: %1$s</string>
-  <string name="recurring_upcoming_title">Заплановано на найближчі 30 днів</string>
+  <string name="recurring_upcoming_title">Заплановано</string>
+  <string name="recurring_period_range">%1$s – %2$s</string>
+  <string name="recurring_period_30_days">30 днів</string>
+  <string name="recurring_period_next_month">Наступний місяць</string>
+  <string name="recurring_period_next_12_months">12 місяців</string>
+  <string name="recurring_period_this_year">Цей рік</string>
   <string name="recurring_upcoming_expense">Витрати</string>
   <string name="recurring_upcoming_income">Надходження</string>
   <string name="recurring_upcoming_none">У цьому вікні нічого не заплановано.</string>
@@ -402,8 +408,6 @@
   <string name="settings_app_lock_locked_body">Ваші баланси приховані, доки ви не розблокуєте застосунок.</string>
   <string name="settings_app_lock_unlock">Розблокувати</string>
   <!-- Розподіл витрат і надходжень за категорією на інструменті. -->
-  <string name="dash_categories_title">За категорією</string>
-  <string name="dash_categories_period">Період: %1$s</string>
   <string name="dash_categories_empty_income">Немає надходжень за цей період</string>
   <string name="dash_categories_empty_expense">Немає витрат за цей період</string>
 </resources>

@@ -162,10 +162,7 @@ fun DashboardScreen(
             onRefresh = onRefreshRates
         )
 
-        CategoryBreakdownCard(
-            breakdown = breakdown,
-            periodLabel = stringResource(period.labelRes)
-        )
+        CategoryBreakdownCard(breakdown = breakdown)
 
         // A separate card per holding, not folded into the total above. The total is money at
         // nominal, which is a claim about maturity; this is the position and the price the user

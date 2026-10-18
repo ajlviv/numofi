@@ -40,6 +40,43 @@ data class UpcomingTotals(
 )
 
 /**
+ * The windows the plans screen offers, as half-open `[from, to)` day ranges.
+ *
+ * Mirrors `DatePreset` in the transaction list: a small enum that turns "today" into a range,
+ * so the screen owns no date arithmetic. The ranges are half-open for the same reason the
+ * transaction filter and [Recurrence] are — a period's `to` is the next period's `from`, so two
+ * adjacent windows never both claim a day.
+ *
+ * Three of the four start today and are pure forecasts. [NEXT_MONTH] is the whole next calendar
+ * month, and [THIS_YEAR] is the whole calendar year, so each can include an occurrence that
+ * already passed — for the year that is usually just an annual charge earlier in the year. A
+ * "this month" window used to sit here and was dropped: on the 17th it was ninety-odd percent
+ * past, a figure that answered nothing the "30 days" chip did not answer better.
+ *
+ * No label lives here. The strings are resolved at the display site, the same rule the
+ * screen's message flow follows.
+ */
+enum class UpcomingPeriod {
+    NEXT_30_DAYS,
+    NEXT_MONTH,
+    NEXT_12_MONTHS,
+    THIS_YEAR;
+
+    fun range(today: LocalDate): Pair<LocalDate, LocalDate> = when (this) {
+        NEXT_30_DAYS -> today to today.plusDays(30)
+        NEXT_MONTH -> {
+            val firstOfNextMonth = today.withDayOfMonth(1).plusMonths(1)
+            firstOfNextMonth to firstOfNextMonth.plusMonths(1)
+        }
+        NEXT_12_MONTHS -> today to today.plusDays(365)
+        THIS_YEAR -> {
+            val firstOfYear = today.withDayOfYear(1)
+            firstOfYear to firstOfYear.plusYears(1)
+        }
+    }
+}
+
+/**
  * Expands [definitions] over `[from, to)` and converts the result into [base].
  *
  * Archived definitions are skipped: archiving means "stop projecting this", and the list that

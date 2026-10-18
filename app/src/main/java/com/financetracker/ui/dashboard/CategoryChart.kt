@@ -63,14 +63,6 @@ import com.financetracker.util.MoneyFormat
 @Composable
 fun CategoryBreakdownCard(
     breakdown: CategoryTotals,
-    /**
-     * The window this breakdown covers, already resolved to the user's language — the same
-     * period the net-worth card's selector controls. Shown on the card because the selector
-     * lives on a different card, and without it a reader sees the breakdown change when they
-     * window the flows above and has nothing to attribute it to. Blank hides the line, which
-     * is what tests that only exercise the slices pass.
-     */
-    periodLabel: String = "",
     modifier: Modifier = Modifier
 ) {
     // A base the cache cannot quote is no breakdown at all, not a breakdown of zero — the net
@@ -118,25 +110,6 @@ fun CategoryBreakdownCard(
 
     Card(modifier = modifier.fillMaxWidth(), elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)) {
         Column(Modifier.padding(16.dp)) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = stringResource(R.string.dash_categories_title),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                if (periodLabel.isNotEmpty()) {
-                    Text(
-                        text = stringResource(R.string.dash_categories_period, periodLabel),
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-            }
-            Spacer(Modifier.height(8.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 FilterChip(
                     selected = !showIncome,

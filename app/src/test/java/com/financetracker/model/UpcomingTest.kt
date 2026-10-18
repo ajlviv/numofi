@@ -77,6 +77,21 @@ class UpcomingTest {
     }
 
     @Test
+    fun `a full-calendar window includes an occurrence earlier in the period`() {
+        // "This month" is the whole calendar month, so an occurrence on the 1st is projected
+        // even when today is later in the month. The schedule is separate from the ledger, so
+        // this is scheduled money, not a claim about what has already moved.
+        val result = project(
+            listOf(definition(1, amount = 1_000.0, start = LocalDate.of(2026, 1, 1))),
+            from = LocalDate.of(2026, 1, 1),
+            to = LocalDate.of(2026, 2, 1)
+        )
+
+        assertEquals(1_000.0, result.expense!!, 1e-9)
+        assertEquals(listOf(LocalDate.of(2026, 1, 1)), result.items.map { it.date })
+    }
+
+    @Test
     fun `a currency the cache cannot quote is excluded and named`() {
         val result = project(
             listOf(

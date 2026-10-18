@@ -1,6 +1,8 @@
 package com.financetracker.ui.recurring
 
+import androidx.annotation.StringRes
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -11,11 +13,16 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Archive
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Unarchive
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -42,6 +49,7 @@ import com.financetracker.R
 import com.financetracker.model.Recurrence
 import com.financetracker.model.RecurringPayment
 import com.financetracker.model.TransactionType
+import com.financetracker.model.UpcomingPeriod
 import com.financetracker.model.UpcomingTotals
 import com.financetracker.ui.MoneyAmount
 import com.financetracker.util.DateFormats
@@ -64,6 +72,7 @@ fun RecurringScreen(
 ) {
     val schedules by viewModel.schedules.collectAsStateWithLifecycle()
     val upcoming by viewModel.upcoming.collectAsStateWithLifecycle()
+    val period by viewModel.period.collectAsStateWithLifecycle()
     val banks by viewModel.banks.collectAsStateWithLifecycle()
     val categories by viewModel.categories.collectAsStateWithLifecycle()
     val baseCurrency by viewModel.baseCurrency.collectAsStateWithLifecycle()
@@ -139,7 +148,14 @@ fun RecurringScreen(
                 // Only after the empty state is ruled out: with nothing scheduled the card
                 // would print "nothing scheduled in this window" directly above "nothing
                 // scheduled yet", which is the same fact twice.
-                item { UpcomingCard(upcoming, baseCurrency) }
+                item {
+                    UpcomingCard(
+                        upcoming = upcoming,
+                        baseCurrency = baseCurrency,
+                        period = period,
+                        onSelectPeriod = viewModel::selectPeriod
+                    )
+                }
 
                 items(schedules, key = { it.id }) { schedule ->
                     ScheduleCard(
@@ -176,15 +192,27 @@ fun RecurringScreen(
 }
 
 @Composable
-private fun UpcomingCard(upcoming: UpcomingTotals, baseCurrency: String) {
+private fun UpcomingCard(
+    upcoming: UpcomingTotals,
+    baseCurrency: String,
+    period: UpcomingPeriod,
+    onSelectPeriod: (UpcomingPeriod) -> Unit
+) {
     Card(modifier = Modifier.fillMaxWidth()) {
         Column(
             modifier = Modifier.padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(6.dp)
         ) {
+            UpcomingPeriodChips(selected = period, onSelect = onSelectPeriod)
+
             Text(
                 text = stringResource(R.string.recurring_upcoming_title),
                 style = MaterialTheme.typography.titleMedium
+            )
+            Text(
+                text = windowRange(period),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
             )
 
             val expense = upcoming.expense
@@ -234,6 +262,61 @@ private fun UpcomingCard(upcoming: UpcomingTotals, baseCurrency: String) {
     }
 }
 
+/**
+ * The four windows, always one selected, scrollable so the row can never clip a chip on a narrow
+ * phone.
+ *
+ * The same shape as the transaction list's type chips: a chip the user has to hunt for is one
+ * they will not use, and the block's whole point is to answer a different question depending on
+ * which one is chosen.
+ */
+@Composable
+private fun UpcomingPeriodChips(
+    selected: UpcomingPeriod,
+    onSelect: (UpcomingPeriod) -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .horizontalScroll(rememberScrollState()),
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        UpcomingPeriod.entries.forEach { entry ->
+            FilterChip(
+                selected = entry == selected,
+                onClick = { onSelect(entry) },
+                label = { Text(stringResource(periodLabel(entry))) }
+            )
+        }
+    }
+}
+
+/**
+ * The selected window as inclusive dates, e.g. "1 Jan 2026 – 31 Jan 2026".
+ *
+ * The end is shown as the last day of the window, not [UpcomingPeriod.range]'s exclusive `to`,
+ * because a person reads a date range inclusively. Both dates carry the year so the rolling
+ * twelve-month window is not mistaken for a range inside one year.
+ */
+@Composable
+private fun windowRange(period: UpcomingPeriod): String {
+    val dateFormat = remember { DateFormats.date() }
+    val (from, to) = period.range(LocalDate.now(ZoneId.systemDefault()))
+    return stringResource(
+        R.string.recurring_period_range,
+        from.format(dateFormat),
+        to.minusDays(1).format(dateFormat)
+    )
+}
+
+@StringRes
+private fun periodLabel(period: UpcomingPeriod): Int = when (period) {
+    UpcomingPeriod.NEXT_30_DAYS -> R.string.recurring_period_30_days
+    UpcomingPeriod.NEXT_MONTH -> R.string.recurring_period_next_month
+    UpcomingPeriod.NEXT_12_MONTHS -> R.string.recurring_period_next_12_months
+    UpcomingPeriod.THIS_YEAR -> R.string.recurring_period_this_year
+}
+
 @Composable
 private fun ScheduleCard(
     schedule: RecurringPayment,
@@ -274,33 +357,58 @@ private fun ScheduleCard(
                 )
             }
 
-            nextDue(schedule, zone)?.let { next ->
-                Text(
-                    text = stringResource(R.string.recurring_next_due, next.format(dateFormat)),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-
-            if (schedule.archived) {
-                Text(
-                    text = stringResource(R.string.recurring_archived),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                TextButton(onClick = onToggleArchived) {
-                    Text(
-                        stringResource(
-                            if (schedule.archived) R.string.recurring_unarchive
-                            else R.string.recurring_archive
+            // The "Next" line and the two controls share one row, the text taking the free
+            // space so the icons sit at the right edge. Reading the next due date and acting on
+            // the plan is one glance rather than two. Icon-only, so each pays for the missing
+            // label with a content description that names the plan, and delete keeps its
+            // confirmation dialog.
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    nextDue(schedule, zone)?.let { next ->
+                        Text(
+                            text = stringResource(
+                                R.string.recurring_next_due,
+                                next.format(dateFormat)
+                            ),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
+                    }
+                    if (schedule.archived) {
+                        Text(
+                            text = stringResource(R.string.recurring_archived),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+                IconButton(onClick = onToggleArchived) {
+                    Icon(
+                        imageVector = if (schedule.archived) {
+                            Icons.Default.Unarchive
+                        } else {
+                            Icons.Default.Archive
+                        },
+                        contentDescription = if (schedule.archived) {
+                            stringResource(R.string.recurring_unarchive_cd, schedule.title)
+                        } else {
+                            stringResource(R.string.recurring_archive_cd, schedule.title)
+                        },
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
-                TextButton(onClick = onDelete) {
-                    Text(stringResource(R.string.common_delete))
+                IconButton(onClick = onDelete) {
+                    Icon(
+                        imageVector = Icons.Default.Delete,
+                        contentDescription = stringResource(
+                            R.string.recurring_delete_cd,
+                            schedule.title
+                        ),
+                        tint = MaterialTheme.colorScheme.error
+                    )
                 }
             }
         }

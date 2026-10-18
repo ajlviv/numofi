@@ -10,6 +10,7 @@ import com.financetracker.model.ExchangeRates
 import com.financetracker.model.RepeatFrequency
 import com.financetracker.model.RecurringPayment
 import com.financetracker.model.TransactionType
+import com.financetracker.model.UpcomingPeriod
 import com.financetracker.model.UpcomingTotals
 import com.financetracker.model.upcoming as upcomingTotals
 import com.financetracker.repository.AuthRepository
@@ -81,7 +82,7 @@ data class RecurringForm(
  *
  * Thin by the project's convention: the occurrence walk is [com.financetracker.model.Recurrence]
  * and the totals are [upcomingTotals], so nothing here computes a date or an amount. What it
- * owns is the account scoping and the fixed projection window.
+ * owns is the account scoping and the window the projection is asked about.
  */
 @OptIn(ExperimentalCoroutinesApi::class)
 @HiltViewModel
@@ -112,16 +113,26 @@ class RecurringViewModel @Inject constructor(
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), EMPTY_RATES)
 
     /**
-     * The next [WINDOW_DAYS] days of commitments, converted into the base currency.
+     * Which window the projection card is showing.
+     *
+     * Held here rather than in the composable so the choice survives rotation and a process
+     * that keeps the ViewModel, and so nothing but this flow decides what the card sums.
+     */
+    private val _period = MutableStateFlow(UpcomingPeriod.NEXT_30_DAYS)
+    val period: StateFlow<UpcomingPeriod> = _period.asStateFlow()
+
+    /**
+     * The commitment totals for the selected [period], converted into the base currency.
      *
      * Computed here rather than stored: a projected date is a function of the schedule and the
      * day it is asked about, so a stored copy would be wrong by the second day.
      */
     val upcoming: StateFlow<UpcomingTotals> =
-        combine(schedules, exchangeRates, baseCurrency) { list, cache, base ->
+        combine(schedules, exchangeRates, baseCurrency, _period) { list, cache, base, period ->
             val zone = ZoneId.systemDefault()
             val today = LocalDate.now(zone)
-            upcomingTotals(list, cache, base, today, today.plusDays(WINDOW_DAYS), zone)
+            val (from, to) = period.range(today)
+            upcomingTotals(list, cache, base, from, to, zone)
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyUpcoming())
 
     /** Fixed localized copy, resolved at the display site. */
@@ -148,6 +159,10 @@ class RecurringViewModel @Inject constructor(
         viewModelScope.launch { repository.setArchived(schedule.id, archived) }
     }
 
+    fun selectPeriod(period: UpcomingPeriod) {
+        _period.value = period
+    }
+
     fun delete(id: Long) {
         viewModelScope.launch { repository.delete(id) }
     }
@@ -157,7 +172,6 @@ class RecurringViewModel @Inject constructor(
     }
 
     private companion object {
-        const val WINDOW_DAYS = 30L
         val EMPTY_RATES = ExchangeRates(emptyMap(), null, 0L)
 
         fun emptyUpcoming(): UpcomingTotals =
