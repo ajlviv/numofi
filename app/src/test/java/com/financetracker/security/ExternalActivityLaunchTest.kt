@@ -49,6 +49,18 @@ class ExternalActivityLaunchTest {
     }
 
     @Test
+    fun `a launch that never happened does not hide the next stop`() {
+        // A refused link leaves the app still in front, so no stop answers the announcement. If
+        // the flag stayed set, the next real backgrounding would be taken for that launch and the
+        // app would come back unlocked.
+        val launch = ExternalActivityLaunch()
+        launch.expect()
+        launch.cancel()
+
+        assertFalse(launch.consumeExpected())
+    }
+
+    @Test
     fun `two pickers in a row are each announced`() {
         val launch = ExternalActivityLaunch()
 

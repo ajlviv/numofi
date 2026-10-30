@@ -240,7 +240,7 @@
   <string name="dash_period_90d">Last 90 days</string>
   <string name="settings_tab_general">General</string>
   <string name="settings_tab_data">Data</string>
-  <string name="settings_tab_account">Account</string>
+  <string name="settings_tab_other">Other</string>
 <string name="settings_tab_categories">Categories</string>
   <string name="settings_preferences">Preferences</string>
   <string name="settings_theme_mode">Theme mode</string>
@@ -327,6 +327,11 @@
   <string name="settings_bank_archived_msg">Archived. Its transactions are kept, and it stays in the filter.</string>
   <string name="settings_bank_restored">Restored.</string>
   <string name="settings_account">Account</string>
+  <string name="settings_support_title">Support the project</string>
+  <string name="settings_support_blurb">This app is free and has no ads. If it is useful to you, you can send a voluntary tip to the developer. It unlocks nothing and the app stays exactly the same.</string>
+  <string name="settings_support_button">Support the project</string>
+  <string name="settings_support_unavailable">No app can open this link.</string>
+  <string name="settings_support_url" translatable="false">https://send.monobank.ua/jar/XXXXXXXX</string>
   <string name="settings_version" translatable="false">Finance Tracker v%1$s</string>
   <string name="import_section_title">Import a statement</string>
   <string name="import_section_blurb">Works with any bank: export a statement as XLSX, CSV or PDF and pick it here. Nothing is uploaded.</string>

@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import android.content.Intent
 import android.net.Uri
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
@@ -94,13 +95,13 @@ import com.financetracker.security.LockCapability
 import com.financetracker.util.CategoryLabel
 
 /**
- * The three groups the page is split into, and the label each is titled by.
+ * The four groups the page is split into, and the label each is titled by.
  *
  * Grouped by what a setting is *for*, not by how much of the page it takes: General is how the
  * app looks and what it is allowed to count, Data is how rows get in and how they are kept, and
- * Account is the signed-in identity. Ten sections in one scroll column buried the heaviest of
- * them — statement import sat sixth, under four cards — and a tab is what lets a group be found
- * without reading past the ones above it.
+ * Other is everything about the app itself — supporting it, and the signed-in identity. Ten
+ * sections in one scroll column buried the heaviest of them — statement import sat sixth, under
+ * four cards — and a tab is what lets a group be found without reading past the ones above it.
  *
  * An enum rather than an index so `rememberSaveable` has a name to write down and the `when`
  * that picks the content cannot pair a label with the wrong sections.
@@ -109,7 +110,7 @@ private enum class SettingsTab(@StringRes val labelRes: Int) {
     GENERAL(R.string.settings_tab_general),
     DATA(R.string.settings_tab_data),
     CATEGORIES(R.string.settings_tab_categories),
-    ACCOUNT(R.string.settings_tab_account)
+    OTHER(R.string.settings_tab_other)
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -206,7 +207,7 @@ fun SettingsScreen(
                 scrollState = dataScroll,
                 viewModel = viewModel
             )
-            SettingsTab.ACCOUNT -> AccountTab(
+            SettingsTab.OTHER -> OtherTab(
                 modifier = tabModifier,
                 scrollState = accountScroll,
                 viewModel = viewModel
@@ -580,19 +581,28 @@ private fun DataTab(
 }
 
 /**
- * Who is signed in, and nothing else.
+ * Everything about the app itself: supporting it, and who is signed in.
  *
- * The one section with no state behind it, which is why the tab holds a single card: sign-out is
- * a consequence of an identity rather than a preference, and putting it beside appearance and
- * totals would invite the reading that it is one of those.
+ * The two are kept in separate cards because they answer different questions — one is a voluntary
+ * gesture with no effect on the app, the other is the identity every local row is scoped to — and
+ * merging them would make the tip look like a purchase of account functionality.
  */
 @Composable
-private fun AccountTab(
+private fun OtherTab(
     scrollState: ScrollState,
     modifier: Modifier = Modifier,
     viewModel: SettingsViewModel
 ) {
     SettingsTabContent(scrollState = scrollState, modifier = modifier) {
+        SettingsSection(title = stringResource(R.string.settings_support_title)) {
+            Text(
+                text = stringResource(R.string.settings_support_blurb),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            SupportProjectButton()
+        }
+
         SettingsSection(title = stringResource(R.string.settings_account)) {
             OutlinedButton(
                 onClick = viewModel::signOut,
@@ -604,6 +614,52 @@ private fun AccountTab(
                 )
             }
         }
+    }
+}
+
+/**
+ * Opens the developer's Monobank Jar in whatever app handles the link.
+ *
+ * The link is opened externally rather than inside a WebView so the payment happens in the
+ * banking app the user already trusts, and so the app never sees a card number. Nothing is
+ * recorded and nothing changes after a tip: it is a voluntary contribution, not an in-app
+ * purchase, which is what keeps it outside Play Billing under the genuine-tip exception.
+ *
+ * The launch is announced to the app lock for the same reason the file pickers are: the browser
+ * is another activity, and a stop it causes must not re-lock and unmount this section.
+ */
+@Composable
+private fun SupportProjectButton() {
+    val context = LocalContext.current
+    val externalLaunch = LocalExternalActivityLaunch.current
+    val url = stringResource(R.string.settings_support_url)
+    var unavailable by remember { mutableStateOf(false) }
+
+    Button(
+        onClick = {
+            unavailable = false
+            // Announced immediately before the launch, and withdrawn if there is no app to take
+            // the link: a refused launch produces no stop, and a stale announcement would keep
+            // the app unlocked through the next real backgrounding.
+            externalLaunch?.expect()
+            val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url))
+            runCatching { context.startActivity(intent) }
+                .onFailure {
+                    externalLaunch?.cancel()
+                    unavailable = true
+                }
+        },
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Text(stringResource(R.string.settings_support_button))
+    }
+
+    if (unavailable) {
+        Text(
+            text = stringResource(R.string.settings_support_unavailable),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.error
+        )
     }
 }
 
