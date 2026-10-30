@@ -10,6 +10,7 @@ import com.financetracker.model.ExchangeRates
 import com.financetracker.model.ExclusionRules
 import com.financetracker.model.Transaction
 import com.financetracker.model.TransactionType
+import org.junit.Assert.assertEquals
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -58,12 +59,12 @@ class DashboardPeriodSelectorTest {
     }
 
     @Test
-    fun theSelectorStartsOnAllTime() {
+    fun theSelectorStartsOnTheMonthSoFar() {
         show()
 
         // The button carries the current period, so which window the flows are scoped to is
         // readable without opening the menu.
-        compose.onNodeWithText(label(DashboardPeriod.ALL_TIME)).assertIsDisplayed()
+        compose.onNodeWithText(label(DashboardPeriod.MONTH_TO_DATE)).assertIsDisplayed()
     }
 
     @Test
@@ -71,12 +72,12 @@ class DashboardPeriodSelectorTest {
         show()
 
         // Opened once, because a dropdown's options do not exist in the tree until it is.
-        // ALL_TIME is skipped while open: it is the button's own label too, so asserting on it
-        // would see two nodes rather than the option being reached for.
-        compose.onNodeWithText(label(DashboardPeriod.ALL_TIME)).performClick()
+        // MONTH_TO_DATE is skipped while open: it is the button's own label too, so asserting on
+        // it would see two nodes rather than the option being reached for.
+        compose.onNodeWithText(label(DashboardPeriod.MONTH_TO_DATE)).performClick()
 
         DashboardPeriod.entries
-            .filter { it != DashboardPeriod.ALL_TIME }
+            .filter { it != DashboardPeriod.MONTH_TO_DATE }
             .forEach { period ->
                 compose.onNodeWithText(label(period)).assertIsDisplayed()
             }
@@ -87,10 +88,10 @@ class DashboardPeriodSelectorTest {
     fun everyOfferedPeriodIsReachableOnANarrowScreen() {
         show()
 
-        compose.onNodeWithText(label(DashboardPeriod.ALL_TIME)).performClick()
+        compose.onNodeWithText(label(DashboardPeriod.MONTH_TO_DATE)).performClick()
 
         DashboardPeriod.entries
-            .filter { it != DashboardPeriod.ALL_TIME }
+            .filter { it != DashboardPeriod.MONTH_TO_DATE }
             .forEach { period ->
                 compose.onNodeWithText(label(period)).assertIsDisplayed()
             }
@@ -101,12 +102,25 @@ class DashboardPeriodSelectorTest {
         show()
 
         val thisYear = DashboardPeriod.THIS_YEAR
-        compose.onNodeWithText(label(DashboardPeriod.ALL_TIME)).performClick()
+        compose.onNodeWithText(label(DashboardPeriod.MONTH_TO_DATE)).performClick()
         compose.onNodeWithText(label(thisYear)).performClick()
 
         // The menu has closed and the button now reads the choice, which is the same job the
         // selected chip used to do.
         compose.onNodeWithText(label(thisYear)).assertIsDisplayed()
+    }
+
+    @Test
+    fun allTimeIsOfferedLast() {
+        show()
+
+        compose.onNodeWithText(label(DashboardPeriod.MONTH_TO_DATE)).performClick()
+
+        // The dropdown maps `entries` in declaration order, so the last entry is the last row
+        // of the menu: the widest window is kept reachable but out of the way of the windows
+        // people switch between.
+        assertEquals(DashboardPeriod.ALL_TIME, DashboardPeriod.entries.last())
+        compose.onNodeWithText(label(DashboardPeriod.ALL_TIME)).assertIsDisplayed()
     }
 
     private fun label(period: DashboardPeriod) = context.getString(period.labelRes)

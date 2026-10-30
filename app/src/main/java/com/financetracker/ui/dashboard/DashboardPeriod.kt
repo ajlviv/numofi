@@ -14,18 +14,21 @@ import java.time.ZonedDateTime
  * A window is half-open `[from, to)`, matching the transaction-date filter, so two adjacent
  * windows never both claim a day.
  *
- * `ALL_TIME` is the default and matches the previous behaviour exactly: no row is ever
- * filtered, so existing users see nothing change on first open.
+ * Declaration order is the dropdown's order, so `ALL_TIME` sits last: it is the widest
+ * question and the least likely one to be re-picked, while the windows people switch between
+ * lead. `MONTH_TO_DATE` is the default — the month so far is what "how am I doing right now"
+ * asks, and it is the window the breakdown and the flows are scoped to until someone changes
+ * it.
  *
  * The window is computed from [nowMillis], which every function defaults to the wall clock
  * so call sites read `period.contains(row.timestamp)`. Tests pass an explicit instant to keep
  * the month-start arithmetic deterministic regardless of when the suite runs.
  */
 enum class DashboardPeriod(@StringRes val labelRes: Int) {
-    ALL_TIME(R.string.dash_period_all_time),
     MONTH_TO_DATE(R.string.dash_period_mtd),
     LAST_90_DAYS(R.string.dash_period_90d),
-    THIS_YEAR(R.string.dash_period_year);
+    THIS_YEAR(R.string.dash_period_year),
+    ALL_TIME(R.string.dash_period_all_time);
 
     /**
      * Half-open millisecond bounds `[from, to)` at [nowMillis], or null for no window.

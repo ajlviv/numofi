@@ -1,12 +1,14 @@
 package com.financetracker.ui.component
 
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
@@ -98,12 +100,20 @@ internal fun <T> SingleChoiceDropdown(
     onSelect: (T) -> Unit,
     // Applied to the button. Full width by default, which is what a form field wants; a caller
     // placing the control in a corner passes `Modifier` so it wraps its own label instead.
-    modifier: Modifier = Modifier.fillMaxWidth()
+    modifier: Modifier = Modifier.fillMaxWidth(),
+    // Applied to the button's inside. Null keeps the shared default, which is what a form
+    // field wants; a caller packing the control into a corner row passes a tighter one so the
+    // control shrinks instead of the row growing around it.
+    contentPadding: PaddingValues? = null
 ) {
     var expanded by remember { mutableStateOf(false) }
 
     Box {
-        OutlinedButton(onClick = { expanded = true }, modifier = modifier) {
+        OutlinedButton(
+            onClick = { expanded = true },
+            modifier = modifier,
+            contentPadding = contentPadding ?: ButtonDefaults.ContentPadding
+        ) {
             Text(
                 text = options.firstOrNull { it.first == selected }?.second ?: label,
                 maxLines = 1,

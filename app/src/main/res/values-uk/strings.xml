@@ -200,7 +200,7 @@
   <string name="dash_held_cost">%1$d у портфелі · собівартість %2$s</string>
   <string name="dash_unrealised">Нереалізований</string>
   <string name="dash_coupon_a_year">Купон на рік</string>
-  <string name="dash_net_worth">Усього активів</string>
+    <string name="dash_net_worth">Чиста вартість</string>
   <string name="dash_net_worth_income">Надходження</string>
   <string name="dash_net_worth_expense">Витрати</string>
   <string name="dash_net_worth_all_time">За весь час, зокрема до будь-якого фільтра за період.</string>
