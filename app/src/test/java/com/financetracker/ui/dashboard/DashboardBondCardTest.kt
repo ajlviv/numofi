@@ -169,9 +169,10 @@ class DashboardBondCardTest {
         )
         show(listOf(position()), transactions = listOf(purchase))
 
-        // The button carries the current period; the rest are in the menu it opens.
-        compose.onNodeWithText("All time").performClick()
-        compose.onNodeWithText("This month").assertIsDisplayed()
+        // The button carries the current period, which is the month so far; the rest — All time
+        // among them — are in the menu it opens.
+        compose.onNodeWithText("This month").performClick()
+        compose.onNodeWithText("All time").assertIsDisplayed()
         compose.onNodeWithText("Last 90 days").assertIsDisplayed()
 
         // The headline is the all-time figure whatever the selector says. A windowed total with

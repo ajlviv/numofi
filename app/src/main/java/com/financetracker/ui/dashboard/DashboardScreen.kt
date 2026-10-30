@@ -6,6 +6,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
@@ -105,14 +106,15 @@ fun DashboardScreen(
     val totals = totalsByCurrency(rows)
 
     // Income and spent are flows, so they can be scoped to a window while the net-worth headline
-    // above stays a stock value. ALL_TIME is the default and matches the old behaviour exactly:
-    // every row passes the filter, so returning users see nothing change.
+    // above stays a stock value. The month so far is the default: it answers "how am I doing right
+    // now" and scopes the breakdown below to the same window, and a returning user who wants the
+    // unfiltered view finds `All time` last in the list.
     //
     // The windowed flows are derived by recomputing netWorth() over the filtered rows with no
     // holdings. That reuses the same rate gate (see the comment in netWorth), so income, spent
     // and the headline are converted on identical terms — the one invariant the dashboard must
     // never break.
-    var period by rememberSaveable { mutableStateOf(DashboardPeriod.ALL_TIME) }
+    var period by rememberSaveable { mutableStateOf(DashboardPeriod.MONTH_TO_DATE) }
     val windowedResult = netWorth(
         totals = totalsByCurrency(rows.filter { period.contains(it.timestamp) }),
         positions = emptyList(),
@@ -260,8 +262,11 @@ private fun NetWorthCard(
                     selected = period,
                     onSelect = onPeriodChange,
                     // Wrap-content rather than the shared default: this control sits in the
-                    // corner beside the label, not across the card.
-                    modifier = Modifier
+                    // corner beside the label, not across the card. Its padding is tightened
+                    // too — a corner control sized like a form field would push the label off
+                    // the row on a narrow screen, and the menu it opens is unaffected.
+                    modifier = Modifier,
+                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp)
                 )
             }
             Spacer(modifier = Modifier.height(4.dp))
@@ -637,20 +642,26 @@ private fun ScheduledPlansCard(
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             } else {
-                Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                    FlowColumn(
-                        label = stringResource(R.string.recurring_upcoming_expense),
-                        amount = expense ?: 0.0,
-                        currencyCode = baseCurrency,
-                        outgoing = true,
-                        showLabel = true
-                    )
+                // One row per direction, income first. Without labels each row is just
+                // the arrow and the figure, so the full width of the narrow card is free
+                // for the amount. Two rows also read as the two halves of the net above
+                // rather than as one crowded line.
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     FlowColumn(
                         label = stringResource(R.string.recurring_upcoming_income),
                         amount = income ?: 0.0,
                         currencyCode = baseCurrency,
                         outgoing = false,
-                        showLabel = true
+                        showLabel = false,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    FlowColumn(
+                        label = stringResource(R.string.recurring_upcoming_expense),
+                        amount = expense ?: 0.0,
+                        currencyCode = baseCurrency,
+                        outgoing = true,
+                        showLabel = false,
+                        modifier = Modifier.fillMaxWidth()
                     )
                 }
             }

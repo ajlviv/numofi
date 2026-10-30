@@ -38,6 +38,7 @@ import com.financetracker.R
 import com.financetracker.model.Bank
 import com.financetracker.model.DEFAULT_RECORDABLE_CURRENCY
 import com.financetracker.model.RECORDABLE_CURRENCIES
+import com.financetracker.model.Recurrence
 import com.financetracker.model.RepeatFrequency
 import com.financetracker.model.RecurringPayment
 import com.financetracker.model.TransactionType
@@ -46,6 +47,7 @@ import com.financetracker.ui.component.RequiredLabel
 import com.financetracker.ui.component.SingleChoiceDropdown
 import com.financetracker.ui.transaction.DateField
 import com.financetracker.util.AmountInput
+import com.financetracker.util.DateFormats
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
@@ -72,6 +74,7 @@ internal fun RecurringEntryForm(
 ) {
     val zone = remember { ZoneId.systemDefault() }
     val today = remember { LocalDate.now(zone) }
+    val dateFormat = remember { DateFormats.date() }
 
     var title by remember { mutableStateOf(existing?.title.orEmpty()) }
     var amount by remember { mutableStateOf(existing?.amount?.let(::plainAmount).orEmpty()) }
@@ -227,6 +230,20 @@ internal fun RecurringEntryForm(
                 DateField(start) { start = it }
             }
 
+            // The next occurrence, derived from the form's current state the same way the card
+            // derives it from the stored row after a save — the same walk over what is about to
+            // be written. Shown here so that changing the start, the frequency, the "every" box
+            // or the end recalculates it in front of the user instead of only after the save.
+            // Dropped rather than printed as anything else when the series has no upcoming date
+            // (ended, or an empty "every" box), exactly as the card drops it.
+            upcomingFromForm(start, end, frequency, interval, today, zone)?.let { next ->
+                Text(
+                    text = stringResource(R.string.recurring_next_due, next.format(dateFormat)),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Checkbox(
                     checked = end != null,
@@ -295,3 +312,27 @@ private fun day(millis: Long, zone: ZoneId): LocalDate =
 /** A double without a trailing `.0`, so editing a whole amount does not show `12000.0`. */
 private fun plainAmount(value: Double): String =
     if (value % 1.0 == 0.0) value.toLong().toString() else value.toString()
+
+/**
+ * The next occurrence the form's current fields describe, or null when they describe none.
+ *
+ * The same [Recurrence.nextOccurrence] walk the plan card runs over the stored row: the dates
+ * are converted to millis here so the form keeps dealing in days and the zone stays explicit,
+ * the same conversion [RecurringForm.toPayment] performs on save. An "every" box that is empty
+ * or not a number reads as an interval below 1, which [Recurrence] refuses as not-a-schedule.
+ */
+private fun upcomingFromForm(
+    start: LocalDate,
+    end: LocalDate?,
+    frequency: RepeatFrequency,
+    interval: String,
+    today: LocalDate,
+    zone: ZoneId
+): LocalDate? = Recurrence.nextOccurrence(
+    frequency = frequency,
+    intervalCount = interval.toIntOrNull() ?: 0,
+    startDateMillis = start.atStartOfDay(zone).toInstant().toEpochMilli(),
+    endDateMillis = end?.atStartOfDay(zone)?.toInstant()?.toEpochMilli(),
+    from = today,
+    zone = zone
+)

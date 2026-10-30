@@ -222,7 +222,7 @@
   <string name="dash_held_cost">%1$d held · cost %2$s</string>
   <string name="dash_unrealised">Unrealised</string>
   <string name="dash_coupon_a_year">Coupon a year</string>
-  <string name="dash_net_worth">Total assets</string>
+    <string name="dash_net_worth">Net Worth</string>
   <string name="dash_net_worth_income">Income</string>
   <string name="dash_net_worth_expense">Spent</string>
   <string name="dash_net_worth_all_time">All time, including before any period filter.</string>
