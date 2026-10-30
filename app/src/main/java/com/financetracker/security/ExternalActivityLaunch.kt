@@ -33,6 +33,17 @@ class ExternalActivityLaunch {
     }
 
     /**
+     * Withdraws an announcement whose launch did not happen after all.
+     *
+     * A picker launch is not expected to fail, but a link handed to another app can be refused
+     * after [expect] has already run. Leaving the flag set would swallow the next genuine stop,
+     * which is the one that should re-lock.
+     */
+    fun cancel() {
+        expected = false
+    }
+
+    /**
      * Whether the stop being handled was one this class asked for, clearing the flag.
      *
      * Consumed rather than read, so a stop that was not expected does not leave the next real one

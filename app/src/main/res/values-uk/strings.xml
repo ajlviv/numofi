@@ -220,7 +220,7 @@
   <string name="dash_scheduled_none">Нічого не заплановано на найближчі 14 днів.</string>
   <string name="settings_tab_general">Загальні</string>
   <string name="settings_tab_data">Дані</string>
-  <string name="settings_tab_account">Акаунт</string>
+  <string name="settings_tab_other">Інше</string>
 <string name="settings_tab_categories">Категорії</string>
   <string name="settings_preferences">Параметри</string>
   <string name="settings_theme_mode">Режим теми</string>
@@ -307,6 +307,10 @@
   <string name="settings_bank_archived_msg">Заархівовано. Його транзакції збережено, і він залишається у фільтрі.</string>
   <string name="settings_bank_restored">Відновлено.</string>
   <string name="settings_account">Обліковий запис</string>
+  <string name="settings_support_title">Підтримати проєкт</string>
+  <string name="settings_support_blurb">Застосунок безкоштовний і без реклами. Якщо він вам корисний, ви можете добровільно підтримати розробника. Це нічого не відкриває, і застосунок не змінюється.</string>
+  <string name="settings_support_button">Підтримати проєкт</string>
+  <string name="settings_support_unavailable">Жоден застосунок не може відкрити це посилання.</string>
   <string name="import_section_title">Імпортувати виписку</string>
   <string name="import_section_blurb">Працює з будь-яким банком: експортуйте виписку як XLSX, CSV або PDF і виберіть її тут. Файл нікуди не завантажується.</string>
   <string name="import_choose_file">Вибрати файл виписки</string>
