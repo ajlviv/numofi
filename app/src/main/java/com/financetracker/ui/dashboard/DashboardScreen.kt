@@ -177,6 +177,11 @@ fun DashboardScreen(
             val bondCards = positions.groupBy { it.bond.nominalCurrency }
             if (bondCards.isNotEmpty()) {
                 bondCards.forEach { (currency, inCurrency) ->
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+                    ) {
+                    Modifier.fillMaxWidth()
                     InvestmentCard(
                         positions = inCurrency,
                         currencyCode = currency,
@@ -605,7 +610,7 @@ private fun EmptyState() {
 private fun ScheduledPlansCard(
     upcoming: UpcomingTotals,
     baseCurrency: String,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier.fillMaxWidth()
 ) {
     Card(
         modifier = modifier,

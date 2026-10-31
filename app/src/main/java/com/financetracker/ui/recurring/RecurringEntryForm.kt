@@ -227,6 +227,7 @@ internal fun RecurringEntryForm(
 
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(stringResource(R.string.recurring_start))
+                Modifier.verticalSpacing(8.dp)
                 DateField(start) { start = it }
             }
 
@@ -250,6 +251,7 @@ internal fun RecurringEntryForm(
                     onCheckedChange = { checked -> end = if (checked) start else null }
                 )
                 Text(stringResource(R.string.recurring_end))
+                Modifier.verticalSpacing(8.dp)
                 val chosen = end
                 if (chosen != null) {
                     DateField(chosen) { end = it }

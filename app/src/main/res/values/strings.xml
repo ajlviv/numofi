@@ -1,6 +1,6 @@
 ﻿<?xml version="1.0" encoding="utf-8"?>
 <resources>
-  <string name="app_name">FinanceTracker</string>
+  <string name="app_name">NumoFi</string>
   <!-- Sign-in -->
   <string name="sign_in">Sign In with Google</string>
   <string name="signing_in">Signing in…</string>
@@ -55,8 +55,8 @@
   <string name="detail_section_payment">Payment</string>
   <string name="detail_section_provenance">Provenance</string>
   <string name="detail_not_set">Not set</string>
-  <string name="detail_currency_iso">Currency (ISO 4217)</string>
-  <string name="detail_amount_stored">Amount (stored)</string>
+  <string name="detail_currency_iso">Currency</string>
+  <string name="detail_amount_stored">Amount</string>
   <string name="detail_card">Card</string>
   <string name="detail_source">Source</string>
   <string name="detail_external_id">External ID</string>

@@ -578,6 +578,14 @@ private fun DataTab(
             )
         }
     }
+
+    BankConnectionSection(
+        bankNames = bankNames,
+        onTokenChanged = viewModel::onTokenChanged,
+        onSignInClicked = {},
+        onSignOutClicked = viewModel::onSignOutClicked,
+        isSignedIn = viewModel.isSignedIn,
+    )
 }
 
 /**
