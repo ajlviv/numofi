@@ -623,11 +623,12 @@ private fun BankConnectionSection(
 }
 
 /**
- * Everything about the app itself: supporting it, and who is signed in.
+ * Everything about the app itself: supporting it, sending feedback, and who is signed in.
  *
- * The two are kept in separate cards because they answer different questions — one is a voluntary
- * gesture with no effect on the app, the other is the identity every local row is scoped to — and
- * merging them would make the tip look like a purchase of account functionality.
+ * The three are kept in separate cards because they answer different questions — a voluntary
+ * gesture with no effect on the app, a free channel for reporting problems, and the identity
+ * every local row is scoped to. Merging the tip with either would make it look like a purchase
+ * of feedback or account functionality.
  */
 @Composable
 private fun OtherTab(
@@ -643,6 +644,15 @@ private fun OtherTab(
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
             SupportProjectButton()
+        }
+
+        SettingsSection(title = stringResource(R.string.settings_feedback_title)) {
+            Text(
+                text = stringResource(R.string.settings_feedback_blurb),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            FeedbackButton()
         }
 
         SettingsSection(title = stringResource(R.string.settings_account)) {
@@ -666,15 +676,45 @@ private fun OtherTab(
  * banking app the user already trusts, and so the app never sees a card number. Nothing is
  * recorded and nothing changes after a tip: it is a voluntary contribution, not an in-app
  * purchase, which is what keeps it outside Play Billing under the genuine-tip exception.
- *
- * The launch is announced to the app lock for the same reason the file pickers are: the browser
- * is another activity, and a stop it causes must not re-lock and unmount this section.
  */
 @Composable
 private fun SupportProjectButton() {
+    ExternalLinkButton(
+        url = stringResource(R.string.settings_support_url),
+        labelRes = R.string.settings_support_button,
+        unavailableRes = R.string.settings_support_unavailable
+    )
+}
+
+/**
+ * Opens the Telegram feedback bot.
+ *
+ * The bot is free to everyone and is deliberately not part of the tip card above: feedback must
+ * never look like something a payment buys, or the voluntary-tip exception stops applying.
+ */
+@Composable
+private fun FeedbackButton() {
+    ExternalLinkButton(
+        url = stringResource(R.string.settings_feedback_url),
+        labelRes = R.string.settings_feedback_button,
+        unavailableRes = R.string.settings_support_unavailable
+    )
+}
+
+/**
+ * Opens [url] in whatever app handles the link.
+ *
+ * The launch is announced to the app lock for the same reason the file pickers are: the browser
+ * or Telegram is another activity, and a stop it causes must not re-lock and unmount this section.
+ */
+@Composable
+private fun ExternalLinkButton(
+    url: String,
+    @StringRes labelRes: Int,
+    @StringRes unavailableRes: Int
+) {
     val context = LocalContext.current
     val externalLaunch = LocalExternalActivityLaunch.current
-    val url = stringResource(R.string.settings_support_url)
     var unavailable by remember { mutableStateOf(false) }
 
     Button(
@@ -693,12 +733,12 @@ private fun SupportProjectButton() {
         },
         modifier = Modifier.fillMaxWidth()
     ) {
-        Text(stringResource(R.string.settings_support_button))
+        Text(stringResource(labelRes))
     }
 
     if (unavailable) {
         Text(
-            text = stringResource(R.string.settings_support_unavailable),
+            text = stringResource(unavailableRes),
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.error
         )

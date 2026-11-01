@@ -312,6 +312,9 @@
   <string name="settings_support_blurb">Застосунок безкоштовний і без реклами. Якщо він вам корисний, ви можете добровільно підтримати розробника. Це нічого не відкриває, і застосунок не змінюється.</string>
   <string name="settings_support_button">Підтримати проєкт</string>
   <string name="settings_support_unavailable">Жоден застосунок не може відкрити це посилання.</string>
+  <string name="settings_feedback_title">Зворотний зв\'язок</string>
+  <string name="settings_feedback_blurb">Повідомте про помилку або запропонуйте функцію в Telegram. Безкоштовно для всіх. Не надсилайте виписки, номери карток чи дані облікового запису.</string>
+  <string name="settings_feedback_button">Відкрити Telegram</string>
   <string name="import_section_title">Імпортувати виписку</string>
   <string name="import_section_blurb">Працює з будь-яким банком: експортуйте виписку як XLSX, CSV або PDF і виберіть її тут. Файл нікуди не завантажується.</string>
   <string name="import_choose_file">Вибрати файл виписки</string>
