@@ -333,6 +333,10 @@
   <string name="settings_support_button">Support the project</string>
   <string name="settings_support_unavailable">No app can open this link.</string>
   <string name="settings_support_url" translatable="false">https://send.monobank.ua/jar/XXXXXXXX</string>
+  <string name="settings_feedback_title">Feedback</string>
+  <string name="settings_feedback_blurb">Report a bug or suggest a feature in Telegram. Free for everyone. Please don\'t send statements, card numbers, or account details.</string>
+  <string name="settings_feedback_button">Open Telegram</string>
+  <string name="settings_feedback_url" translatable="false">https://t.me/NumofiFeedbackBot</string>
   <string name="settings_version" translatable="false">Finance Tracker v%1$s</string>
   <string name="import_section_title">Import a statement</string>
   <string name="import_section_blurb">Works with any bank: export a statement as XLSX, CSV or PDF and pick it here. Nothing is uploaded.</string>
