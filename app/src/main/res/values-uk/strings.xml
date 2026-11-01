@@ -48,6 +48,7 @@
   <string name="detail_card">Картка</string>
   <string name="detail_source">Джерело</string>
   <string name="detail_external_id">Зовнішній ID</string>
+  <string name="settings_no_bank">Банк не вибрано</string>
   <string name="detail_delete_title">Видалити транзакцію?</string>
   <string name="detail_delete_body">«%1$s» буде остаточно видалено.</string>
   <string name="lang_system_default">Мова системи</string>

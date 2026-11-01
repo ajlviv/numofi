@@ -580,12 +580,46 @@ private fun DataTab(
     }
 
     BankConnectionSection(
-        bankNames = bankNames,
-        onTokenChanged = viewModel::onTokenChanged,
+        bankNames = banks.map { it.displayName },
+        onTokenChanged = { viewModel::onTokenChange },
         onSignInClicked = {},
-        onSignOutClicked = viewModel::onSignOutClicked,
-        isSignedIn = viewModel.isSignedIn,
+        onSignOutClicked = viewModel::signOut,
+        isSignedIn = viewModel.selectedBankId.value != null,
     )
+}
+
+/** Composable that displays bank connection UI: bank name, token input, and sign in/out buttons. */
+@Composable
+private fun BankConnectionSection(
+    bankNames: List<String>,
+    onTokenChanged: (String) -> Unit,
+    onSignInClicked: () -> Unit,
+    onSignOutClicked: () -> Unit,
+    isSignedIn: Boolean,
+) {
+    if (isSignedIn) {
+        Row(horizontalArrangement = Arrangement.SpaceBetween) {
+            Text(
+                text = bankNames.firstOrNull() ?: stringResource(R.string.settings_no_bank),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            OutlinedButton(onClick = onSignOutClicked) {
+                Text(stringResource(R.string.sign_out))
+            }
+        }
+    } else {
+        OutlinedTextField(
+            value = "", // token state managed elsewhere
+            onValueChange = onTokenChanged,
+            label = { Text(stringResource(R.string.settings_access_token)) },
+            modifier = Modifier.fillMaxWidth(),
+            visualTransformation = PasswordVisualTransformation()
+        )
+        Button(onClick = onSignInClicked) {
+            Text(stringResource(R.string.sign_in))
+        }
+    }
 }
 
 /**

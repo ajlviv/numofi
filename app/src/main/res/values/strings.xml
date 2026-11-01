@@ -39,6 +39,7 @@
   <string name="common_back">Back</string>
   <string name="common_delete">Delete</string>
   <string name="common_none">None</string>
+  <string name="settings_no_bank">No bank selected</string>
   <string name="common_manual">Manual</string>
   <string name="bank_archived">%1$s (archived)</string>
   <!-- Transaction detail card. The English values are what TransactionDetails pins byte for

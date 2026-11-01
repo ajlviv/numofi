@@ -2,10 +2,14 @@ package com.financetracker.ui.recurring
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.Spacer
+
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
@@ -70,7 +74,7 @@ internal fun RecurringEntryForm(
     categories: List<String>,
     onSave: (RecurringForm) -> Unit,
     onCancel: () -> Unit,
-    modifier: Modifier = Modifier
+    scaffoldModifier: Modifier = Modifier
 ) {
     val zone = remember { ZoneId.systemDefault() }
     val today = remember { LocalDate.now(zone) }
@@ -100,7 +104,7 @@ internal fun RecurringEntryForm(
     BackHandler(onBack = onCancel)
 
     Scaffold(
-        modifier = modifier,
+        modifier = scaffoldModifier,
         topBar = {
             TopAppBar(
                 title = {
@@ -225,9 +229,9 @@ internal fun RecurringEntryForm(
                 singleLine = true
             )
 
-            Row(verticalAlignment = Alignment.CenterVertically) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
                 Text(stringResource(R.string.recurring_start))
-                Modifier.verticalSpacing(8.dp)
+                Spacer(Modifier.height(8.dp))
                 DateField(start) { start = it }
             }
 
@@ -245,13 +249,13 @@ internal fun RecurringEntryForm(
                 )
             }
 
-            Row(verticalAlignment = Alignment.CenterVertically) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
                 Checkbox(
                     checked = end != null,
                     onCheckedChange = { checked -> end = if (checked) start else null }
                 )
                 Text(stringResource(R.string.recurring_end))
-                Modifier.verticalSpacing(8.dp)
+                Spacer(Modifier.height(8.dp))
                 val chosen = end
                 if (chosen != null) {
                     DateField(chosen) { end = it }

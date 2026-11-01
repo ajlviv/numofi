@@ -110,7 +110,7 @@ fun RecurringScreen(
                 adding = false
                 editing = null
             },
-            modifier = Modifier.fillMaxSize()
+            scaffoldModifier = Modifier.fillMaxSize()
         )
         return
     }
