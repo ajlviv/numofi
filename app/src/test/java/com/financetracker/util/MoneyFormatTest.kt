@@ -36,8 +36,16 @@ class MoneyFormatTest {
     @Test
     fun `an unknown code falls back rather than inventing a currency`() {
         // Nothing sensible to show, but it must not be empty and must not claim to be
-        // a currency the row was never denominated in.
-        assertNotEquals("ZZZ", MoneyFormat.symbolOf("ZZZ"))
+        // a currency the row was never denominated in. Pinned to a locale with no country:
+        // GitHub's runner defaults to one, and the JDK then has no currency to fall back on,
+        // which is the branch that used to return the unknown code itself.
+        val original = Locale.getDefault()
+        try {
+            Locale.setDefault(Locale.ENGLISH)
+            assertNotEquals("ZZZ", MoneyFormat.symbolOf("ZZZ"))
+        } finally {
+            Locale.setDefault(original)
+        }
     }
 
     @Test

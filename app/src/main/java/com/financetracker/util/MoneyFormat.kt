@@ -66,7 +66,7 @@ object MoneyFormat {
         if (code == null) return deviceSymbol() ?: FALLBACK
         NATIVE_SYMBOLS[code]?.let { return it }
         val currency = runCatching { Currency.getInstance(code) }.getOrNull()
-            ?: return deviceSymbol() ?: code
+            ?: return deviceSymbol() ?: FALLBACK
         return runCatching { currency.getSymbol(Locale.getDefault()) }.getOrNull()
             ?.takeIf { it.isNotBlank() }
             ?: code
