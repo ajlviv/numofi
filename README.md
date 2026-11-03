@@ -73,6 +73,19 @@ longer a dependency and nothing reads the file, so it can be deleted.
 ./gradlew :app:testDebugUnitTest   # JVM + Robolectric suite
 ```
 
+## CI/CD
+
+- Pull requests: `.github/workflows/ci.yml` runs the JVM/Robolectric suite, lint, and a debug APK.
+- Every push to `main`: `.github/workflows/android-release.yml` stamps a new version, builds a
+  signed APK/AAB, and distributes the APK to the Firebase App Distribution `testers` group.
+- Play: run the release workflow manually with `play-internal`, then `play-production`, which
+  requires approval in the `play-production` environment.
+- Setup, secrets, and the version scheme: see `RELEASING.md`.
+
+The application version is generated per CI run: `versionName = major.minor.runNumber`,
+`versionCode = versionCodeOffset + runNumber * 10 + (runAttempt - 1)`. `version.properties`
+holds the major, minor, and offset values.
+
 ## Authentication Flow
 1. App launches → `LoginActivity` (LAUNCHER)
 2. `LoginScreen` asks Credential Manager for a Google ID token and hands the credential to

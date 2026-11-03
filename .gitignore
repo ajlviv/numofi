@@ -20,6 +20,9 @@ app/src/main/res/navigation/
 *.jks
 *.keystore
 
+# Local release signing material
+keystore.properties
+
 # Generated files
 gen/
 

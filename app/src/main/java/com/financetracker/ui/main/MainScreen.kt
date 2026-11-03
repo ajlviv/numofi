@@ -5,7 +5,9 @@ import androidx.annotation.StringRes
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
@@ -253,7 +255,13 @@ fun MainScreen(
             }
         }
     ) { padding ->
-        Box(modifier = Modifier.padding(padding).fillMaxSize()) {
+        Box(
+            modifier = Modifier
+                .padding(padding)
+                .consumeWindowInsets(padding)
+                .imePadding()
+                .fillMaxSize()
+        ) {
             when (items[selectedTab]) {
                 MainBottomNavDestination.DASHBOARD ->
                     DashboardScreen(

@@ -584,7 +584,7 @@ private fun DataTab(
         onTokenChanged = { viewModel::onTokenChange },
         onSignInClicked = {},
         onSignOutClicked = viewModel::signOut,
-        isSignedIn = viewModel.selectedBankId.value != null,
+        isSignedIn = selectedBankId != null,
     )
 }
 

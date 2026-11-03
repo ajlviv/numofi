@@ -48,15 +48,18 @@ private val FinanceTrackerTypography = Typography(
 )
 
 @Composable
+fun isDarkTheme(themeMode: ThemeMode): Boolean = when (themeMode) {
+    ThemeMode.SYSTEM -> isSystemInDarkTheme()
+    ThemeMode.LIGHT -> false
+    ThemeMode.DARK -> true
+}
+
+@Composable
 fun FinanceTrackerTheme(
     themeMode: ThemeMode = ThemeMode.SYSTEM,
     content: @Composable () -> Unit
 ) {
-    val darkTheme = when (themeMode) {
-        ThemeMode.SYSTEM -> isSystemInDarkTheme()
-        ThemeMode.LIGHT -> false
-        ThemeMode.DARK -> true
-    }
+    val darkTheme = isDarkTheme(themeMode)
 
     MaterialTheme(
         colorScheme = if (darkTheme) {

@@ -4,12 +4,14 @@ import android.content.Context
 import android.content.Intent
 import android.os.Bundle
 import androidx.activity.compose.setContent
+import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.core.view.WindowCompat
 import androidx.fragment.app.FragmentActivity
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -19,6 +21,7 @@ import com.financetracker.ui.auth.AuthGuard
 import com.financetracker.ui.auth.AuthViewModel
 import com.financetracker.ui.main.MainScreen
 import com.financetracker.ui.theme.FinanceTrackerTheme
+import com.financetracker.ui.theme.isDarkTheme
 import com.financetracker.util.AppLocale
 import dagger.hilt.android.AndroidEntryPoint
 
@@ -39,11 +42,20 @@ class MainActivity : FragmentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        enableEdgeToEdge()
 
         setContent {
             val context = LocalContext.current
             val appViewModel: AppViewModel = hiltViewModel()
             val themeMode by appViewModel.themeMode.collectAsStateWithLifecycle()
+            val darkTheme = isDarkTheme(themeMode)
+
+            SideEffect {
+                WindowCompat.getInsetsController(window, window.decorView).apply {
+                    isAppearanceLightStatusBars = !darkTheme
+                    isAppearanceLightNavigationBars = !darkTheme
+                }
+            }
 
             FinanceTrackerTheme(themeMode = themeMode) {
                 AuthGuard(
