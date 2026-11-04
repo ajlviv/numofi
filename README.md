@@ -75,16 +75,20 @@ longer a dependency and nothing reads the file, so it can be deleted.
 
 ## CI/CD
 
-- Pull requests: `.github/workflows/ci.yml` runs the JVM/Robolectric suite, lint, and a debug APK.
-- Every push to `main`: `.github/workflows/android-release.yml` stamps a new version, builds a
-  signed APK/AAB, and distributes the APK to the Firebase App Distribution `testers` group.
-- Play: run the release workflow manually with `play-internal`, then `play-production`, which
-  requires approval in the `play-production` environment.
-- Setup, secrets, and the version scheme: see `RELEASING.md`.
+- Pull requests: `.github/workflows/ci.yml` only compiles, runs the JVM/Robolectric suite, and
+  runs lint.
+- Releases are tag-driven. Run **Actions → Create release tag** with `patch`, `minor`, or `major`;
+  it commits the new `appVersionName`, pushes an immutable `vX.Y.Z` tag, and the tag starts the
+  release build.
+- The `Release` workflow checks out that exact tag, builds and signs the APK/AAB, and creates a
+  GitHub Release. Play upload is optional and runs only when the release workflow is started
+  manually for an existing tag.
+- Setup, secrets, and the release runbook: see `RELEASING.md`.
 
-The application version is generated per CI run: `versionName = major.minor.runNumber`,
-`versionCode = versionCodeOffset + runNumber * 10 + (runAttempt - 1)`. `version.properties`
-holds the major, minor, and offset values.
+`gradle.properties` is the single source of truth for `appVersionName`; `versionCode` is derived
+as `major * 1_000_000 + minor * 1_000 + patch`. A tag that disagrees with `appVersionName`, or
+that does not point at a commit on `main`, is refused before building. Feature branches never bump
+the version; release keystores live only in GitHub secrets.
 
 ## Authentication Flow
 1. App launches → `LoginActivity` (LAUNCHER)

@@ -1,76 +1,97 @@
 # Releasing NumoFi
 
-There are two delivery paths:
+Releases are tag-driven:
 
-- **Testers** get every build from `main` through Firebase App Distribution. This is free on the
-  Firebase Spark plan and works with a private repository; testers do not need GitHub access.
-- **Google Play** gets a build only when a person runs the release workflow manually and approves
-  the `play-production` environment. The Play API cannot create the app or the first release, so
-  the one-time setup below must be done by hand.
+- **Pull requests** run the fast path only: compile, JVM/Robolectric tests, and lint.
+- **A person starts a release** by running the `Create release tag` workflow with `patch`, `minor`,
+  or `major`. That workflow is the only place the version is bumped.
+- **A tag triggers the release build.** The `Release` workflow checks out exactly that tag, builds
+  and signs the APK/AAB, uploads them, and creates a GitHub Release.
+- **Google Play is optional.** Run the `Release` workflow manually on an existing tag and choose
+  `internal` or `production`.
 
-Both paths are implemented in `.github/workflows/android-release.yml`. Pull requests are checked
-by `.github/workflows/ci.yml`.
+This separates the fast PR flow from the deliberate release flow. Every release artifact is built
+from an immutable tag, so it is traceable to one commit and one `appVersionName`.
 
 ## Version scheme
 
-`version.properties` holds the human-controlled part:
+`gradle.properties` is the single source of truth:
 
 ```properties
-versionMajor=1
-versionMinor=0
-versionCodeOffset=1000
+appVersionName=1.0.0
 ```
 
-Every run of `android-release.yml` stamps:
+The **tag must match** `appVersionName`. A `v1.4.2` tag refuses to build if
+`gradle.properties` says `1.4.1`; no artifact can be published with the wrong version.
+
+`versionCode` is derived, not stored:
 
 ```text
-versionName = <versionMajor>.<versionMinor>.<github.run_number>
-versionCode = versionCodeOffset + (github.run_number * 10) + (github.run_attempt - 1)
+versionCode = major * 1_000_000 + minor * 1_000 + patch
 ```
 
-Examples: the first release run gets `1.0.1` / `1010`; its second attempt gets `1.0.1` / `1011`;
-the next run gets `1.0.2` / `1020`. A local build with no CI values gets `1.0.0` / `1000`.
+Examples: `1.0.0` → `1000000`, `1.4.2` → `1004002`, `2.0.0` → `2000000`. The formula is
+monotonic for SemVer, so Play never sees a version code go backwards. The derived code must stay
+in Play's `1..2100000000` range; `Create release tag` and the Gradle build both refuse a version
+outside it.
 
 Rules:
 
-- `versionCode` must always increase for Play. The run number does that; do not reuse a version.
-- Do not add a second workflow that uploads to Play. `github.run_number` is monotonic **per
-  workflow file**, so a second uploader would get a different counter and could collide.
-- Do not rename, delete, or recreate `android-release.yml` casually: a new workflow can reset the
-  counter. If it ever does, raise `versionCodeOffset` above the highest versionCode already
-  uploaded.
-- A major or minor bump is an edit to `version.properties`. `versionCode` keeps increasing because
-  it is based on the run number, not on the semantic version.
+- The release tag is immutable. Never move, delete, or recreate a published tag. If a release is
+  wrong, fix forward with the next patch/minor tag.
+- The only writer of `appVersionName` is `Create release tag`. Do not hand-edit it as part of a
+  feature PR.
 - The version is displayed in Settings and stored in backups as `appVersion`. Releases must not
-  move `AppDatabase.version` or `BackupSnapshot.FORMAT`; neither is affected by versioning.
+  move `AppDatabase.version` or `BackupSnapshot.FORMAT`; neither is affected by app versioning.
+- Old `version.properties` is gone. Run numbers and attempt numbers no longer participate in app
+  versioning.
+
+## Branch strategy
+
+- `main` is always releasable, protected, and requires the PR checks.
+- `feature/*` branches are short-lived and never change `appVersionName`.
+- `release/vX.Y.Z` is optional, only for a maintenance line.
+- `vX.Y.Z` tags are created by the release workflow, not by feature branches.
+
+## Guardrails
+
+- Pull requests only compile, test, and lint. They never assemble an APK/AAB, run
+  `bundleRelease`, sign, or touch Play.
+- Only `Create release tag` writes `appVersionName`; feature branches never bump it.
+- Release keystores live in GitHub secrets, never in the repository.
+- The tag build refuses a tag whose commit is not on `main`.
+- Toolchain versions are pinned: Gradle wrapper `8.11.1`, JDK `17.0.21`, `compileSdk` 36, build-tools
+  `36.0.0`, and exact Action versions.
 
 ## Required GitHub configuration
 
-Repository variables (Settings → Secrets and variables → Actions → Variables):
-
-| Variable | Value |
-| --- | --- |
-| `FIREBASE_APP_ID` | Firebase Android App ID, `1:...:android:...` |
-| `FIREBASE_TESTER_GROUPS` | Comma-separated App Distribution group names, e.g. `testers` |
-
-Repository secrets:
+Secrets (Settings → Secrets and variables → Actions → Secrets):
 
 | Secret | Value |
 | --- | --- |
+| `RELEASE_TOKEN` | Fine-grained PAT with **Contents: write**; if `main` is protected, it must be allowed to bypass that protection. |
 | `KEYSTORE_BASE64` | Base64 of the upload keystore |
 | `KEYSTORE_PASSWORD` | Keystore password |
 | `KEY_ALIAS` | Upload key alias |
 | `KEY_PASSWORD` | Upload key password |
-| `FIREBASE_SERVICE_ACCOUNT` | JSON key for a service account with Firebase App Distribution Admin |
-| `PLAY_SERVICE_ACCOUNT_JSON` | JSON key for the Play Developer API service account |
+| `PLAY_SERVICE_ACCOUNT_JSON` | Optional; JSON key for the Play Developer API service account |
+
+`RELEASE_TOKEN` is required because a tag pushed with the automatic `GITHUB_TOKEN` does **not**
+start another workflow. The PAT is what makes the tag push trigger the release build.
 
 Environments (Settings → Environments):
 
+- `release` — required reviewers, and deployment branches/tags restricted to `main` and
+  `v*.*.*`. Both tag creation and the tag build deploy to this environment, so each release is
+  approved twice: once before the tag is created and once before artifacts are built.
 - `play-internal` — no required reviewers.
-- `play-production` — required reviewers and deployment branches restricted to `main`.
+- `play-production` — required reviewers. The release workflow also restricts production uploads
+  to the `production` input, but the environment approval is the real gate.
 
-The Play secret may be a repository secret or an Environment secret. If it is an Environment
-secret, add it to both `play-internal` and `play-production`.
+Prefer Environment secrets on `release` for `RELEASE_TOKEN` and the four keystore values, so a
+workflow on an unprotected branch cannot read them. The Play secret may be a repository secret or
+an Environment secret; if it is an Environment secret, add it to both `play-internal` and
+`play-production`.
 
 Never commit a keystore, a password, or a service-account JSON. `*.jks`, `*.keystore`, and
 `keystore.properties` are already ignored by Git.
@@ -95,19 +116,29 @@ keytool -list -v -keystore "$HOME/numofi-upload.jks" -alias upload | grep -i sha
 ```
 
 If Play App Signing is enabled, also copy the **app signing certificate SHA-1** from Play Console
-→ Setup → App integrity and register it on the same OAuth client. Firebase testers install the
+→ Setup → App integrity and register it on the same OAuth client. GitHub Releases carry the
 upload-key-signed APK; Play installs the app-signing-key-signed build. Both must be registered, or
 Google Sign-In fails only on that delivery path.
 
-Store the keystore and passwords in GitHub:
+Create the `release`, `play-internal`, and `play-production` environments first, then store the
+keystore and passwords on `release`:
 
 ```bash
 base64 -w0 "$HOME/numofi-upload.jks" > "$HOME/numofi-upload.jks.b64"
-gh secret set KEYSTORE_BASE64 < "$HOME/numofi-upload.jks.b64"
-gh secret set KEYSTORE_PASSWORD
-gh secret set KEY_ALIAS
-gh secret set KEY_PASSWORD
+gh secret set KEYSTORE_BASE64 --env release < "$HOME/numofi-upload.jks.b64"
+gh secret set KEYSTORE_PASSWORD --env release
+gh secret set KEY_ALIAS --env release
+gh secret set KEY_PASSWORD --env release
 ```
+
+Create the release token and store it on `release`:
+
+```bash
+gh secret set RELEASE_TOKEN --env release
+```
+
+The token needs `Contents: write` on this repository. If `main` rejects direct pushes, grant the
+token permission to bypass that rule; the workflow commits the version bump directly to `main`.
 
 For local release builds, create a gitignored `keystore.properties`:
 
@@ -121,20 +152,7 @@ keyPassword=...
 Or pass `KEYSTORE_FILE`, `KEYSTORE_PASSWORD`, `KEY_ALIAS`, and `KEY_PASSWORD` as environment
 variables.
 
-### 2. Firebase App Distribution
-
-1. Create a Firebase project on the free Spark plan.
-2. Add an Android app with package `com.financetracker` and copy its App ID.
-3. Create a testers group (for example `testers`) and add tester emails.
-4. Create a service account with the **Firebase App Distribution Admin** role, download a JSON key,
-   and store it as `FIREBASE_SERVICE_ACCOUNT`.
-
-The app does not need the Firebase SDK, the Gradle plugin, or `google-services.json` for App
-Distribution. Do not add them for this purpose.
-
-Limits: 500 testers per project, 200 per group, 1,000 releases per app retained for 150 days.
-
-### 3. Google Play
+### 2. Google Play
 
 1. Confirm `com.financetracker` is available to the Play developer account. If it is not, change
    `applicationId` before the first upload; changing it later creates a new listing and requires a
@@ -148,53 +166,82 @@ Limits: 500 testers per project, 200 per group, 1,000 releases per app retained 
    permissions with access to this app and permission to release to testing tracks and production.
 6. Store the JSON as `PLAY_SERVICE_ACCOUNT_JSON`.
 7. Enroll in Play App Signing and register the app-signing SHA-1 as described above.
-8. Run the `play-internal` destination once before any production push. Play returns
-   `Precondition check failed` for a first-ever production release.
+8. Upload once to `internal` before any `production` run. Play returns `Precondition check failed`
+   for a first-ever production release.
 
 **Play target API:** new apps and updates must target API 36 since 2026-08-31. The project now
-compiles and targets API 36. Firebase distribution is not affected by this requirement.
+compiles and targets API 36.
 
-## Running the workflows
+## Release runbook
 
-- **Pull request:** `.github/workflows/ci.yml` runs the JVM/Robolectric suite, lint, and a debug
-  APK. It uses no secrets.
-- **Push to `main`:** `.github/workflows/android-release.yml` runs the suite, builds a signed APK
-  and AAB, and distributes the APK to the Firebase group.
-- **Manual tester build:** Actions → Android release → Run workflow → `destination=firebase`.
-- **Play internal:** Actions → Android release → Run workflow → `destination=play-internal`.
-- **Play production:** Actions → Android release → Run workflow → `destination=play-production`,
-  then approve the `play-production` environment. Rejecting the approval uploads nothing.
+1. Merge the feature PR to `main` through the normal PR pipeline.
+2. Go to **Actions → Create release tag → Run workflow**.
+3. Select `patch`, `minor`, or `major`, then approve the `release` environment.
+4. The workflow updates `appVersionName`, commits it to `main`, creates the annotated
+   `vX.Y.Z` tag, and pushes both atomically.
+5. The tag push starts **Release**. Approve the `release` environment again. It checks out the
+   tag, verifies the tag is on `main` and matches `appVersionName`, runs the tests, builds and
+   signs the APK/AAB, and creates the GitHub Release.
+6. Download the APK/AAB from the GitHub Release, or from the workflow run's
+   `numofi-release-vX.Y.Z` artifact.
 
-Every run gets a new `versionName` and `versionCode`. The run summary shows both and the commit.
+If the tag workflow fails, fix the cause and re-run it. Re-runs are safe: an existing GitHub
+Release is updated in place with `--clobber`, from the same immutable tag.
+
+### Optional Play upload
+
+The tag push does **not** upload to Play. To publish an already-tagged build:
+
+1. Go to **Actions → Release → Run workflow**.
+2. Enter the existing tag, for example `v1.4.2`.
+3. Choose `play_track`: `internal` or `production`.
+4. Approve the `play-production` environment if prompted.
+
+This rebuilds from the same tag, verifies the version again, updates the GitHub Release, and then
+uploads the AAB. It does not move the tag.
+
+### Downloading a build
+
+- **Release APK/AAB:** GitHub → Releases → the `vX.Y.Z` release.
+- **Workflow artifact:** the tag run's `numofi-release-vX.Y.Z` artifact.
+
+Pull request CI does not upload an APK; it compiles, tests, and lints only.
 
 ## Tester install note
 
-A Firebase build is signed with the upload key. A Play build is re-signed by Play App Signing, so
-Android will refuse to install one over the other. Uninstall the Play copy before installing a
-Firebase build. The same signature rule is why the Google Sign-In SHA-1 list must contain both
-certificates.
+A GitHub Release APK is signed with the upload key. A Play build is re-signed by Play App Signing,
+so Android will refuse to install one over the other. Uninstall the Play copy before installing a
+GitHub Release build. The same signature rule is why the Google Sign-In SHA-1 list must contain
+both certificates.
 
 ## Local release build
+
+Edit `gradle.properties` locally if you are testing a version, then:
 
 ```bash
 KEYSTORE_FILE="$HOME/numofi-upload.jks" \
 KEYSTORE_PASSWORD=... KEY_ALIAS=upload KEY_PASSWORD=... \
-./gradlew :app:assembleRelease :app:bundleRelease \
-  -PversionName=1.0.99 -PversionCode=1099 --console=plain
+./gradlew :app:assembleRelease :app:bundleRelease --console=plain
 ```
 
-Without a keystore the release is unsigned; CI refuses to distribute an unsigned APK.
+Without a keystore the release is unsigned; the tag workflow refuses to publish an unsigned APK.
 
 ## Troubleshooting
 
 | Symptom | Check |
 | --- | --- |
+| `Create release tag` refuses to start | `RELEASE_TOKEN` is missing, or it cannot push to protected `main`. |
+| `RELEASE_TOKEN is required` | Create the PAT and store it on the `release` environment (or as a repository secret). |
+| No `Release` run after the tag appears | The tag was pushed with `GITHUB_TOKEN`; the manual workflow must push it with `RELEASE_TOKEN`. |
+| Release is waiting for approval | Approve the `release` environment; tag creation and the tag build each ask once. |
+| `Tag vX.Y.Z does not point to a commit on main` | The tag was made from a feature branch. Tags are immutable; create a new tag from `main`. |
+| `Manual release runs must start from main` | Re-run **Release** from `main` (or a `vX.Y.Z` tag), not a feature branch. |
+| `Tag vX.Y.Z does not match ... appVersionName` | The tag and `gradle.properties` disagree. Fix forward with a new tag; do not move the old one. |
+| `Tag vX.Y.Z already exists` | Tags are immutable. Bump again; never delete or reuse a tag. |
 | `KEYSTORE_BASE64 is not configured` | Repository secret is missing or empty. |
 | `apksigner verify` fails | One of the four keystore values is missing, so the build was unsigned. |
-| Firebase `PERMISSION_DENIED` | Service account role or `FIREBASE_APP_ID` is wrong. |
 | Play `Package not found` | The app or its first manual release does not exist in Play Console. |
 | Play `Precondition check failed` | Store listing incomplete, or no internal/alpha/beta release yet. |
 | Play rejects the target API | The targetSdk 36 migration has not landed. |
-| `version code already used` | A run was repeated past the 10-attempt window, or the workflow counter was reset. |
 | Testers cannot install | Uninstall the Play-signed copy first; signatures differ. |
-| Sign-in fails only on Firebase or only on Play | That certificate's SHA-1 is missing from the OAuth client. |
+| Sign-in fails only on GitHub Releases or only on Play | That certificate's SHA-1 is missing from the OAuth client. |

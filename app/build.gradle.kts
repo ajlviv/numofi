@@ -8,15 +8,25 @@ plugins {
     id("com.google.dagger.hilt.android")
 }
 
-val versionProps = Properties().apply {
-    rootProject.file("version.properties").inputStream().use { load(it) }
-}
-val versionMajor = versionProps.getProperty("versionMajor")
-val versionMinor = versionProps.getProperty("versionMinor")
-val versionCodeOffset = versionProps.getProperty("versionCodeOffset").toInt()
+val appVersionName = providers.gradleProperty("appVersionName").orNull
+    ?: error("gradle.properties must define appVersionName, for example 1.0.0")
 
-val ciVersionCode = providers.gradleProperty("versionCode").orNull?.toInt()
-val ciVersionName = providers.gradleProperty("versionName").orNull
+val appVersionParts = appVersionName.split(".")
+require(appVersionParts.size == 3) {
+    "appVersionName must be MAJOR.MINOR.PATCH, was '$appVersionName'"
+}
+val (appVersionMajor, appVersionMinor, appVersionPatch) = appVersionParts.map { part ->
+    requireNotNull(part.toIntOrNull()) {
+        "appVersionName must be MAJOR.MINOR.PATCH, was '$appVersionName'"
+    }
+}
+require(appVersionMajor in 0..2_100 && appVersionMinor in 0..999 && appVersionPatch in 0..999) {
+    "appVersionName components are out of range: '$appVersionName'"
+}
+val appVersionCode = appVersionMajor * 1_000_000 + appVersionMinor * 1_000 + appVersionPatch
+require(appVersionCode in 1..2_100_000_000) {
+    "appVersionName '$appVersionName' produces versionCode $appVersionCode outside Play's 1..2100000000 range"
+}
 
 val keystoreProps = Properties().apply {
     val file = rootProject.file("keystore.properties")
@@ -46,8 +56,8 @@ android {
         applicationId = "com.financetracker"
         minSdk = 26
         targetSdk = 36
-        versionCode = ciVersionCode ?: versionCodeOffset
-        versionName = ciVersionName ?: "$versionMajor.$versionMinor.0"
+        versionCode = appVersionCode
+        versionName = appVersionName
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
