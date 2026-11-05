@@ -88,7 +88,7 @@ longer a dependency and nothing reads the file, so it can be deleted.
 `gradle.properties` is the single source of truth for `appVersionName`; `versionCode` is derived
 as `major * 1_000_000 + minor * 1_000 + patch`. A tag that disagrees with `appVersionName`, or
 that does not point at a commit on `main`, is refused before building. Feature branches never bump
-the version; release keystores live only in GitHub secrets.
+the version; release keystores are never committed, and CI reads them from GitHub secrets.
 
 ## Authentication Flow
 1. App launches → `LoginActivity` (LAUNCHER)

@@ -55,4 +55,5 @@ jobs:
             app/build/reports/lint-results-debug.html
             app/build/reports/lint-results-debug.xml
           if-no-files-found: ignore
+          overwrite: true
           retention-days: 14

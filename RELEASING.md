@@ -50,22 +50,23 @@ Rules:
 
 - `main` is always releasable, protected, and requires the PR checks.
 - `feature/*` branches are short-lived and never change `appVersionName`.
-- `release/vX.Y.Z` is optional, only for a maintenance line.
-- `vX.Y.Z` tags are created by the release workflow, not by feature branches.
+- `release/vX.Y.Z` is optional, only for a maintenance line; its fixes must still land on
+  `main` before tagging.
+- `vX.Y.Z` tags are created by `Create release tag`, not by feature branches.
 
 ## Guardrails
 
 - Pull requests only compile, test, and lint. They never assemble an APK/AAB, run
   `bundleRelease`, sign, or touch Play.
 - Only `Create release tag` writes `appVersionName`; feature branches never bump it.
-- Release keystores live in GitHub secrets, never in the repository.
+- Release keystores are never committed; CI reads them from GitHub secrets.
 - The tag build refuses a tag whose commit is not on `main`.
 - Toolchain versions are pinned: Gradle wrapper `8.11.1`, JDK `17.0.21`, `compileSdk` 36, build-tools
   `36.0.0`, and exact Action versions.
 
 ## Required GitHub configuration
 
-Secrets (Settings → Secrets and variables → Actions → Secrets):
+Secrets:
 
 | Secret | Value |
 | --- | --- |
@@ -84,14 +85,16 @@ Environments (Settings → Environments):
 - `release` — required reviewers, and deployment branches/tags restricted to `main` and
   `v*.*.*`. Both tag creation and the tag build deploy to this environment, so each release is
   approved twice: once before the tag is created and once before artifacts are built.
-- `play-internal` — no required reviewers.
-- `play-production` — required reviewers. The release workflow also restricts production uploads
-  to the `production` input, but the environment approval is the real gate.
+- `play-internal` — no required reviewers; deployment branches/tags restricted to `main` and
+  `v*.*.*`.
+- `play-production` — required reviewers; deployment branches/tags restricted to `main` and
+  `v*.*.*`. The release workflow also restricts production uploads to the `production` input, but
+  the environment approval is the real gate.
 
-Prefer Environment secrets on `release` for `RELEASE_TOKEN` and the four keystore values, so a
-workflow on an unprotected branch cannot read them. The Play secret may be a repository secret or
-an Environment secret; if it is an Environment secret, add it to both `play-internal` and
-`play-production`.
+Store `RELEASE_TOKEN` and the four keystore values as Environment secrets on `release`, so a
+workflow on an unprotected branch cannot read them. Store `PLAY_SERVICE_ACCOUNT_JSON` on both
+`play-internal` and `play-production`; a repository secret would be readable by any workflow, so
+use one only as a deliberate simplification.
 
 Never commit a keystore, a password, or a service-account JSON. `*.jks`, `*.keystore`, and
 `keystore.properties` are already ignored by Git.
@@ -124,7 +127,7 @@ Create the `release`, `play-internal`, and `play-production` environments first,
 keystore and passwords on `release`:
 
 ```bash
-base64 -w0 "$HOME/numofi-upload.jks" > "$HOME/numofi-upload.jks.b64"
+base64 < "$HOME/numofi-upload.jks" | tr -d '\r\n' > "$HOME/numofi-upload.jks.b64"
 gh secret set KEYSTORE_BASE64 --env release < "$HOME/numofi-upload.jks.b64"
 gh secret set KEYSTORE_PASSWORD --env release
 gh secret set KEY_ALIAS --env release
@@ -139,6 +142,8 @@ gh secret set RELEASE_TOKEN --env release
 
 The token needs `Contents: write` on this repository. If `main` rejects direct pushes, grant the
 token permission to bypass that rule; the workflow commits the version bump directly to `main`.
+If `main` requires signed commits, the bot's commit must be signed or that rule relaxed — a PAT
+does not make the commit signed.
 
 For local release builds, create a gitignored `keystore.properties`:
 
@@ -164,7 +169,7 @@ variables.
 4. Enable **Google Play Android Developer API** in Google Cloud.
 5. Create a service account, download its JSON key, and invite it in Play Console → Users and
    permissions with access to this app and permission to release to testing tracks and production.
-6. Store the JSON as `PLAY_SERVICE_ACCOUNT_JSON`.
+6. Store the JSON as `PLAY_SERVICE_ACCOUNT_JSON` on both Play environments.
 7. Enroll in Play App Signing and register the app-signing SHA-1 as described above.
 8. Upload once to `internal` before any `production` run. Play returns `Precondition check failed`
    for a first-ever production release.
@@ -175,7 +180,7 @@ compiles and targets API 36.
 ## Release runbook
 
 1. Merge the feature PR to `main` through the normal PR pipeline.
-2. Go to **Actions → Create release tag → Run workflow**.
+2. Go to **Actions → Create release tag → Run workflow**, on `main`.
 3. Select `patch`, `minor`, or `major`, then approve the `release` environment.
 4. The workflow updates `appVersionName`, commits it to `main`, creates the annotated
    `vX.Y.Z` tag, and pushes both atomically.
@@ -185,17 +190,18 @@ compiles and targets API 36.
 6. Download the APK/AAB from the GitHub Release, or from the workflow run's
    `numofi-release-vX.Y.Z` artifact.
 
-If the tag workflow fails, fix the cause and re-run it. Re-runs are safe: an existing GitHub
-Release is updated in place with `--clobber`, from the same immutable tag.
+If tag creation fails before the push, fix the cause and re-run it. If the tag exists and the
+`Release` build fails, re-run that workflow for the same tag; an existing GitHub Release is
+updated in place with `--clobber`, from the same immutable tag.
 
 ### Optional Play upload
 
 The tag push does **not** upload to Play. To publish an already-tagged build:
 
-1. Go to **Actions → Release → Run workflow**.
+1. Go to **Actions → Release → Run workflow**, from `main` or the tag itself.
 2. Enter the existing tag, for example `v1.4.2`.
 3. Choose `play_track`: `internal` or `production`.
-4. Approve the `play-production` environment if prompted.
+4. Approve the `release` environment for the rebuild, then `play-production` if prompted.
 
 This rebuilds from the same tag, verifies the version again, updates the GitHub Release, and then
 uploads the AAB. It does not move the tag.
@@ -230,16 +236,16 @@ Without a keystore the release is unsigned; the tag workflow refuses to publish 
 
 | Symptom | Check |
 | --- | --- |
-| `Create release tag` refuses to start | `RELEASE_TOKEN` is missing, or it cannot push to protected `main`. |
-| `RELEASE_TOKEN is required` | Create the PAT and store it on the `release` environment (or as a repository secret). |
+| `Create release tag` refuses to start | `RELEASE_TOKEN` is missing, cannot push to protected `main`, or `main` requires signed commits. |
+| `RELEASE_TOKEN is required` | Create the PAT and store it on the `release` environment. |
 | No `Release` run after the tag appears | The tag was pushed with `GITHUB_TOKEN`; the manual workflow must push it with `RELEASE_TOKEN`. |
 | Release is waiting for approval | Approve the `release` environment; tag creation and the tag build each ask once. |
 | `Tag vX.Y.Z does not point to a commit on main` | The tag was made from a feature branch. Tags are immutable; create a new tag from `main`. |
-| `Manual release runs must start from main` | Re-run **Release** from `main` (or a `vX.Y.Z` tag), not a feature branch. |
+| The `Release` run is skipped | Re-run **Release** from `main` (or a `vX.Y.Z` tag), not a feature branch. |
 | `Tag vX.Y.Z does not match ... appVersionName` | The tag and `gradle.properties` disagree. Fix forward with a new tag; do not move the old one. |
 | `Tag vX.Y.Z already exists` | Tags are immutable. Bump again; never delete or reuse a tag. |
-| `KEYSTORE_BASE64 is not configured` | Repository secret is missing or empty. |
-| `apksigner verify` fails | One of the four keystore values is missing, so the build was unsigned. |
+| `KEYSTORE_BASE64 is not configured` | The `release` environment secret is missing or empty. |
+| `apksigner verify` fails | The build was not signed; check all four keystore values and the decoded `KEYSTORE_FILE`. |
 | Play `Package not found` | The app or its first manual release does not exist in Play Console. |
 | Play `Precondition check failed` | Store listing incomplete, or no internal/alpha/beta release yet. |
 | Play rejects the target API | The targetSdk 36 migration has not landed. |
