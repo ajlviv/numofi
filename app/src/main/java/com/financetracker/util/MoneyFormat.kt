@@ -58,15 +58,15 @@ object MoneyFormat {
      * there is no room for a full formatted amount.
      *
      * Always returns something printable: a code the device does not know, or a row written
-     * before the currency column existed, degrades to the device's own currency rather than
-     * rendering an empty string.
+     * before the currency column existed, degrades to the device's own currency, or to
+     * [FALLBACK] when the device reports none, rather than rendering an empty string.
      */
     fun symbolOf(currencyCode: String?): String {
         val code = normalize(currencyCode)
         if (code == null) return deviceSymbol() ?: FALLBACK
         NATIVE_SYMBOLS[code]?.let { return it }
         val currency = runCatching { Currency.getInstance(code) }.getOrNull()
-            ?: return deviceSymbol() ?: code
+            ?: return deviceSymbol() ?: FALLBACK
         return runCatching { currency.getSymbol(Locale.getDefault()) }.getOrNull()
             ?.takeIf { it.isNotBlank() }
             ?: code

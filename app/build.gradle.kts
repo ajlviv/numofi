@@ -1,3 +1,5 @@
+import java.util.Properties
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
@@ -6,16 +8,56 @@ plugins {
     id("com.google.dagger.hilt.android")
 }
 
+val appVersionName = providers.gradleProperty("appVersionName").orNull
+    ?: error("gradle.properties must define appVersionName, for example 1.0.0")
+
+val appVersionParts = appVersionName.split(".")
+require(appVersionParts.size == 3) {
+    "appVersionName must be MAJOR.MINOR.PATCH, was '$appVersionName'"
+}
+val (appVersionMajor, appVersionMinor, appVersionPatch) = appVersionParts.map { part ->
+    requireNotNull(part.toIntOrNull()) {
+        "appVersionName must be MAJOR.MINOR.PATCH, was '$appVersionName'"
+    }
+}
+require(appVersionMajor in 0..2_100 && appVersionMinor in 0..999 && appVersionPatch in 0..999) {
+    "appVersionName components are out of range: '$appVersionName'"
+}
+val appVersionCode = appVersionMajor * 1_000_000 + appVersionMinor * 1_000 + appVersionPatch
+require(appVersionCode in 1..2_100_000_000) {
+    "appVersionName '$appVersionName' produces versionCode $appVersionCode outside Play's 1..2100000000 range"
+}
+
+val keystoreProps = Properties().apply {
+    val file = rootProject.file("keystore.properties")
+    if (file.exists()) file.inputStream().use { load(it) }
+}
+
+fun releaseSecret(envName: String, propertyName: String): String? =
+    System.getenv(envName)?.takeIf { it.isNotBlank() }
+        ?: keystoreProps.getProperty(propertyName)?.takeIf { it.isNotBlank() }
+
+val releaseStoreFile = releaseSecret("KEYSTORE_FILE", "storeFile")
+val releaseStorePassword = releaseSecret("KEYSTORE_PASSWORD", "storePassword")
+val releaseKeyAlias = releaseSecret("KEY_ALIAS", "keyAlias")
+val releaseKeyPassword = releaseSecret("KEY_PASSWORD", "keyPassword")
+val hasReleaseSigning =
+    releaseStoreFile != null &&
+        releaseStorePassword != null &&
+        releaseKeyAlias != null &&
+        releaseKeyPassword != null
+
 android {
     namespace = "com.financetracker"
-    compileSdk = 34
+    compileSdk = 36
+    buildToolsVersion = "36.0.0"
 
     defaultConfig {
         applicationId = "com.financetracker"
         minSdk = 26
-        targetSdk = 34
-        versionCode = 1
-        versionName = "1.0"
+        targetSdk = 36
+        versionCode = appVersionCode
+        versionName = appVersionName
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -36,8 +78,20 @@ android {
         targetCompatibility = JavaVersion.VERSION_17
     }
 
+    signingConfigs {
+        create("release") {
+            releaseStoreFile?.let { path ->
+                storeFile = rootProject.file(path)
+                storePassword = releaseStorePassword
+                keyAlias = releaseKeyAlias
+                keyPassword = releaseKeyPassword
+            }
+        }
+    }
+
     buildTypes {
         release {
+            signingConfig = if (hasReleaseSigning) signingConfigs.getByName("release") else null
             isMinifyEnabled = false
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
